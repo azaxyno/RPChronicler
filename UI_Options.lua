@@ -868,13 +868,15 @@ do
           after = function() if UI.RefreshRecordIcon then UI.RefreshRecordIcon() end end },
         { field = "autoScreenshots", label = "Auto-screenshots",
           tip = "Takes a screenshot on boss kills, level ups and marked moments while a run records." },
+        { field = "worldAutoShots", label = "Auto-screenshots in open world",
+          tip = "OFF (default): auto-screenshots only happen in dungeons and raids. Open-world runs still take a shot when you Mark Moment." },
         { field = "recordManualShots", invert = true, label = "Add my own screenshots to runs",
           tip = "Your Print Screen shots during a run join its screenshot list with a caption, so Export_Stories.bat can place them in the story." },
     })
-    local status = Note(p, "", 0, -204)
-    Note(p, "|cff8f9ba8Open-world runs: click Start Recording in Adventures, use the RP icon's right-click menu, or a keybind. A run cut short by a logout or disconnect is saved as interrupted, never lost.|r", 0, -230)
+    local status = Note(p, "", 0, -228)
+    Note(p, "|cff8f9ba8Open-world runs: click Start Recording in Adventures, use the RP icon's right-click menu, or a keybind. A run cut short by a logout or disconnect is saved as interrupted, never lost.|r", 0, -254)
     local dBtn = UI.CreateSleekButton(p, 160, 24, "Dungeon/Raid Template", "gold")
-    dBtn:SetPoint("TOPLEFT", 0, -278)
+    dBtn:SetPoint("TOPLEFT", 0, -300)
     dBtn:SetIcon(UI.ICONS.STORY, 16)
     dBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("STORY") end)
     local aBtn = UI.CreateSleekButton(p, 150, 24, "Adventure Template", "gold")

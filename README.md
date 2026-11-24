@@ -14,7 +14,7 @@ RPCopy also remembers the **companions** you meet, records your **dungeons, raid
                              5 short in-character options
 ```
 
-- **Version:** 0.5.1 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.5.2 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide, on your PC only)
 - **License:** MIT
 
@@ -307,7 +307,7 @@ The Story Book has its own place on the rail. Every story your AI wrote is there
 
 ## Screenshots and export
 
-- **Auto screenshots** (off by default) on boss kills, level ups and marked moments, combat-safe and capped per run.
+- **Auto screenshots** (off by default) on boss kills, level ups and marked moments, combat-safe and capped per run. They happen only in dungeons and raids unless you turn on **Auto-screenshots in open world** in **Options > Recording**. Mark Moment still takes a shot in the open world.
 - **Your own screenshots** taken with Print Screen during a run join it, with a caption such as "Fighting Hogger in Elwynn Forest". Turn this off in **Options > Recording**.
 - Each shot is listed in the Full Log as `[SHOT N]`, and the story templates ask the AI to put a `[Shot N]` marker where it fits. The in-game reader hides these markers.
 
@@ -441,7 +441,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | `activeRun` | The run being recorded right now, so it survives `/reload` and disconnects |
 | `capture`, `summaryStats`, `logCats`, `limits` | What chat is kept, which Summary stats show, Full Log categories and limits |
 | `setupVersion`, `wipedAt` | Which setup you've seen, and when you last deleted everything |
-| `autoRecord`, `promptOnGroup`, `promptOnLogin`, `resumeAfterReload`, `iconState`, `autoScreenshots`, `recordManualShots` | Recording options |
+| `autoRecord`, `promptOnGroup`, `promptOnLogin`, `resumeAfterReload`, `iconState`, `autoScreenshots`, `worldAutoShots`, `recordManualShots` | Recording options |
 | `knownPlayerBlocks`, `knownPlayerMax`, `knownNoteMax`, `autoUpdateKnown`, `companionMenu`, `nearbyChip`, `runCompanions` | Companion options |
 | `autoColorStory`, `exportTip`, `exportImageDir`, `exportShotsDir` | Story and export options |
 | `copyMode`, `instantInCombat`, `quickCtrlC`, `rpReplyLength`, `aiModel`, `aiCustomLimit` | Copy style, template reply length, AI picked for the size meter |

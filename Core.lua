@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.5.1"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.5.2"
 
 BINDING_HEADER_RPCOPY = "RPCopy (RP Context & Chronicle)"
 BINDING_NAME_RPCOPY_OPEN = "Toggle RPCopy Window"
@@ -189,6 +189,7 @@ RPCopyDB = RPCopyDB or {
     adventures = {},
     autoUpdateKnown = true,
     autoScreenshots = false,
+    worldAutoShots = false, -- 0.5.1: auto shots only in dungeons and raids
     quickCtrlC = true,
     quickCopyKey = "CTRL-C",
     quickCapture = true,

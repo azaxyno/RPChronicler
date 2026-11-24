@@ -36,6 +36,9 @@ local function Capture(kind, description)
     if not RPCopyDB or not RPCopyDB.autoScreenshots then return end
     local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
     if not run then return end
+    -- 0.5.1: no automatic shots in open-world runs unless switched on
+    -- (Options > Recording). Mark Moment is your own choice, so it still shoots.
+    if run.kind == "world" and kind ~= "mark" and not RPCopyDB.worldAutoShots then return end
     -- 0.5.0: the per-run cap (Options > Full Log limits) stops new shots
     -- instead of dropping the oldest ones
     if not ns.RecordAdventureScreenshot(kind, description) then return end

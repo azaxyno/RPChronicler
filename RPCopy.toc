@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: RPCopy
 ## Notes: AI RP Context Snapshot & Colored Adventure Chronicle Journal
-## Version: 0.5.1
+## Version: 0.5.2
 ## SavedVariables: RPCopyDB
 # CurseForge: once the project exists, change the next line to
 # "## X-Curse-Project-ID: <project id>" (two #, no space before X)

@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.3.1"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.4.0"
 
 BINDING_HEADER_RPCOPY = "RPCopy (RP Context & Chronicle)"
 BINDING_NAME_RPCOPY_OPEN = "Toggle RPCopy Window"
@@ -22,7 +22,7 @@ ns.DEFAULT_TRIGGER = "use aloria"
 -- Options > Slice Tabs. Chat sources are merged into one time-ordered timeline.
 ns.TAB_FLAGS = {
     "incDirect", "incTarget", "incParty", "incStatus", "incQuest",
-    "incSocial", "incPartySay", "incPartyChat", "incNpc", "incLoot", "incOoc", "incWorld",
+    "incSocial", "incPartySay", "incPartyChat", "incNpc", "incLoot", "incOoc", "incWorld", "incGuild",
 }
 
 local function Tab(id, label, on)
@@ -32,17 +32,79 @@ local function Tab(id, label, on)
 end
 
 ns.DEFAULT_TABS = {
-    -- Smart: everything happening around you
-    Tab("SMART", "Smart", { incDirect = true, incTarget = true, incParty = true, incStatus = true,
-        incSocial = true, incPartyChat = true, incNpc = true }),
-    -- Chat: conversations (the direct line is marked inside the timeline)
+    -- Chat: local RP (say, emotes, whispers); the direct line is marked inside the timeline
     Tab("CHAT", "Chat", { incDirect = true, incTarget = true, incSocial = true }),
+    -- World: General, Trade, LFG and other numbered channels (the OOC channel is kept apart)
+    Tab("WORLD", "World", { incWorld = true }),
     -- Party: your group only (party chat plus say/emotes from party members)
     Tab("PARTY", "Party", { incTarget = true, incParty = true, incStatus = true,
         incPartySay = true, incPartyChat = true }),
+    -- Guild: guild and officer chat
+    Tab("GUILD", "Guild", { incGuild = true }),
     Tab("QUEST", "Quest", { incTarget = true, incStatus = true, incQuest = true, incNpc = true }),
     Tab("LOOT", "Loot", { incParty = true, incStatus = true, incLoot = true }),
 }
+
+-- Full Log categories. Each one has its own switch in Options > Full Log.
+ns.LOG_CATEGORIES = {
+    { key = "fights",      label = "Fights (one line each)" },
+    { key = "kills",       label = "Kills of elites, rares, bosses" },
+    { key = "aggro",       label = "Aggro swaps" },
+    { key = "danger",      label = "Near deaths and saves" },
+    { key = "spells",      label = "Party spells" },
+    { key = "bossCasts",   label = "Boss casts" },
+    { key = "cc",          label = "Crowd control" },
+    { key = "pets",        label = "Pets" },
+    { key = "quests",      label = "Quests accepted and done" },
+    { key = "npcDialogue", label = "NPC and quest dialogue" },
+    { key = "levels",      label = "Level ups" },
+    { key = "places",      label = "Subzone changes" },
+    { key = "skills",      label = "Profession skill-ups" },
+    { key = "milestones",  label = "Milestones" },
+    { key = "loot",        label = "Loot and coin" },
+    { key = "lootSource",  label = "Where loot came from" },
+    { key = "atmosphere",  label = "Atmosphere (time of day)" },
+    { key = "guildmates",  label = "Guildmates in the party" },
+    { key = "chat",        label = "Party and say chat" },
+}
+
+-- Editable limits (Options > Full Log)
+ns.LOG_LIMITS = {
+    { key = "minFightSec", label = "Shortest fight to log (sec)", default = 4, min = 0, max = 60 },
+    { key = "spellCap",    label = "Spell lines per run",         default = 120, min = 0, max = 400 },
+    { key = "npcCap",      label = "NPC dialogue lines per run",  default = 60, min = 0, max = 300 },
+    { key = "timelineMax", label = "Timeline lines kept per run",  default = 500, min = 100, max = 1500 },
+}
+
+-- AI picker for the Full Log size meter: a comfortable paste size in
+-- characters (about 4 characters per token). Each leaves room for the
+-- skill's instructions and the story it writes. Checked November 2026:
+-- free Gemini has a 32K token context, free ChatGPT about 27K, ChatGPT
+-- Go/Plus about 54K, Gemini Pro and Claude up to 1M (README: Requirements).
+ns.AI_MODELS = {
+    { key = "GEMINI_FREE",  label = "Gemini (free)",       chars = 80000 },
+    { key = "GEMINI_PAID",  label = "Gemini (AI Plus/Pro)", chars = 300000 },
+    { key = "CHATGPT_FREE", label = "ChatGPT (free)",      chars = 50000 },
+    { key = "CHATGPT_PAID", label = "ChatGPT (Go/Plus)",   chars = 150000 },
+    { key = "CLAUDE_FREE",  label = "Claude (free)",       chars = 100000 },
+    { key = "CLAUDE_PAID",  label = "Claude (Pro/Max)",    chars = 400000 },
+    { key = "CUSTOM",       label = "Custom limit",        chars = nil },
+}
+
+function ns.LogOn(cat)
+    local c = RPCopyDB and RPCopyDB.logCats
+    return not c or c[cat] ~= false
+end
+
+function ns.Limit(key)
+    local l = RPCopyDB and RPCopyDB.limits
+    local v = l and tonumber(l[key])
+    if v then return v end
+    for _, d in ipairs(ns.LOG_LIMITS) do
+        if d.key == key then return d.default end
+    end
+    return 0
+end
 
 local function CloneDefaultTabs()
     local copy = {}
@@ -78,6 +140,7 @@ ns.logs = {
     combat = {},
     npc = {},
     world = {},
+    guild = {},
     playerRecentChat = {},
 }
 
@@ -85,13 +148,13 @@ ns.state = {
     lastDirectMsg = nil,
     lastDirectAuthor = nil,
     lastQuestInfo = nil,
-    activeFilter = "SMART",
+    activeFilter = "CHAT",
     activeNote = "",
     isExpanded = false,
     selectedPlayerKey = nil,
     selectedAdventureId = nil,
     adventureViewMode = "SUMMARY",
-    selectedOptionTabId = "SMART",
+    selectedOptionTabId = "CHAT",
 }
 
 ns.resumedAt = nil
@@ -568,6 +631,7 @@ function ns.ClearSessionLogs()
     ns.logs.combat = {}
     ns.logs.npc = {}
     ns.logs.world = {}
+    ns.logs.guild = {}
     ns.state.lastDirectMsg = nil
     ns.state.lastDirectEntry = nil
     ns.state.lastLife = nil
@@ -677,6 +741,53 @@ function ns.EnsureDB()
         end
     end
     RPCopyDB.migratedV031 = true
+    -- 0.4.0: Smart is gone; World and Guild are new built-in tabs
+    if not RPCopyDB.migratedV040 then
+        for i = #RPCopyDB.tabs, 1, -1 do
+            if RPCopyDB.tabs[i].id == "SMART" then table.remove(RPCopyDB.tabs, i) end
+        end
+        for idx, def in ipairs(ns.DEFAULT_TABS) do
+            local found = false
+            for _, t in ipairs(RPCopyDB.tabs) do
+                if t.id == def.id then found = true end
+            end
+            if not found then
+                local item = {}
+                for k, v in pairs(def) do item[k] = v end
+                table.insert(RPCopyDB.tabs, math.min(idx, #RPCopyDB.tabs + 1), item)
+            end
+        end
+        if RPCopyDB.lastSliceId == "SMART" then RPCopyDB.lastSliceId = "CHAT" end
+        RPCopyDB.migratedV040 = true
+    end
+    for _, t in ipairs(RPCopyDB.tabs) do
+        if t.incGuild == nil then t.incGuild = false end
+    end
+
+    -- 0.4.0 settings: Full Log categories, limits, recording behaviour
+    RPCopyDB.logCats = type(RPCopyDB.logCats) == "table" and RPCopyDB.logCats or {}
+    for _, c in ipairs(ns.LOG_CATEGORIES) do
+        if RPCopyDB.logCats[c.key] == nil then RPCopyDB.logCats[c.key] = true end
+    end
+    RPCopyDB.limits = type(RPCopyDB.limits) == "table" and RPCopyDB.limits or {}
+    for _, d in ipairs(ns.LOG_LIMITS) do
+        local v = tonumber(RPCopyDB.limits[d.key]) or d.default
+        RPCopyDB.limits[d.key] = math.max(d.min, math.min(d.max, math.floor(v)))
+    end
+    local defaults = {
+        autoRecord = true,        -- dungeons and raids record by themselves
+        promptOnGroup = true,     -- open world: ask "Start recording?" when you join a group
+        promptOnLogin = false,    -- open world: ask at login
+        resumeAfterReload = true, -- a /reload continues the run without asking
+        iconState = true,         -- the [RP] button shows the recording state
+        sizeMeter = true,         -- Full Log size meter
+        debugVerbose = false,     -- extra lines in the debug log
+    }
+    for k, v in pairs(defaults) do
+        if RPCopyDB[k] == nil then RPCopyDB[k] = v end
+    end
+    if type(RPCopyDB.aiModel) ~= "string" then RPCopyDB.aiModel = "GEMINI_FREE" end
+    RPCopyDB.aiCustomLimit = math.max(1000, tonumber(RPCopyDB.aiCustomLimit) or 40000)
 
     for k, v in pairs(RPCopyDB.players) do
         if type(v) == "string" then

@@ -262,6 +262,7 @@ local function BuildTimeline(tabCfg, limit)
     if tabCfg.incLoot then TakeRecent(picked, ns.logs.loot, limit) end
     if tabCfg.incOoc then TakeRecent(picked, ns.logs.ooc, limit) end
     if tabCfg.incWorld then TakeRecent(picked, ns.logs.world, limit) end
+    if tabCfg.incGuild then TakeRecent(picked, ns.logs.guild, limit) end
 
     local seen, list = {}, {}
     for _, e in ipairs(picked) do

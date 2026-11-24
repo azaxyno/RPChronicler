@@ -212,7 +212,15 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
 
     local lines = {}
     if tabCfg and tabCfg.prefix and tabCfg.prefix ~= "" then
-        table.insert(lines, tabCfg.prefix)
+        -- Line 1 invokes the character skill in the AI, e.g. "[Skill Call] use aloria"
+        table.insert(lines, ns.ColorText("[Skill Call]", ns.COLORS.header) .. " " .. tabCfg.prefix)
+    end
+
+    -- "/rp <text>" is a direction for the LLM (tone, focus, what to reply to),
+    -- not something said in chat, so it goes right under the trigger line.
+    local cleanNote = (note or ""):match("^%s*(.-)%s*$")
+    if cleanNote ~= "" then
+        table.insert(lines, ns.ColorText("[Instruction]", ns.COLORS.note) .. " " .. ns.ColorText(cleanNote, ns.COLORS.softWhite))
     end
 
     local where = ns.GetCurrentWhere()
@@ -261,11 +269,6 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
         if tabCfg.incLoot then
             AppendRecentSlice(lines, ns.logs.loot, limit)
         end
-    end
-
-    local cleanNote = (note or ""):match("^%s*(.-)%s*$")
-    if cleanNote ~= "" then
-        table.insert(lines, ns.ColorText("[OOC Note]", ns.COLORS.note) .. " " .. ns.ColorText(cleanNote, ns.COLORS.softWhite))
     end
 
     local bodyText = table.concat(lines, "\n")

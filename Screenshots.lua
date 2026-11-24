@@ -13,7 +13,11 @@ local MAX_SHOTS = 12
 local pending, lastShotAt, loading, uiFaded = nil, nil, false, false
 
 -- When two moments land inside the delay, the bigger one labels the shot.
-local PRIORITY = { story = 1, newzone = 2, quest = 3, levelup = 5, boss = 6 }
+local PRIORITY = { story = 1, newzone = 2, quest = 3, mark = 4, levelup = 5, boss = 6 }
+
+-- Boss kills and manual Mark Moment always get a shot, even right after
+-- another one (the 20s debounce only thins out routine zone/quest shots).
+local ALWAYS_SHOOT = { boss = true, mark = true }
 
 local function InCombat()
     return (InCombatLockdown and InCombatLockdown())
@@ -77,14 +81,15 @@ local function FirePending(tries)
         return
     end
     pending = nil
-    if loading or (lastShotAt and (GetTime() - lastShotAt) < DEBOUNCE) then return end
+    if loading then return end
+    if not ALWAYS_SHOOT[p.kind] and lastShotAt and (GetTime() - lastShotAt) < DEBOUNCE then return end
     Capture(p.kind, p.description)
 end
 
 function ns.RequestScreenshot(kind, description)
     if not RPCopyDB or not RPCopyDB.autoScreenshots then return end
     if not (ns.GetActiveAdventure and ns.GetActiveAdventure()) then return end
-    if lastShotAt and (GetTime() - lastShotAt) < DEBOUNCE then return end
+    if not ALWAYS_SHOOT[kind] and lastShotAt and (GetTime() - lastShotAt) < DEBOUNCE then return end
     if pending then
         if (PRIORITY[kind] or 0) > (PRIORITY[pending.kind] or 0) then
             pending.kind, pending.description = kind, description

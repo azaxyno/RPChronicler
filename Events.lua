@@ -4,14 +4,6 @@ local lastKillerByVictim = {}
 local recentLoggedDeaths = {}
 local lastCapturedQuestTitle = ""
 
-local RARE_PLUS_HEX = {
-    ["1eff00"] = true, -- Uncommon
-    ["0070dd"] = true, -- Rare
-    ["a335ee"] = true, -- Epic
-    ["ff8000"] = true, -- Legendary
-    ["e6cc80"] = true, -- Heirloom / Artifact
-}
-
 local function IsBossUnit(unit)
     if not UnitExists(unit) then return false end
     local cls = ns.SafeStr(UnitClassification(unit))
@@ -108,12 +100,114 @@ local function HandleNpcChat(kindLabel, rawMsg, rawAuthor)
     end
 end
 
+-- Item quality colors (index = quality). Used when a loot link carries the
+-- modern "|cnIQ4:" color tag or no color at all, so lines never render white.
+local QUALITY_HEX = {
+    [0] = "9d9d9d", -- Poor
+    [1] = "ffffff", -- Common
+    [2] = "1eff00", -- Uncommon
+    [3] = "0070dd", -- Rare
+    [4] = "a335ee", -- Epic
+    [5] = "ff8000", -- Legendary
+    [6] = "e6cc80", -- Artifact
+    [7] = "00ccff", -- Heirloom
+}
+local HEX_TO_QUALITY = {}
+for q, hex in pairs(QUALITY_HEX) do HEX_TO_QUALITY[hex] = q end
+
+-- Returns quality number (or nil) and the hex color to draw the link in.
+local function ResolveLinkColor(colorTag, linkData, fullLink)
+    local q = tonumber((colorTag or ""):match("^nIQ(%d)"))
+    local hex = (colorTag or ""):match("^ff(%x%x%x%x%x%x)")
+    if hex then hex = hex:lower() end
+    if not q and hex then q = HEX_TO_QUALITY[hex] end
+    local linkType = (linkData or ""):match("^(%a+):")
+    if not q and linkType == "item" then
+        local itemId = tonumber(linkData:match("^item:(%d+)"))
+        if itemId and C_Item and C_Item.GetItemQualityByID then
+            local ok, res = pcall(C_Item.GetItemQualityByID, itemId)
+            if ok and type(res) == "number" then q = res end
+        end
+        if not q and GetItemInfo then
+            local ok, _, _, res = pcall(GetItemInfo, fullLink)
+            if ok and type(res) == "number" then q = res end
+        end
+    end
+    if q and QUALITY_HEX[q] then
+        return q, QUALITY_HEX[q]
+    end
+    if linkType == "currency" then
+        return nil, hex or ns.COLORS.currency
+    end
+    return nil, hex or QUALITY_HEX[1]
+end
+
+local MONEY_WORDS = {
+    gold = "coinGold", g = "coinGold",
+    silver = "coinSilver", s = "coinSilver",
+    copper = "coinCopper", c = "coinCopper",
+}
+
+-- Colors a plain text run: coin amounts get gold/silver/copper colors,
+-- everything else the soft loot-text color.
+local function ColorLootPlain(seg)
+    if not seg or seg == "" then return "" end
+    local out, last = {}, 1
+    for s, num, unit, e in seg:gmatch("()(%d+)%s*(%a+)()") do
+        local key = MONEY_WORDS[unit:lower()]
+        if key then
+            table.insert(out, ns.ColorText(seg:sub(last, s - 1), ns.COLORS.lootType))
+            table.insert(out, ns.ColorText(num .. " " .. unit, ns.COLORS[key]))
+            last = e
+        end
+    end
+    table.insert(out, ns.ColorText(seg:sub(last), ns.COLORS.lootType))
+    return table.concat(out)
+end
+
+-- Rebuilds a CHAT_MSG_LOOT / CHAT_MSG_MONEY line with per-quality item colors
+-- and coin colors. Returns the colored line plus a list of found items.
+local function BuildLootLine(safeMsg)
+    local s = safeMsg
+    -- Coin icons -> words, so the copied text reads cleanly for the AI
+    s = s:gsub("(%d+)%s*|T[^|]-UI%-GoldIcon[^|]-|t", "%1 Gold")
+    s = s:gsub("(%d+)%s*|T[^|]-UI%-SilverIcon[^|]-|t", "%1 Silver")
+    s = s:gsub("(%d+)%s*|T[^|]-UI%-CopperIcon[^|]-|t", "%1 Copper")
+    s = s:gsub("|T.-|t", "")
+
+    local links, items = {}, {}
+    local function Capture(full, colorTag, linkData, name)
+        local q, hex = ResolveLinkColor(colorTag, linkData, full)
+        local colored = ns.ColorText("[" .. name .. "]", hex)
+        table.insert(links, colored)
+        if (linkData or ""):match("^item:") then
+            table.insert(items, { colored = colored, plain = "[" .. name .. "]", quality = q })
+        end
+        return "\001" .. #links .. "\002"
+    end
+    s = s:gsub("(|c([^|]*)|H([^|]*)|h%[([^%]]*)%]|h|r)", Capture)
+    s = s:gsub("(|H([^|]*)|h%[([^%]]*)%]|h)", function(full, linkData, name)
+        return Capture(full, "", linkData, name)
+    end)
+
+    -- Drop any leftover color codes before re-coloring the plain parts
+    s = s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|cn[^:|]*:", ""):gsub("|r", "")
+
+    local out, last = {}, 1
+    for a, idx, b in s:gmatch("()\001(%d+)\002()") do
+        table.insert(out, ColorLootPlain(s:sub(last, a - 1)))
+        table.insert(out, links[tonumber(idx)] or "")
+        last = b
+    end
+    table.insert(out, ColorLootPlain(s:sub(last)))
+    return table.concat(out), items
+end
+
 local function HandleLootMessage(rawMsg, rawAuthor)
     local safeMsg = ns.SafeStr(rawMsg)
     if not safeMsg or safeMsg == "" then return end
 
     local cleanPlain = ns.CleanText(safeMsg) or ""
-    local keepColored = ns.CleanChatKeepColors(safeMsg) or cleanPlain
     local looter = ns.StripRealm(rawAuthor)
     if not looter or looter == "" then
         looter = cleanPlain:match("^([^%s]+)%s+receives loot:")
@@ -123,13 +217,19 @@ local function HandleLootMessage(rawMsg, rawAuthor)
             or "Player"
     end
 
-    local line = ns.ColorText("[Loot]", ns.COLORS.lootTag) .. " " .. keepColored
+    local ok, coloredLine, items = pcall(BuildLootLine, safeMsg)
+    if not ok or not coloredLine or coloredLine == "" then
+        coloredLine = ns.ColorText(cleanPlain, ns.COLORS.lootType)
+        items = {}
+    end
+
+    local line = ns.ColorText("[Loot]", ns.COLORS.lootTag) .. " " .. coloredLine
     ns.PushLog(ns.logs.loot, line)
 
-    for hex, itemLink in safeMsg:gmatch("(|c%x%x(%x%x%x%x%x%x)|Hitem:.-|h%[.-%]|h|r)") do
-        if RARE_PLUS_HEX[hex:lower()] and ns.RecordAdventureLoot then
-            local itemPlain = ns.CleanText(itemLink)
-            ns.RecordAdventureLoot(itemLink, itemPlain, looter)
+    -- Uncommon (green) and better go into the adventure's key loot list
+    for _, item in ipairs(items or {}) do
+        if item.quality and item.quality >= 2 and ns.RecordAdventureLoot then
+            ns.RecordAdventureLoot(item.colored, item.plain, looter)
         end
     end
 end
@@ -337,10 +437,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local _, encounterName, _, _, success = ...
         local bName = ns.SafeStr(encounterName)
         if bName and success == 1 then
-            if ns.RecordAdventureBossKill then
-                ns.RecordAdventureBossKill(bName)
-            end
-            if ns.RequestScreenshot then
+            local recorded = ns.RecordAdventureBossKill and ns.RecordAdventureBossKill(bName)
+            if recorded and ns.RequestScreenshot then
                 ns.RequestScreenshot("boss", "Defeated " .. bName)
             end
         end
@@ -348,7 +446,19 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local unit = ...
         if not unit then return end
         if unit == "target" or unit:match("^boss%d+$") then
-            if UnitExists(unit) and UnitCanAttack("player", unit) and not UnitIsDead(unit) then
+            if UnitExists(unit) and UnitIsDead(unit) then
+                -- Boss-kill fallback now that the combat log is off-limits:
+                -- a dead boss frame, skull/worldboss, or the boss we were fighting.
+                local bName = ns.SafeStr(UnitName(unit))
+                local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
+                local isBoss = unit:match("^boss%d+$") or IsBossUnit(unit)
+                    or (bName and activeBoss and activeBoss:lower() == bName:lower())
+                if bName and isBoss and ns.RecordAdventureBossKill then
+                    if ns.RecordAdventureBossKill(bName) and ns.RequestScreenshot then
+                        ns.RequestScreenshot("boss", "Defeated " .. bName)
+                    end
+                end
+            elseif UnitExists(unit) and UnitCanAttack("player", unit) then
                 if unit:match("^boss%d+$") or IsBossUnit(unit) then
                     local bName = ns.SafeStr(UnitName(unit))
                     local hp = ns.SafeNum(UnitHealth(unit))

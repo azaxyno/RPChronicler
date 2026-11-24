@@ -361,6 +361,7 @@ function ns.RecordAdventureBossKill(bossName)
     activeRun.bossKills = activeRun.bossKills or {}
     table.insert(activeRun.bossKills, bossName)
     PushTimeline(activeRun, PreciseStamp(), "[BOSS KILL] " .. bossName)
+    return true
 end
 
 function ns.RecordAdventureLoot(coloredLink, plainText, looter)
@@ -409,8 +410,12 @@ function ns.MarkAdventureHighlight(customNote)
 end
 
 function RPCopy_MarkMoment()
-    local _, status = ns.MarkAdventureHighlight(nil)
+    local ok, status = ns.MarkAdventureHighlight(nil)
     print("|cff00ff00[RPCopy]|r " .. status)
+    -- Marked moments also get a screenshot when Auto-Shots is on
+    if ok and ns.RequestScreenshot then
+        ns.RequestScreenshot("mark", "Marked moment")
+    end
 end
 
 function ns.SetAdventureStory(advId, rawStoryText)

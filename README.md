@@ -10,13 +10,13 @@ You build a **character skill** in your AI once. The skill knows who your charac
  In game                     Your AI (with your character skill)        In game
  ---------                   ------------------------------------       ---------
  Someone talks to you  -->   Ctrl+C, paste the scene          -->       Pick a line,
-                             "use aloria" + scene              -->       paste it in /s /p /w
+                             "[Skill Call] use aloria"             -->       paste it in /s /p /w
                              5 short in-character options
 ```
 
 Along the way, RPCopy remembers the **companions** you meet, so your AI knows who they are next time. It also records your **dungeon and raid runs**, so the AI can turn them into colored story chronicles you read inside the game.
 
-- **Version:** 3.7.1 (interface `16001`, WoW: Forever)
+- **Version:** 3.8.0 (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide)
 - **License:** MIT
 
@@ -38,14 +38,14 @@ Along the way, RPCopy remembers the **companions** you meet, so your AI knows wh
 2. **Create your character skill** (one time):
    - Open **Options** and click the **RP Template** button. Copy the template with `Ctrl+C`.
    - Paste it into Gemini (or any AI that supports custom skills, Gems, GPTs or projects). Fill in your character: name, faction, race, class, personality, quirks and inspiration. Let the AI build the skill.
-   - Pick a short **trigger**, such as `use aloria`, and set the same trigger in **Options > Top Constant / Skill Trigger**. Every snapshot starts with that line, so the AI knows to use your character's skill.
-3. **Play.** When someone talks to you, press `Ctrl+C` out of combat, or use `/rp quick`. A toast confirms the copy.
+   - Pick a short **trigger**, such as `use aloria`, and set the same trigger in **Options > Skill Call**. Every snapshot starts with `[Skill Call] use aloria`, so the AI knows to use your character's skill.
+3. **Play.** When someone talks to you, press `Ctrl+C` once, in or out of combat, or use `/rp quick`. A toast confirms the copy. To steer the AI, use `/rp <instruction>`, for example `/rp make it flirty`.
 4. **Paste into your AI.** It replies with up to 5 short options, written for the channel (say, party, whisper and so on). Copy one into WoW chat.
 
 ### What a snapshot looks like
 
 ```
-use aloria
+[Skill Call] use aloria
 [Location] The Barrens - Crossroads
 [Direct] [W] Thrallgar: you look lost, need a hand with those raptors?
 [Target] Thrallgar - Lvl 14 Orc Warrior [Friendly] [100%]
@@ -58,6 +58,83 @@ Latest Chat:
 ```
 
 The `[Known Player]` block is added automatically because Thrallgar is a saved companion (see below).
+
+### Example: from snapshot to replies
+
+You press `Ctrl+C` while questing and paste this into Gemini:
+
+```
+[Skill Call] use aloria
+[Location] Elwynn Forest - Northshire Valley
+[Quest] Active: Wolves Across the Border
+[Status] Lvl 4 Hunter | 100% HP | [Out of Combat] | Pet: Sir Fluffington [Content]
+```
+
+The skill answers with five short options, one per personality angle, ready to paste into `/s` or `/p`:
+
+```
+1. Deadpan chuuni:    behold, the shadow wolves of northshire. my arrows hunger. also my feet hurt.
+2. Petty & witty:     these wolves keep stealing my kills. i am filing a formal complaint with the stormwind guard.
+3. Cute & frugal:     every wolf drops like two copper. that is a whole bread roll. keep them coming.
+4. Beast & pet chaos: sir fluffington has declared himself king of the wolves. they did not agree.
+5. Trigger-happy:     what if i just multishot the entire forest and feign death. for science.
+```
+
+Add `/rp <instruction>` to steer it, for example `/rp she's tired and wants to go home`.
+
+### The character skill template
+
+This is the template RPCopy gives you under **Options > RP Template**. Paste it into your AI, replace the `<placeholders>` with your character, and let the AI build the skill.
+
+<details>
+<summary>Show the RP skill template</summary>
+
+```text
+---
+name: <character-name>-rp-<class>
+description: Generate short, casual World of Warcraft roleplay responses for <Character Full Name> (<Faction> <Race> <Class>) inspired by <Persona Inspiration>. Use when the user uploads a WoW chat screenshot, mentions "<trigger>" (such as "use <trigger>"), or asks for <Class> RP replies in General, Say, Whisper, or Party chat.
+---
+
+WOW RP <FACTION> <RACE> <CLASS> (<PERSONA INSPIRATION> PERSONA)
+
+Generate short, casual in-character English roleplay replies for <Character Full Name>, a <personality summary> <Faction>-aligned <Race> <Class> in World of Warcraft, capturing the voice and quirks of <Persona Inspiration>.
+
+WHEN TO USE
+
+- The user pastes an RPCopy context snapshot starting with "[Skill Call] use <trigger>" (containing [Location], [Target], [S], [G], [P], [W], [Loot], etc.) or uploads a WoW chat screenshot.
+- The user mentions the trigger words "<trigger>" or "<surname>" (for example: "use <trigger>", "<trigger> reply").
+- The user asks for quick in-character <Class> roleplay responses.
+
+CORE PERSONALITY (5 DISTINCT ANGLES)
+
+1. Signature Quirk / Theatrical Angle:
+   - Frames ordinary moments with <Character Full Name>'s signature flair (e.g., dramatic titles, deadpan grand declarations, or noble poise), then drops right back into casual speech.
+   - Invents overly dramatic names for ordinary beasts, spells, gear, or low-level mobs.
+
+2. Petty & Witty Banter:
+   - Invents grandiose lore excuses to dodge mundane chores, walking, or blame ("my keen senses are currently sealed for greater prey").
+   - Turns trivial moments into playful rivalry and gets flustered if treated like a novice.
+
+3. Heart & Everyday Habits:
+   - Carries grounded adventurer habits into Azeroth (counting every copper, hating repair/reagent bills, hoarding free food, protecting loot rights).
+   - Loyal to <Faction> and teammates, with a soft spot for <favorite thing/creatures>.
+
+4. Class / Companion / Lore Chaos (Option 4):
+   - Obsessed with <class-specific gimmick: e.g., taming dangerous elites, forbidden arcane theory, questionable engineering>, giving them ridiculous names, and blaming accidental pulls on <pet/spells/fate>.
+
+5. Unhinged Overkill Mode (Option 5):
+   - Over-the-top <Class> mode: eager to solve every minor problem by unloading big AoE/traps/cooldowns on the entire room, then immediately <Feign / Blink / Vanish / bubble> while the party handles the aggro.
+
+CHANNEL CONTEXT & FORMATTING RULES
+
+1. No Channel Prefixes: Never start replies with /1, /p, /s, /w, or /y. Output pure, copy-paste-ready text.
+2. Adapt to the Chat Channel Context: Check [G], [P], [S], [W], [Y] tags and tailor RP accordingly.
+3. Always Output RP in English: Write all 5 RP chat options in natural, casual lowercase English.
+4. Keep It Short: 1-2 short sentences max per option so it fits fast-paced WoW chat.
+5. Follow the [Instruction] Line: If the snapshot has an [Instruction] line, it is the user's direction for these replies (tone, focus, who to answer, what to do). Follow it. It is not chat and never something a character said.
+```
+
+</details>
 
 ### What the character skill gives you
 
@@ -94,27 +171,41 @@ Each tab is a "slice", meaning a preset of what goes into the snapshot. The buil
 
 You can add **custom tabs** with their own trigger and any mix of these sections: direct message, target info, party roster, status and pet, active quest, combat and deaths, social chat, OOC channel, party and raid chat, NPC dialogue, and loot log. `Ctrl+C` always copies the slice you used last.
 
-Add a one-time out-of-character note with `/rp <note>`, for example `/rp make it flirty`. It's sent to the AI as `[OOC Note]`.
+Loot lines are colored the way the game colors them: item names by quality (gray, white, green, blue, purple, orange), money in gold, silver and copper colors, and the rest of the line in a soft teal.
+
+Give the AI a one-time instruction with `/rp <instruction>`, for example `/rp make it flirty` or `/rp reply to Thrall only`. It goes at the top of the snapshot as `[Instruction]`, so the AI follows it instead of treating it as chat.
 
 ---
 
 ## Adventures: dungeon and raid stories
 
-RPCopy also works as a quiet chronicler. It records your runs so an AI can write them up as a story afterwards.
+RPCopy also works as a quiet chronicler. The point of recording a run is to capture all the context a storyteller needs: who was there, which bosses fell, who died, what dropped, and what everyone said in the middle of each fight. RPCopy packs that into one log that's ready to send straight to your AI. The AI writes a full story from it. You import the story back onto that run, where it's saved, and read it in game as a colorful chronicle.
+
+The flow is:
+
+1. **Play the run.** RPCopy logs it automatically.
+2. **Copy the Full Log** from the run in the Adventures view.
+3. **Paste it into your AI** with the `wow-adventure-story` skill. The skill's template is in the Story view. The AI returns a story written with WoW color codes.
+4. **Import Story** on the same run. The story is saved with that run.
+5. **Read it in game** in the Story reader, with gold chapter titles, class-colored party names and orange bosses.
+
+![The in-game Story reader showing a colored Shadowfang Keep chapter](docs/story-viewer.png)
+
+How it works:
 
 - **Automatic logging** starts when you enter a dungeon or raid and stops when you leave. You can also start a run manually anywhere.
 - **Timestamped `[HH:MM:SS]` timeline** with these tags:
   - `[BOSS ENGAGED]` when a boss is pulled
   - `[BOSS HP]` at 50%, 20% and 5%
   - `[DANGER]` at low HP, and `[LOW MANA]` at low mana
-  - `[DEATH]` with the killing spell
+  - `[DEATH]` for your own deaths
   - `[WIPE #N]`
   - `[REZ]` for resurrections
   - `[LOOT]` for Uncommon or better drops
 - **Fight context on chat.** Chat is tagged with the fight it happened in, for example `[Party | vs Boss 5% HP] Healer: OOM!!`, so the story knows exactly when someone panicked.
-- **Mark Moment.** The keybind or `/rp mark [note]` stars a moment as a highlight.
+- **Mark Moment.** Set a key in **Options > Mark Moment** (or use the WoW keybinding or `/rp mark [note]`) to star a moment as a highlight. With Auto-Shots on, it also takes a screenshot.
 - **Full Log** export, then **Import Story**. Copy the log into an AI that has the `wow-adventure-story` skill (its template is in the Story view). Paste the colored chronicle back, and read it in the in-game **Story** reader. The story skill is told to use only what's in the log: no invented bosses, loot or quotes.
-- **Optional auto screenshots** at key moments, such as boss kills, level-ups and new zones. These are combat-safe and capped per run.
+- **Auto screenshots** (turn on **Auto-Shots**) at key moments during a run: every boss kill, marked moments, level-ups, quests and new zones. Boss kills and marks always get a shot; the others are spaced at least 20 seconds apart. Boss kills are detected from the encounter end, or from the boss dying on your target or boss frame. Shots are combat-safe and capped per run.
 - Up to 40 runs are archived.
 
 ---
@@ -124,7 +215,7 @@ RPCopy also works as a quiet chronicler. It records your runs so an AI can write
 | Command | What it does |
 |---|---|
 | `/rp` or `/rpcopy` | Open the RPCopy window |
-| `/rp <note>` | Open the window with a one-time OOC note added to the snapshot |
+| `/rp <instruction>` | Open the window with a one-time instruction for the AI added to the snapshot |
 | `/rp quick` | Quick-copy the last used slice |
 | `/rp capture` | Save or update your target (or mouseover, or last whisperer) as a companion |
 | `/rp mark [note]` | Bookmark the latest moment, or your note, in the active run |
@@ -133,7 +224,9 @@ RPCopy also works as a quiet chronicler. It records your runs so an AI can write
 
 ## Keybindings
 
-Set these in **Esc > Key Bindings > AddOns > RPCopy (RP Context & Chronicle)**:
+The **Options** keybinding bar sets RPCopy's own shortcuts: **Quick Copy** (`Ctrl+C`), **Target** capture (`Shift+C`) and **Mark Moment** (no key until you set one; right-click to clear). Click a key button and press the combo you want. Avoid Ctrl combos for Target and Mark, since instant `Ctrl+C` takes the keyboard while Ctrl is held.
+
+You can also set these in **Esc > Key Bindings > AddOns > RPCopy (RP Context & Chronicle)**:
 
 | Binding | Action |
 |---|---|
@@ -142,7 +235,7 @@ Set these in **Esc > Key Bindings > AddOns > RPCopy (RP Context & Chronicle)**:
 | Capture / Update Target Companion | Same as `/rp capture` |
 | Bookmark Adventure Moment | Same as `/rp mark` |
 
-Silent quick copy (`Ctrl+C` by default) works out of combat. You can change the key or turn it off in Options. In combat it's released automatically, so your normal keybinds are never affected.
+Silent quick copy (`Ctrl+C` by default) copies on the first press, in or out of combat, without stopping your character. WoW addons can't write to the clipboard directly, so when you press Ctrl down RPCopy briefly focuses a hidden box with the snapshot selected, and your own Ctrl+C copies it. The box lets go as soon as you press C, press any other key or release Ctrl. While Ctrl is held, other Ctrl+key shortcuts won't fire. If you set a custom key in Options, it uses two presses: your key arms the copy, then Ctrl+C copies. You can also turn it off in Options.
 
 ---
 
@@ -192,6 +285,8 @@ Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or 
 - WoW fonts can't draw Unicode symbols such as stars, arrows or smart quotes, so all in-game text is plain ASCII. Colors use `|cffRRGGBB...|r` escape codes only, never Markdown.
 - Text pasted into WoW edit boxes turns `|` into `||`. `ns.NormalizeStoryText` converts it back, strips code fences, and closes any open color tags before the story is rendered.
 - Screenshots fade `UIParent` with `SetAlpha` instead of hiding it, which avoids `ADDON_ACTION_BLOCKED` in combat.
+- The Forever client runs on the modern engine, where `COMBAT_LOG_EVENT_UNFILTERED` is Blizzard-only. Registering it shows the "blocked from an action only available to the Blizzard UI" popup on every load, so RPCopy skips it when `issecretvalue` exists. Boss kills come from `ENCOUNTER_END` and your own deaths from `PLAYER_DEAD`. If that popup ever shows up, `Logs/taint.log` in the game folder names the file and line.
+- **Versioning.** Bump `## Version` in `RPCopy.toc` with every change: a patch bump (3.7.1 to 3.7.2) for small fixes, a minor bump (3.7 to 3.8) for big updates. The chat banner on load reads it, so you can tell at a glance which build is running.
 
 ---
 

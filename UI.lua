@@ -67,7 +67,7 @@ Generate short, casual in-character English roleplay replies for <Character Full
 
 WHEN TO USE
 
-- The user pastes an RPCopy context snapshot starting with "use <trigger>" (containing [Location], [Target], [S], [G], [P], [W], [Loot], etc.) or uploads a WoW chat screenshot.
+- The user pastes an RPCopy context snapshot starting with "[Skill Call] use <trigger>" (containing [Location], [Target], [S], [G], [P], [W], [Loot], etc.) or uploads a WoW chat screenshot.
 - The user mentions the trigger words "<trigger>" or "<surname>" (for example: "use <trigger>", "<trigger> reply").
 - The user asks for quick in-character <Class> roleplay responses.
 
@@ -96,7 +96,8 @@ CHANNEL CONTEXT & FORMATTING RULES
 1. No Channel Prefixes: Never start replies with /1, /p, /s, /w, or /y. Output pure, copy-paste-ready text.
 2. Adapt to the Chat Channel Context: Check [G], [P], [S], [W], [Y] tags and tailor RP accordingly.
 3. Always Output RP in English: Write all 5 RP chat options in natural, casual lowercase English.
-4. Keep It Short: 1-2 short sentences max per option so it fits fast-paced WoW chat.]]
+4. Keep It Short: 1-2 short sentences max per option so it fits fast-paced WoW chat.
+5. Follow the [Instruction] Line: If the snapshot has an [Instruction] line, it is the user's direction for these replies (tone, focus, who to answer, what to do). Follow it. It is not chat and never something a character said.]]
 
 local STORY_SKILL_TEMPLATE_TEXT = [[---
 name: wow-adventure-story
@@ -180,6 +181,10 @@ local function EnsureUIOptions()
     end
     if not RPCopyDB.captureTargetKey or RPCopyDB.captureTargetKey == "" then
         RPCopyDB.captureTargetKey = "SHIFT-C"
+    end
+    -- Mark Moment has no default key ("" = unbound) so it never steals a bind
+    if type(RPCopyDB.markMomentKey) ~= "string" then
+        RPCopyDB.markMomentKey = ""
     end
     if not RPCopyDB.lastSliceId or RPCopyDB.lastSliceId == "" then
         RPCopyDB.lastSliceId = "CHAT"
@@ -326,7 +331,7 @@ titleText:SetText("|cffffd100RPCopy|r |cffd8dee9- Pick a Slice & Press Ctrl+C (E
 
 local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 verBadge:SetPoint("RIGHT", -34, 0)
-verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "3.7.1") .. "|r")
+verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "3.8.0") .. "|r")
 
 local closeBtn = CreateSleekButton(headerBar, 22, 20, "x", "danger")
 closeBtn:SetPoint("RIGHT", -5, 0)
@@ -419,7 +424,8 @@ end
 
 local function ArmCtrlCopy(mode)
     EnsureUIOptions()
-    if InCombatLockdown and InCombatLockdown() then return false end
+    -- No combat check: SetText/SetFocus on our own non-secure EditBox is not
+    -- a protected action, so this is safe in combat (no blocked-action popup).
     if copyFrame:IsShown() then return false end
 
     local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
@@ -431,8 +437,12 @@ local function ArmCtrlCopy(mode)
     local tabId = (tabCfg and tabCfg.id) or "CHAT"
     armedTabLabel = (tabCfg and tabCfg.label) or "Chat"
 
+    -- pcall: in combat some chat/unit values can be restricted; never error mid-fight
+    local ok, snap = pcall(ns.BuildSnapshot, tabId, "", false)
+    if not ok or type(snap) ~= "string" then return false end
+
     armEditBox:Show()
-    armEditBox:SetText(ns.BuildSnapshot(tabId, "", false))
+    armEditBox:SetText(snap)
     armEditBox:SetFocus()
     armEditBox:HighlightText()
     isArmed = true
@@ -505,7 +515,6 @@ local silentCopyBtn = CreateFrame("Button", "RPCopySilentCopyBtn", UIParent)
 silentCopyBtn:SetSize(1, 1)
 silentCopyBtn:SetPoint("BOTTOMLEFT", 0, 0)
 silentCopyBtn:SetScript("OnClick", function()
-    if InCombatLockdown and InCombatLockdown() then return end
     local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     if focused and focused ~= armEditBox then return end
 
@@ -564,6 +573,15 @@ silentCaptureBtn:SetScript("OnClick", function()
     RPCopy_CaptureTarget()
 end)
 
+local silentMarkBtn = CreateFrame("Button", "RPCopySilentMarkBtn", UIParent)
+silentMarkBtn:SetSize(1, 1)
+silentMarkBtn:SetPoint("BOTTOMLEFT", 0, 0)
+silentMarkBtn:SetScript("OnClick", function()
+    local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    if focused and focused ~= armEditBox then return end
+    if RPCopy_MarkMoment then RPCopy_MarkMoment() end
+end)
+
 -- Safe Override Binding Manager (NEVER calls SetPropagateKeyboardInput or modifies binds in combat)
 local bindManagerFrame = CreateFrame("Frame", "RPCopyBindManagerFrame", UIParent)
 bindManagerFrame:RegisterEvent("PLAYER_LOGIN")
@@ -585,6 +603,9 @@ local function UpdateOverrideBindings()
         end
         if RPCopyDB.quickCapture and RPCopyDB.captureTargetKey and RPCopyDB.captureTargetKey ~= "" then
             SetOverrideBindingClick(bindManagerFrame, false, RPCopyDB.captureTargetKey, "RPCopySilentCaptureBtn")
+        end
+        if RPCopyDB.markMomentKey and RPCopyDB.markMomentKey ~= "" then
+            SetOverrideBindingClick(bindManagerFrame, false, RPCopyDB.markMomentKey, "RPCopySilentMarkBtn")
         end
     end
 end
@@ -1385,6 +1406,7 @@ local barCtrlCToggleBtn
 local optCopyBindBtn
 local optCaptureToggleBtn
 local optCaptureBindBtn
+local optMarkBindBtn
 
 local function SyncToggleLabels()
     EnsureUIOptions()
@@ -1407,7 +1429,7 @@ local function SyncToggleLabels()
         if ccOn then barCtrlCToggleBtn:LockHighlight() else barCtrlCToggleBtn:UnlockHighlight() end
     end
     if optCtrlCToggleBtn then
-        optCtrlCToggleBtn:SetText(ccOn and "|cff5cb85cQuick Copy: ON|r" or "|cff9aa5b4Quick Copy: OFF|r")
+        optCtrlCToggleBtn:SetText(ccOn and "|cff5cb85cON|r" or "|cff9aa5b4OFF|r")
         if ccOn then optCtrlCToggleBtn:LockHighlight() else optCtrlCToggleBtn:UnlockHighlight() end
     end
     if optCopyBindBtn then
@@ -1417,11 +1439,16 @@ local function SyncToggleLabels()
     local capOn = RPCopyDB.quickCapture and true or false
     local capKey = RPCopyDB.captureTargetKey or "SHIFT-C"
     if optCaptureToggleBtn then
-        optCaptureToggleBtn:SetText(capOn and "|cff5cb85cTarget Key: ON|r" or "|cff9aa5b4Target Key: OFF|r")
+        optCaptureToggleBtn:SetText(capOn and "|cff5cb85cON|r" or "|cff9aa5b4OFF|r")
         if capOn then optCaptureToggleBtn:LockHighlight() else optCaptureToggleBtn:UnlockHighlight() end
     end
     if optCaptureBindBtn then
         optCaptureBindBtn:SetText("|cffffd100" .. capKey .. "|r")
+    end
+
+    local markKey = RPCopyDB.markMomentKey or ""
+    if optMarkBindBtn then
+        optMarkBindBtn:SetText(markKey ~= "" and ("|cffffd100" .. markKey .. "|r") or "|cff9aa5b4Set Key|r")
     end
 end
 
@@ -1698,7 +1725,7 @@ local kbQuickLbl = optKeybindBar:CreateFontString(nil, "OVERLAY", "GameFontNorma
 kbQuickLbl:SetPoint("LEFT", 8, 0)
 kbQuickLbl:SetText("|cffffd100Quick Copy:|r")
 
-optCtrlCToggleBtn = CreateSleekButton(optKeybindBar, 108, 20, "Quick Copy: ON")
+optCtrlCToggleBtn = CreateSleekButton(optKeybindBar, 40, 20, "ON")
 optCtrlCToggleBtn:SetPoint("LEFT", kbQuickLbl, "RIGHT", 6, 0)
 optCtrlCToggleBtn:SetScript("OnClick", function()
     EnsureUIOptions()
@@ -1711,14 +1738,14 @@ optCtrlCToggleBtn:SetScript("OnClick", function()
         or "|cffffd100RPCopy|r - Quick Copy shortcut disabled.")
 end)
 
-optCopyBindBtn = CreateSleekButton(optKeybindBar, 84, 20, "CTRL-C", "gold")
+optCopyBindBtn = CreateSleekButton(optKeybindBar, 74, 20, "CTRL-C", "gold")
 optCopyBindBtn:SetPoint("LEFT", optCtrlCToggleBtn, "RIGHT", 4, 0)
 
 local kbCapLbl = optKeybindBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-kbCapLbl:SetPoint("LEFT", optCopyBindBtn, "RIGHT", 14, 0)
-kbCapLbl:SetText("|cffffd100Capture Target:|r")
+kbCapLbl:SetPoint("LEFT", optCopyBindBtn, "RIGHT", 12, 0)
+kbCapLbl:SetText("|cffffd100Target:|r")
 
-optCaptureToggleBtn = CreateSleekButton(optKeybindBar, 110, 20, "Target Key: ON")
+optCaptureToggleBtn = CreateSleekButton(optKeybindBar, 40, 20, "ON")
 optCaptureToggleBtn:SetPoint("LEFT", kbCapLbl, "RIGHT", 6, 0)
 optCaptureToggleBtn:SetScript("OnClick", function()
     EnsureUIOptions()
@@ -1730,10 +1757,21 @@ optCaptureToggleBtn:SetScript("OnClick", function()
         or "|cffffd100RPCopy|r - Target Capture shortcut disabled.")
 end)
 
-optCaptureBindBtn = CreateSleekButton(optKeybindBar, 84, 20, "SHIFT-C", "gold")
+optCaptureBindBtn = CreateSleekButton(optKeybindBar, 74, 20, "SHIFT-C", "gold")
 optCaptureBindBtn:SetPoint("LEFT", optCaptureToggleBtn, "RIGHT", 4, 0)
 
-local resetKeysBtn = CreateSleekButton(optKeybindBar, 84, 20, "Reset Keys")
+local kbMarkLbl = optKeybindBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+kbMarkLbl:SetPoint("LEFT", optCaptureBindBtn, "RIGHT", 12, 0)
+kbMarkLbl:SetText("|cffffd100Mark Moment:|r")
+
+-- Left-click sets the key, right-click clears it
+optMarkBindBtn = CreateSleekButton(optKeybindBar, 74, 20, "Set Key", "gold")
+optMarkBindBtn:SetPoint("LEFT", kbMarkLbl, "RIGHT", 6, 0)
+if optMarkBindBtn.RegisterForClicks then
+    optMarkBindBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+end
+
+local resetKeysBtn = CreateSleekButton(optKeybindBar, 52, 20, "Reset")
 resetKeysBtn:SetPoint("RIGHT", -6, 0)
 resetKeysBtn:SetScript("OnClick", function()
     EnsureUIOptions()
@@ -1741,9 +1779,10 @@ resetKeysBtn:SetScript("OnClick", function()
     RPCopyDB.quickCopyKey = "CTRL-C"
     RPCopyDB.quickCapture = true
     RPCopyDB.captureTargetKey = "SHIFT-C"
+    RPCopyDB.markMomentKey = ""
     UpdateOverrideBindings()
     SyncToggleLabels()
-    titleText:SetText("|cffffd100RPCopy|r - Reset shortcuts to CTRL-C and SHIFT-C.")
+    titleText:SetText("|cffffd100RPCopy|r - Reset shortcuts to CTRL-C and SHIFT-C (Mark Moment unbound).")
 end)
 
 -- Safe Key-Capture Overlay Frame (captures next key combo without protected calls)
@@ -1806,7 +1845,12 @@ keyCaptureFrame:SetScript("OnKeyDown", function(self, key)
     self:Hide()
     UpdateOverrideBindings()
     SyncToggleLabels()
-    titleText:SetText("|cffffd100RPCopy|r - Bound shortcut to |cff69ccf0" .. combo .. "|r!")
+    local warn = ""
+    if self.targetField ~= "quickCopyKey" and combo:find("CTRL-", 1, true) and RPCopyDB.quickCtrlC and RPCopyDB.quickCopyKey == "CTRL-C" then
+        -- Instant Ctrl+C grabs the keyboard while Ctrl is held, so Ctrl combos won't fire
+        warn = " |cffff6b6bCtrl keys clash with instant Ctrl+C copy - pick Shift or Alt.|r"
+    end
+    titleText:SetText("|cffffd100RPCopy|r - Bound shortcut to |cff69ccf0" .. combo .. "|r!" .. warn)
 end)
 
 optCopyBindBtn:SetScript("OnClick", function()
@@ -1815,6 +1859,18 @@ end)
 
 optCaptureBindBtn:SetScript("OnClick", function()
     StartKeyBindCapture("captureTargetKey", "Capture Target")
+end)
+
+optMarkBindBtn:SetScript("OnClick", function(_, button)
+    if button == "RightButton" then
+        EnsureUIOptions()
+        RPCopyDB.markMomentKey = ""
+        UpdateOverrideBindings()
+        SyncToggleLabels()
+        titleText:SetText("|cffffd100RPCopy|r - Mark Moment key cleared.")
+        return
+    end
+    StartKeyBindCapture("markMomentKey", "Mark Moment")
 end)
 
 -- Custom Tabs List & Editor (starts at -68 below the two top bars)
@@ -1860,7 +1916,7 @@ oMoveDownBtn:SetPoint("TOPRIGHT", 0, -16)
 
 local oPrefixLbl = oEditorPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 oPrefixLbl:SetPoint("TOPLEFT", 0, -42)
-oPrefixLbl:SetText("Top Constant / Skill Trigger (Line 1):")
+oPrefixLbl:SetText("Skill Call (Line 1, invokes your AI skill):")
 
 local oPrefixInput = CreateFrame("EditBox", "RPCopyOptTabPrefix", oEditorPanel, "InputBoxTemplate")
 oPrefixInput:SetSize(436, 20)
@@ -2332,8 +2388,11 @@ SlashCmdList["RPCOPY"] = function(msg)
         return
     elseif low:match("^mark") then
         local noteArg = trimmed:match("^mark%s+(.+)$")
-        local _, status = ns.MarkAdventureHighlight(noteArg)
+        local ok, status = ns.MarkAdventureHighlight(noteArg)
         print("|cff00ff00[RPCopy]|r " .. status)
+        if ok and ns.RequestScreenshot then
+            ns.RequestScreenshot("mark", noteArg or "Marked moment")
+        end
         return
     end
     RPCopy_Open(trimmed)

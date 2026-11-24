@@ -1,0 +1,11 @@
+# Local backup copies (git history replaces these)
+backup/
+
+# Windows / editor junk
+Thumbs.db
+desktop.ini
+*.bak
+*.tmp
+*~
+.vscode/
+.idea/

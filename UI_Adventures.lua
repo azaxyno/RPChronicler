@@ -5,10 +5,12 @@ local UI = ns.UI
 -- Recording controls (buttons, keybinds and slash commands share these)
 -- =========================================================
 local function RefreshIfOpen()
+    if UI.RefreshRecordIcon then pcall(UI.RefreshRecordIcon) end
     if UI.frame:IsShown() and ns.state.section == "ADVENTURES" and UI.RefreshAdventuresTab then
         UI.RefreshAdventuresTab()
     end
 end
+UI.RefreshRunViews = RefreshIfOpen
 
 local function Report(msg, kind)
     if UI.frame:IsShown() then
@@ -31,6 +33,13 @@ function RPCopy_StartRun()
         Report("Recording adventure: " .. (run.title or "Adventure"), "good")
     end
     RefreshIfOpen()
+end
+
+UI.StartRunFromUI = function() RPCopy_StartRun() end
+
+-- One toggle for Start / Stop (the button, the RP icon menu, keybinds)
+function RPCopy_ToggleRun()
+    if ns.GetActiveAdventure() then RPCopy_EndRun() else RPCopy_StartRun() end
 end
 
 function RPCopy_ToggleRunPause()
@@ -83,15 +92,26 @@ do
 
     imp.title = UI.Label(f, "|cffffd100Import Adventure Chronicle|r", "GameFontNormal")
     imp.title:SetPoint("TOPLEFT", 14, -12)
-    local sub = UI.Label(f, "|cffd7c4a3Paste the full colored story below (Ctrl+V) and click Save Chronicle.|r", "GameFontHighlightSmall")
+    local sub = UI.Label(f, "|cffd7c4a3Pick the run, paste the colored story (Ctrl+V) and click Save to Story Book.|r", "GameFontHighlightSmall")
     sub:SetPoint("TOPLEFT", 14, -28)
+
+    -- Run selector: < Run name >
+    imp.prev = UI.CreateSleekButton(f, 22, 20, "<")
+    imp.prev:SetPoint("TOPLEFT", 14, -46)
+    imp.next = UI.CreateSleekButton(f, 22, 20, ">")
+    imp.next:SetPoint("TOPRIGHT", -14, -46)
+    imp.runLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    imp.runLabel:SetPoint("LEFT", imp.prev, "RIGHT", 8, 0)
+    imp.runLabel:SetPoint("RIGHT", imp.next, "LEFT", -8, 0)
+    imp.runLabel:SetJustifyH("CENTER")
+    imp.runLabel:SetWordWrap(false)
 
     local closeX = UI.CreateSleekButton(f, 22, 20, "x", "danger")
     closeX:SetPoint("TOPRIGHT", -8, -8)
     closeX:SetScript("OnClick", function() f:Hide() end)
 
     local boxBg = CreateFrame("Frame", nil, f, UI.BACKDROP)
-    boxBg:SetPoint("TOPLEFT", 14, -48)
+    boxBg:SetPoint("TOPLEFT", 14, -72)
     boxBg:SetPoint("BOTTOMRIGHT", -14, 42)
     UI.ApplyDarkGlass(boxBg, 0.06, 0.05, 0.04, 0.96, 0.72, 0.56, 0.26, 0.75)
 
@@ -104,14 +124,14 @@ do
     eb:SetMaxLetters(0)
     eb:SetFontObject(ChatFontNormal)
     eb:SetWidth(510)
-    eb:SetHeight(310)
+    eb:SetHeight(286)
     eb:SetAutoFocus(true)
     scroll:SetScrollChild(eb)
     eb:SetScript("OnTextChanged", function() scroll:UpdateScrollChildRect() end)
     eb:SetScript("OnEscapePressed", function() f:Hide() end)
     imp.editBox = eb
 
-    local saveBtn = UI.CreateSleekButton(f, 136, 24, "Save Chronicle", "gold")
+    local saveBtn = UI.CreateSleekButton(f, 136, 24, "Save to Story Book", "gold")
     saveBtn:SetPoint("BOTTOMLEFT", 14, 11)
     saveBtn:SetScript("OnClick", function()
         local raw = eb:GetText() or ""
@@ -120,10 +140,9 @@ do
             return
         end
         if f.targetAdvId and ns.SetAdventureStory(f.targetAdvId, raw) then
-            ns.state.adventureViewMode = "STORY"
             f:Hide()
-            if UI.RefreshAdventuresTab then UI.RefreshAdventuresTab() end
-            UI.SetStatus("Chronicle saved to the Story tab.", "good")
+            if UI.ShowAdventuresSub then UI.ShowAdventuresSub("BOOK", f.targetAdvId) end
+            UI.SetStatus("Story saved to the Story Book.", "good")
         end
     end)
 
@@ -139,32 +158,90 @@ do
     cancelBtn:SetScript("OnClick", function() f:Hide() end)
 end
 
+-- Every run you can attach a story to: the live one first, then saved ones
+local function AllRuns()
+    local list = {}
+    local active = ns.GetActiveAdventure()
+    if active then table.insert(list, active) end
+    for _, adv in ipairs(RPCopyDB.adventures or {}) do table.insert(list, adv) end
+    return list
+end
+UI.AllRuns = AllRuns
+
+local function ShowImportRun()
+    local runs = AllRuns()
+    local idx = 1
+    for i, adv in ipairs(runs) do
+        if adv.id == imp.frame.targetAdvId then idx = i end
+    end
+    local adv = runs[idx]
+    imp.frame.targetAdvId = adv and adv.id or nil
+    if adv then
+        local has = (adv.story and adv.story ~= "") and "  |cffffb74d(has a story: saving replaces it)|r" or ""
+        imp.runLabel:SetText(string.format("|cfff5e6c8%s|r |cff9aa5b4- %s - %s (%d of %d)|r%s",
+            adv.title or "Adventure", ns.GetRunKindLabel(adv), adv.startDate or "-", idx, #runs, has))
+    else
+        imp.runLabel:SetText("|cffff6b6bNo recorded runs yet. Record one first.|r")
+    end
+    if #runs > 1 then imp.prev:Enable(); imp.next:Enable() else imp.prev:Disable(); imp.next:Disable() end
+    return runs, idx
+end
+
+local function StepImportRun(delta)
+    local runs, idx = ShowImportRun()
+    if #runs == 0 then return end
+    idx = ((idx - 1 + delta) % #runs) + 1
+    imp.frame.targetAdvId = runs[idx].id
+    ShowImportRun()
+end
+imp.prev:SetScript("OnClick", function() StepImportRun(-1) end)
+imp.next:SetScript("OnClick", function() StepImportRun(1) end)
+
 local function OpenStoryImportModal(adv)
-    if not adv then return end
-    imp.frame.targetAdvId = adv.id
-    imp.title:SetText("|cffffd100Import Chronicle:|r |cfff5e6c8" .. (adv.title or "Adventure") .. "|r")
+    imp.frame.targetAdvId = adv and adv.id or (ns.state.selectedAdventureId)
+    imp.title:SetText("|cffffd100Import Story from your AI|r")
     imp.editBox:SetText("")
+    ShowImportRun()
     imp.frame:Show()
     imp.editBox:SetFocus()
 end
+UI.OpenStoryImportModal = OpenStoryImportModal
 
 -- =========================================================
 -- ADVENTURES section: record bar, run list, Summary | Full Log | Story
 -- =========================================================
-local view = UI.NewSection("ADVENTURES", "Adventures", "Runs record by themselves in dungeons and raids. Full Log is what you paste into your AI.")
-UI.AddRailButton("ADVENTURES", "Adventures", UI.ICONS.ADVENTURES, "Record dungeon and raid runs and read their stories.")
+local view = UI.NewSection("ADVENTURES", "Adventures", "Recordings holds your runs. Story Book holds the stories your AI wrote.")
+UI.AddRailButton("ADVENTURES", "Adventures", UI.ICONS.ADVENTURES, "Record runs and read their stories in the Story Book.")
 
 local A = { cards = {} }
 UI.adventures = A
 
+-- Sub-tabs: Recordings | Story Book
+A.recTab = UI.CreateSleekButton(view, 96, 22, "Recordings")
+A.recTab:SetPoint("TOPLEFT", 0, 0)
+A.recTab:SetIcon(UI.ICONS.ADVENTURES, 14)
+A.bookTab = UI.CreateSleekButton(view, 104, 22, "Story Book")
+A.bookTab:SetPoint("LEFT", A.recTab, "RIGHT", 4, 0)
+A.bookTab:SetIcon(UI.ICONS.STORY, 14)
+A.bookTab.tipTitle = "|cffffd100Story Book|r"
+A.bookTab.tipText = "Every run with a story from your AI: read, share, edit details or import a new one."
+
+A.recView = CreateFrame("Frame", nil, view)
+A.recView:SetPoint("TOPLEFT", 0, -28)
+A.recView:SetPoint("BOTTOMRIGHT", 0, 0)
+A.bookView = CreateFrame("Frame", nil, view)
+A.bookView:SetPoint("TOPLEFT", 0, -28)
+A.bookView:SetPoint("BOTTOMRIGHT", 0, 0)
+A.bookView:Hide()
+
 -- Record bar
-A.recBar = CreateFrame("Frame", nil, view, UI.BACKDROP)
+A.recBar = CreateFrame("Frame", nil, A.recView, UI.BACKDROP)
 A.recBar:SetHeight(30)
 A.recBar:SetPoint("TOPLEFT", 0, 0)
 A.recBar:SetPoint("TOPRIGHT", 0, 0)
 UI.ApplyDarkGlass(A.recBar, 0.08, 0.10, 0.14, 0.95, 0.72, 0.58, 0.28, 0.45)
 
-A.runBtn = UI.CreateSleekButton(A.recBar, 122, 22, "Start New Run", "gold")
+A.runBtn = UI.CreateSleekButton(A.recBar, 122, 22, "Start Recording", "good")
 A.runBtn:SetPoint("LEFT", 4, 0)
 A.runBtn.dot = A.runBtn:CreateTexture(nil, "OVERLAY")
 A.runBtn.dot:SetSize(8, 8)
@@ -188,14 +265,14 @@ A.recText:SetJustifyH("RIGHT")
 A.recText:SetWordWrap(false)
 
 -- Run list
-A.list = CreateFrame("Frame", nil, view, UI.BACKDROP)
+A.list = CreateFrame("Frame", nil, A.recView, UI.BACKDROP)
 A.list:SetWidth(190)
 A.list:SetPoint("TOPLEFT", A.recBar, "BOTTOMLEFT", 0, -6)
 A.list:SetPoint("BOTTOMLEFT", 0, 0)
 UI.ApplyPanelLook(A.list)
 
 do
-    local header = UI.Label(A.list, "|cffffd100Recorded Adventures|r")
+    local header = UI.Label(A.list, "|cffffd100Recordings|r")
     header:SetPoint("TOPLEFT", 10, -8)
 end
 
@@ -207,7 +284,7 @@ A.listChild:SetSize(156, 10)
 A.listScroll:SetScrollChild(A.listChild)
 
 -- Right panel
-A.right = CreateFrame("Frame", nil, view)
+A.right = CreateFrame("Frame", nil, A.recView)
 A.right:SetPoint("TOPLEFT", A.list, "TOPRIGHT", 10, 0)
 A.right:SetPoint("BOTTOMRIGHT", 0, 0)
 
@@ -248,8 +325,13 @@ A.fullBtn = UI.CreateSleekButton(A.right, 62, 22, "Full Log")
 A.fullBtn:SetPoint("LEFT", A.summaryBtn, "RIGHT", 4, 0)
 A.fullBtn.tipTitle = "|cffffd100Full Log|r"
 A.fullBtn.tipText = "The whole run for your AI storyteller. Click Select All, then Ctrl+C."
-A.storyBtn = UI.CreateSleekButton(A.right, 62, 22, "Story")
-A.storyBtn:SetPoint("LEFT", A.fullBtn, "RIGHT", 4, 0)
+A.tplBtn = UI.CreateSleekButton(A.right, 70, 22, "Template", "tool")
+A.tplBtn:SetPoint("LEFT", A.fullBtn, "RIGHT", 4, 0)
+A.tplBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+A.tplBtn.tipTitle = "|cffffd100Story Template|r"
+A.storyBtn = UI.CreateSleekButton(A.right, 56, 22, "Story", "gold")
+A.storyBtn:SetPoint("LEFT", A.tplBtn, "RIGHT", 4, 0)
+A.storyBtn.tipTitle = "|cffffd100Story|r"
 
 A.delBtn = UI.CreateSleekButton(A.right, 56, 22, "Delete", "danger")
 A.delBtn:SetPoint("TOPRIGHT", 0, -66)
@@ -257,9 +339,27 @@ A.delBtn.tipTitle = "|cffff6b6bDelete|r"
 A.delBtn.tipText = "Click twice to delete this run."
 A.selectAllBtn = UI.CreateSleekButton(A.right, 80, 22, "Select All", "gold")
 A.selectAllBtn:SetPoint("RIGHT", A.delBtn, "LEFT", -4, 0)
-A.reimportBtn = UI.CreateSleekButton(A.right, 104, 22, "Re-Import Story", "gold")
-A.reimportBtn:SetPoint("RIGHT", A.delBtn, "LEFT", -4, 0)
-A.reimportBtn:Hide()
+
+-- Full Log size meter (Options > Full Log picks the AI and can hide it)
+A.meter = CreateFrame("Button", nil, A.right)
+A.meter:SetHeight(16)
+A.meter:SetPoint("TOPLEFT", 2, -92)
+A.meter:SetPoint("TOPRIGHT", -2, -92)
+A.meterText = A.meter:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+A.meterText:SetAllPoints(A.meter)
+A.meterText:SetJustifyH("LEFT")
+A.meterText:SetWordWrap(false)
+A.meter:SetScript("OnEnter", function(self)
+    UI.Tooltip(self, "|cffffd100Full Log size|r",
+        "How much of your AI's paste room this log uses. Pick your AI in Options > Full Log.",
+        "Too long? Turn off busy categories there, lower the limits, or use a paid plan.",
+        "README: see the Requirements section for free vs paid plans.")
+end)
+A.meter:SetScript("OnLeave", UI.HideTooltip)
+A.meter:SetScript("OnClick", function()
+    if UI.OpenOptionsPage then UI.OpenOptionsPage("FULLLOG") end
+end)
+A.meter:Hide()
 
 -- Summary / Full Log text box
 A.boxBg = CreateFrame("Frame", nil, A.right, UI.BACKDROP)
@@ -279,104 +379,6 @@ A.editBox:SetHeight(240)
 A.editBox:SetAutoFocus(false)
 A.editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 A.scroll:SetScrollChild(A.editBox)
-
--- Story reader (warm parchment) with an empty-state guide
-A.storyBg = CreateFrame("Frame", nil, A.right, UI.BACKDROP)
-A.storyBg:SetPoint("TOPLEFT", 0, -94)
-A.storyBg:SetPoint("BOTTOMRIGHT", 0, 0)
-A.storyBg:Hide()
-UI.ApplyStoryTomeLook(A.storyBg)
-
-do
-    local inner = CreateFrame("Frame", nil, A.storyBg, UI.BACKDROP)
-    inner:SetPoint("TOPLEFT", 5, -5)
-    inner:SetPoint("BOTTOMRIGHT", -5, 5)
-    UI.ApplyDarkGlass(inner, 0.11, 0.08, 0.06, 0.82, 0.82, 0.65, 0.30, 0.50)
-
-    local empty = CreateFrame("Frame", nil, inner)
-    empty:SetAllPoints(inner)
-    A.emptyPane = empty
-
-    local book = empty:CreateTexture(nil, "ARTWORK")
-    book:SetSize(36, 36)
-    book:SetPoint("TOPLEFT", 16, -16)
-    book:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    book:SetTexture(UI.ICONS.STORY)
-
-    A.emptyHeading = empty:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    A.emptyHeading:SetPoint("TOPLEFT", book, "TOPRIGHT", 10, -2)
-    A.emptyHeading:SetPoint("RIGHT", empty, "RIGHT", -16, 0)
-    A.emptyHeading:SetJustifyH("LEFT")
-    A.emptyHeading:SetWordWrap(false)
-    pcall(A.emptyHeading.SetFont, A.emptyHeading, "Fonts\\FRIZQT__.TTF", 15, "")
-
-    -- Two anchors give it the panel's width, so it wraps instead of overflowing
-    local subHeading = empty:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subHeading:SetPoint("TOPLEFT", book, "TOPRIGHT", 10, -21)
-    subHeading:SetPoint("TOPRIGHT", empty, "TOPRIGHT", -16, -37)
-    subHeading:SetJustifyH("LEFT")
-    subHeading:SetJustifyV("TOP")
-    subHeading:SetWordWrap(true)
-    if subHeading.SetMaxLines then subHeading:SetMaxLines(2) end
-    subHeading:SetText("|cffd7c4a3Turn this run's chatter, wipes, and loot into a colored Warcraft story.|r")
-
-    local divider = empty:CreateTexture(nil, "ARTWORK")
-    divider:SetHeight(1)
-    divider:SetPoint("TOPLEFT", 16, -66)
-    divider:SetPoint("TOPRIGHT", -16, -66)
-    divider:SetTexture(UI.SOLID_TEX)
-    divider:SetVertexColor(0.82, 0.65, 0.30, 0.45)
-
-    local steps = empty:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    steps:SetPoint("TOPLEFT", 18, -76)
-    steps:SetPoint("TOPRIGHT", -18, -76)
-    steps:SetJustifyH("LEFT")
-    steps:SetSpacing(4)
-    steps:SetText(
-        "|cffffd100How to make the story:|r\n" ..
-        "|cfff5e6c81. One time:|r click |cffffd100Story Template|r, paste it into your AI (like Gemini) and create the storyteller skill.\n" ..
-        "|cfff5e6c82. Copy the run:|r open |cff69ccf0Full Log|r, click |cffffd100Select All|r and press |cffffd100Ctrl+C|r.\n" ..
-        "|cfff5e6c83. Import:|r paste the log into your AI, copy its colored story, and click |cffffd100Import Story|r.")
-
-    local tplBtn = UI.CreateSleekButton(empty, 140, 24, "Story Template", "gold")
-    tplBtn:SetPoint("BOTTOMLEFT", 18, 14)
-    tplBtn:SetIcon(UI.ICONS.STORY, 16)
-    tplBtn:SetScript("OnClick", function()
-        if UI.OpenSkillTemplateModal then UI.OpenSkillTemplateModal("STORY") end
-    end)
-
-    A.emptyImportBtn = UI.CreateSleekButton(empty, 140, 24, "Import Story", "gold")
-    A.emptyImportBtn:SetPoint("LEFT", tplBtn, "RIGHT", 8, 0)
-
-    local read = CreateFrame("Frame", nil, inner)
-    read:SetAllPoints(inner)
-    read:Hide()
-    A.readPane = read
-
-    A.storyScroll = CreateFrame("ScrollFrame", "RPCopyStoryReadScroll", read, "UIPanelScrollFrameTemplate")
-    A.storyScroll:SetPoint("TOPLEFT", 14, -12)
-    A.storyScroll:SetPoint("BOTTOMRIGHT", -28, 12)
-    A.storyChild = CreateFrame("Frame", nil, A.storyScroll)
-    A.storyChild:SetSize(320, 240)
-    A.storyScroll:SetScrollChild(A.storyChild)
-
-    A.storyText = A.storyChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    A.storyText:SetPoint("TOPLEFT", 2, -2)
-    A.storyText:SetWidth(316)
-    A.storyText:SetJustifyH("LEFT")
-    A.storyText:SetJustifyV("TOP")
-    A.storyText:SetSpacing(5)
-    A.storyText:SetTextColor(0.95, 0.92, 0.86)
-    A.storyText:SetShadowOffset(1, -1)
-    A.storyText:SetShadowColor(0, 0, 0, 0.95)
-    pcall(A.storyText.SetFont, A.storyText, "Fonts\\FRIZQT__.TTF", 13, "")
-end
-
-local function UpdateStoryScrollHeight()
-    local h = A.storyText:GetStringHeight() or 200
-    A.storyChild:SetHeight(math.max(230, h + 32))
-    A.storyScroll:UpdateScrollChildRect()
-end
 
 local function CreateAdventureCard(parent)
     local card = CreateFrame("Button", nil, parent, UI.BACKDROP)
@@ -444,26 +446,29 @@ local function UpdateHero(adv, isLive)
     if not adv then
         A.heroIcon:SetTexture(UI.ICONS.ADVENTURES)
         A.heroTitle:SetText("|cffffd100No Adventure Selected|r")
-        A.heroMeta:SetText("|cff9aa5b4Enter a dungeon or raid, or click Start New Run above|r")
+        A.heroMeta:SetText("|cff9aa5b4Enter a dungeon or raid, or click Start Recording above|r")
         A.heroStats:SetText("")
         return
     end
     A.heroIcon:SetTexture(ns.GetAdventureIcon(adv))
     local livePrefix = isLive and (adv.paused and "|cffffb74d[PAUSED]|r " or "|cffff5252[REC]|r ") or ""
-    local storyBadge = (adv.story and adv.story ~= "") and "  |cffffd100[Chronicle]|r" or ""
+    local storyBadge = (adv.story and adv.story ~= "") and "  |cffffd100[Story]|r" or ""
     A.heroTitle:SetText(livePrefix .. "|cffffd100" .. (adv.title or "Adventure") .. "|r" .. storyBadge)
-    local durSec = adv.duration or (adv.startTime and (time() - adv.startTime) or 0)
+    local durSec = ns.GetRunDuration(adv)
+    local interrupted = adv.interrupted and "  -  |cffffb74dinterrupted|r|cffb0bac5" or ""
     local reloads = (adv.reloads and adv.reloads > 0) and string.format("  -  %d reload%s", adv.reloads, adv.reloads == 1 and "" or "s") or ""
-    A.heroMeta:SetText(string.format("|cffb0bac5%s  -  %s  -  %s%s|r",
-        adv.zone or "Unknown", adv.startDate or "-", ns.FormatDuration(durSec), reloads))
+    A.heroMeta:SetText(string.format("|cffb0bac5%s  -  %s  -  %s  -  %s%s%s|r",
+        ns.GetRunKindLabel(adv), adv.zone or "Unknown", adv.startDate or "-", ns.FormatDuration(durSec), reloads, interrupted))
     A.heroStats:SetText(string.format(
-        "|cff8f9ba8Kills:|r |cff5cb85c%d|r   |cff8f9ba8Wipes:|r |cffff6b6b%d|r   |cff8f9ba8Deaths:|r |cffffb74d%d|r   |cff8f9ba8Shots:|r |cff69ccf0%d|r",
-        #(adv.bossKills or {}), adv.wipes or 0, adv.deaths or 0, #(adv.shots or {})))
+        "|cff8f9ba8Bosses:|r |cff5cb85c%d|r   |cff8f9ba8Foes:|r |cff5cb85c%d|r   |cff8f9ba8Wipes:|r |cffff6b6b%d|r   |cff8f9ba8Deaths:|r |cffffb74d%d|r   |cff8f9ba8Shots:|r |cff69ccf0%d|r",
+        #(adv.bossKills or {}), adv.foesDefeated or 0, adv.wipes or 0, adv.deaths or 0, #(adv.shots or {})))
 end
 
 local function UpdateRecordBar(active)
     if active then
-        A.runBtn:SetText("|cffff6b6bEnd & Save Run|r")
+        A.runBtn.accentStyle = "danger"
+        A.runBtn.ApplyNormalLook()
+        A.runBtn:SetText("Stop & Save")
         A.runBtn.dot:Hide()
         A.runBtn.label:SetPoint("LEFT", 5, 0)
         A.pauseBtn:Enable()
@@ -480,7 +485,9 @@ local function UpdateRecordBar(active)
             A.recText:SetText(string.format("|cffff6b6bRecording:|r |cffd8dee9%s (%dm)|r", active.title or "Adventure", mins))
         end
     else
-        A.runBtn:SetText("|cff5cb85cStart New Run|r")
+        A.runBtn.accentStyle = "good"
+        A.runBtn.ApplyNormalLook()
+        A.runBtn:SetText("Start Recording")
         A.runBtn.dot:Show()
         A.runBtn.label:SetPoint("LEFT", 14, 0)
         A.pauseBtn:SetText("Pause")
@@ -493,6 +500,19 @@ end
 
 function UI.RefreshAdventuresTab()
     UI.EnsureOptions()
+    if ns.state.adventureSub == "BOOK" then
+        A.recTab:UnlockHighlight()
+        A.bookTab:LockHighlight()
+        A.recView:Hide()
+        A.bookView:Show()
+        A.editBox:ClearFocus()
+        if UI.RefreshStoryBook then UI.RefreshStoryBook() end
+        return
+    end
+    A.recTab:LockHighlight()
+    A.bookTab:UnlockHighlight()
+    A.bookView:Hide()
+    A.recView:Show()
     local active = ns.GetActiveAdventure()
     UpdateRecordBar(active)
 
@@ -515,9 +535,10 @@ function UI.RefreshAdventuresTab()
         local prefix = item.isLive and (adv.paused and "|cffffb74d[P]|r " or "|cffff5252[REC]|r ") or ""
         local bookStar = (adv.story and adv.story ~= "") and " |cffffd100*|r" or ""
         card.titleLbl:SetText(prefix .. "|cfff0f4f8" .. (adv.title or "Adventure") .. "|r" .. bookStar)
-        local durSec = adv.duration or (adv.startTime and (time() - adv.startTime) or 0)
-        card.subLbl:SetText(string.format("|cff8f9ba8%s - %dk - %dw|r",
-            ns.FormatDuration(durSec), #(adv.bossKills or {}), adv.wipes or 0))
+        local durSec = ns.GetRunDuration(adv)
+        local kindShort = (adv.kind == "raid" and "Raid") or (adv.kind == "dungeon" and "Dgn") or "World"
+        card.subLbl:SetText(string.format("|cff8f9ba8%s - %s - %dk - %dw|r",
+            kindShort, ns.FormatDuration(durSec), #(adv.bossKills or {}), adv.wipes or 0))
 
         local selected = (ns.state.selectedAdventureId == adv.id)
         card.isSelected = selected
@@ -545,49 +566,58 @@ function UI.RefreshAdventuresTab()
 
     local hasStory = selected and selected.story and selected.story ~= ""
     A.storyBtn:SetText(hasStory and "Story *" or "Story")
+    A.storyBtn.tipText = hasStory and "Open this run's story in the Story Book." or "Import a story for this run from your AI."
+    if selected then A.storyBtn:Enable() else A.storyBtn:Disable() end
+    local isWorld = not selected or selected.kind == "world"
+    A.tplBtn.tipText = (isWorld and "Opens the |cffffd100Adventure Story|r template (open world, solo)." or "Opens the |cffffd100Dungeon/Raid Story|r template (one chapter per boss).")
+        .. "\nRight-click for the other one. Paste it into your AI once to make the storyteller skill."
     A.summaryBtn:UnlockHighlight()
     A.fullBtn:UnlockHighlight()
-    A.storyBtn:UnlockHighlight()
 
-    local mode = ns.state.adventureViewMode or "SUMMARY"
-    if mode == "STORY" then
-        A.storyBtn:LockHighlight()
-        A.boxBg:Hide()
-        A.selectAllBtn:Hide()
-        A.storyBg:Show()
-        if selected then
-            A.reimportBtn:Show()
-            A.reimportBtn:SetText(hasStory and "Re-Import Story" or "Import Story")
-            A.emptyImportBtn:Enable()
+    local mode = ns.state.adventureViewMode
+    if mode ~= "FULL" then mode = "SUMMARY" end
+    A.boxBg:ClearAllPoints()
+    A.boxBg:SetPoint("BOTTOMRIGHT", 0, 0)
+    if mode == "FULL" then
+        A.fullBtn:LockHighlight()
+        local text = ns.BuildAdventureFullLog(selected)
+        A.editBox:SetText(text)
+        local meterOn = selected and RPCopyDB.sizeMeter ~= false
+        if meterOn then
+            local limit, label = ns.GetAiLimit()
+            local chars = #text
+            local tokens = math.floor(chars / 4 + 0.5)
+            local pct = math.floor(chars * 100 / math.max(1, limit) + 0.5)
+            local color = (pct > 100 and "ff6b6b") or (pct > 80 and "ffb74d") or "5cb85c"
+            local warn = (pct > 100) and ("  |cffff6b6bToo long for " .. label .. ": trim it in Options > Full Log|r") or ("  |cff8f9ba8for " .. label .. "|r")
+            A.meterText:SetText(string.format("|cff8f9ba8Size:|r |cff%s%.1fk chars (~%.1fk tokens), %d%%|r%s",
+                color, chars / 1000, tokens / 1000, pct, warn))
+            A.meter:Show()
+            A.boxBg:SetPoint("TOPLEFT", 0, -112)
         else
-            A.reimportBtn:Hide()
-            A.emptyImportBtn:Disable()
-        end
-        if hasStory then
-            A.emptyPane:Hide()
-            A.readPane:Show()
-            -- Re-normalize on render so stories saved by older versions display cleanly
-            A.storyText:SetText(ns.DecorateStoryBosses(ns.NormalizeStoryText(selected.story), selected))
-            UpdateStoryScrollHeight()
-            A.storyScroll:SetVerticalScroll(0)
-            if C_Timer and C_Timer.After then C_Timer.After(0, UpdateStoryScrollHeight) end
-        else
-            A.readPane:Hide()
-            A.emptyPane:Show()
-            A.emptyHeading:SetText(selected and "|cffffd100No Chronicle Yet|r" or "|cffffd100Select or Start an Adventure First|r")
+            A.meter:Hide()
+            A.boxBg:SetPoint("TOPLEFT", 0, -94)
         end
     else
-        A.storyBg:Hide()
-        A.reimportBtn:Hide()
-        A.boxBg:Show()
-        A.selectAllBtn:Show()
-        if mode == "FULL" then
-            A.fullBtn:LockHighlight()
-            A.editBox:SetText(ns.BuildAdventureFullLog(selected))
-        else
-            A.summaryBtn:LockHighlight()
-            A.editBox:SetText(ns.BuildAdventureSummary(selected))
-        end
+        A.meter:Hide()
+        A.boxBg:SetPoint("TOPLEFT", 0, -94)
+        A.summaryBtn:LockHighlight()
+        A.editBox:SetText(ns.BuildAdventureSummary(selected))
+    end
+end
+
+-- Recordings | Story Book
+function UI.ShowAdventuresSub(sub, advId)
+    ns.state.adventureSub = (sub == "BOOK") and "BOOK" or "REC"
+    if advId then
+        if ns.state.adventureSub == "BOOK" then ns.state.bookAdventureId = advId else ns.state.selectedAdventureId = advId end
+    end
+    if not UI.frame:IsShown() then
+        RPCopy_Open("", "ADVENTURES")
+    elseif ns.state.section ~= "ADVENTURES" then
+        UI.ShowSection("ADVENTURES")
+    else
+        UI.RefreshAdventuresTab()
     end
 end
 
@@ -597,14 +627,28 @@ local function SetMode(mode)
 end
 A.summaryBtn:SetScript("OnClick", function() SetMode("SUMMARY") end)
 A.fullBtn:SetScript("OnClick", function() SetMode("FULL") end)
-A.storyBtn:SetScript("OnClick", function() SetMode("STORY") end)
+A.recTab:SetScript("OnClick", function() UI.ShowAdventuresSub("REC") end)
+A.bookTab:SetScript("OnClick", function() UI.ShowAdventuresSub("BOOK") end)
 
-local function ImportForSelected()
+-- Story: jump to this run's story, or import one
+A.storyBtn:SetScript("OnClick", function()
     local adv = GetSelectedAdventure()
-    if adv then OpenStoryImportModal(adv) end
-end
-A.emptyImportBtn:SetScript("OnClick", ImportForSelected)
-A.reimportBtn:SetScript("OnClick", ImportForSelected)
+    if not adv then return end
+    if adv.story and adv.story ~= "" then
+        UI.ShowAdventuresSub("BOOK", adv.id)
+    else
+        OpenStoryImportModal(adv)
+    end
+end)
+
+-- The template that fits the run type; right-click for the other
+A.tplBtn:SetScript("OnClick", function(_, button)
+    local adv = GetSelectedAdventure()
+    local isWorld = not adv or adv.kind == "world"
+    if button == "RightButton" then isWorld = not isWorld end
+    if UI.OpenSkillTemplateModal then UI.OpenSkillTemplateModal(isWorld and "ADVENTURE" or "STORY") end
+end)
+UI.GetSelectedAdventure = GetSelectedAdventure
 
 A.selectAllBtn:SetScript("OnClick", function()
     A.editBox:SetFocus()
@@ -613,7 +657,7 @@ A.selectAllBtn:SetScript("OnClick", function()
 end)
 
 A.runBtn:SetScript("OnClick", function()
-    if ns.GetActiveAdventure() then RPCopy_EndRun() else RPCopy_StartRun() end
+    RPCopy_ToggleRun()
     UI.RefreshAdventuresTab()
 end)
 A.pauseBtn:SetScript("OnClick", function()
@@ -645,6 +689,7 @@ A.delBtn:SetScript("OnClick", function(self)
             end
             self.armedAt = nil
             table.remove(RPCopyDB.adventures, i)
+            if ns.Debug then ns.Debug("run", "deleted run " .. tostring(adv.title)) end
             ns.state.selectedAdventureId = nil
             UI.SetStatus("Adventure deleted.", "good")
             UI.RefreshAdventuresTab()
@@ -671,10 +716,4 @@ end
 UI.AddReflow(function()
     local w = A.scroll:GetWidth()
     if w and w > 50 then A.editBox:SetWidth(w) end
-    w = A.storyScroll:GetWidth()
-    if w and w > 50 then
-        A.storyChild:SetWidth(w)
-        A.storyText:SetWidth(w - 4)
-        UpdateStoryScrollHeight()
-    end
 end)

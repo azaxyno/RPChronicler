@@ -164,6 +164,9 @@ function UI.CreateSleekButton(parent, width, height, text, accentStyle)
         elseif btn.accentStyle == "danger" then
             UI.ApplyDarkGlass(btn, 0.18, 0.08, 0.09, 0.90, 0.65, 0.24, 0.26, 0.70)
             btn.label:SetTextColor(1.0, 0.55, 0.55)
+        elseif btn.accentStyle == "good" then
+            UI.ApplyDarkGlass(btn, 0.08, 0.17, 0.10, 0.92, 0.30, 0.66, 0.36, 0.80)
+            btn.label:SetTextColor(0.55, 0.92, 0.58)
         elseif btn.accentStyle == "rail" then
             UI.ApplyDarkGlass(btn, 0.07, 0.08, 0.11, 0.0, 0.28, 0.32, 0.40, 0.0)
             btn.label:SetTextColor(0.80, 0.84, 0.90)
@@ -335,7 +338,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.3.1") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.4.0") .. "|r")
 end
 
 -- Left rail
@@ -627,6 +630,138 @@ do
         toast:SetBackdropBorderColor(borderR or 0.36, borderG or 0.72, borderB or 0.36, 0.92)
         toast.hideIn = duration or 2.0
         toast:Show()
+    end
+end
+
+-- =========================================================
+-- Prompt (0.4.0): a small question box with up to three buttons, used for
+-- "Start recording?" and the interrupted-run question. Never protected.
+-- =========================================================
+do
+    local p = CreateFrame("Frame", "RPCopyPromptFrame", UIParent, UI.BACKDROP)
+    p:SetSize(380, 112)
+    p:SetPoint("TOP", UIParent, "TOP", 0, -170)
+    p:SetFrameStrata("FULLSCREEN_DIALOG")
+    p:SetMovable(true)
+    p:EnableMouse(true)
+    p:RegisterForDrag("LeftButton")
+    p:SetScript("OnDragStart", p.StartMoving)
+    p:SetScript("OnDragStop", p.StopMovingOrSizing)
+    p:Hide()
+    UI.ApplyDarkGlass(p, 0.05, 0.07, 0.10, 0.97, 0.82, 0.65, 0.30, 0.90)
+
+    local text = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    text:SetPoint("TOPLEFT", 14, -14)
+    text:SetPoint("TOPRIGHT", -14, -14)
+    text:SetJustifyH("LEFT")
+    text:SetJustifyV("TOP")
+    text:SetSpacing(3)
+
+    local btns = {}
+    for i = 1, 3 do
+        local b = UI.CreateSleekButton(p, 110, 24, "", i == 1 and "gold" or nil)
+        if i == 1 then b:SetPoint("BOTTOMLEFT", 14, 12) else b:SetPoint("LEFT", btns[i - 1], "RIGHT", 6, 0) end
+        b:SetScript("OnClick", function(self)
+            p:Hide()
+            if self.fn then pcall(self.fn) end
+        end)
+        btns[i] = b
+    end
+
+    -- UI.ShowPrompt(text, label1, fn1, label2, fn2, label3, fn3)
+    function UI.ShowPrompt(msg, ...)
+        text:SetText(msg or "")
+        local args = { ... }
+        for i = 1, 3 do
+            local label, fn = args[i * 2 - 1], args[i * 2]
+            if label then
+                btns[i]:SetText(label)
+                btns[i]:SetWidth(math.max(90, (btns[i].label:GetStringWidth() or 60) + 24))
+                btns[i].fn = fn
+                btns[i]:Show()
+            else
+                btns[i]:Hide()
+            end
+        end
+        p:SetHeight(math.max(96, (text:GetStringHeight() or 30) + 60))
+        p:Show()
+    end
+    UI.promptFrame = p
+end
+
+-- =========================================================
+-- Copy box (0.4.0): a read-only text box with Select All, for sharing a
+-- story as plain text and for the /rp debug report
+-- =========================================================
+do
+    local f = CreateFrame("Frame", "RPCopyCopyBoxFrame", UIParent, UI.BACKDROP)
+    f:SetSize(560, 400)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    f:Hide()
+    UI.ApplyDarkGlass(f, 0.05, 0.06, 0.08, 0.97, 0.78, 0.62, 0.28, 0.80)
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "RPCopyCopyBoxFrame") end
+
+    local title = UI.Label(f, "", "GameFontNormal")
+    title:SetPoint("TOPLEFT", 14, -12)
+    local sub = UI.Label(f, "", "GameFontHighlightSmall")
+    sub:SetPoint("TOPLEFT", 14, -28)
+    sub:SetPoint("RIGHT", -40, 0)
+
+    local closeX = UI.CreateSleekButton(f, 22, 20, "x", "danger")
+    closeX:SetPoint("TOPRIGHT", -8, -8)
+    closeX:SetScript("OnClick", function() f:Hide() end)
+
+    local boxBg = CreateFrame("Frame", nil, f, UI.BACKDROP)
+    boxBg:SetPoint("TOPLEFT", 14, -48)
+    boxBg:SetPoint("BOTTOMRIGHT", -14, 42)
+    UI.ApplyPanelLook(boxBg)
+
+    local scroll = CreateFrame("ScrollFrame", "RPCopyCopyBoxScroll", boxBg, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 8, -8)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 8)
+    local eb = CreateFrame("EditBox", "RPCopyCopyBoxEditBox", scroll)
+    eb:SetMultiLine(true)
+    eb:SetMaxLetters(0)
+    eb:SetFontObject(ChatFontNormal)
+    eb:SetWidth(490)
+    eb:SetHeight(300)
+    eb:SetAutoFocus(false)
+    eb:SetScript("OnEscapePressed", function() f:Hide() end)
+    -- Read-only: typing puts the text back
+    eb:SetScript("OnTextChanged", function(self, userInput)
+        if userInput and f.text then self:SetText(f.text); self:HighlightText() end
+        scroll:UpdateScrollChildRect()
+    end)
+    scroll:SetScrollChild(eb)
+
+    local selBtn = UI.CreateSleekButton(f, 110, 24, "Select All", "gold")
+    selBtn:SetPoint("BOTTOMLEFT", 14, 11)
+    selBtn:SetScript("OnClick", function()
+        eb:SetFocus()
+        eb:HighlightText()
+    end)
+    local hint = UI.Label(f, "|cff9aa5b4Then press Ctrl+C to copy.|r", "GameFontHighlightSmall")
+    hint:SetPoint("LEFT", selBtn, "RIGHT", 8, 0)
+    local closeBtn = UI.CreateSleekButton(f, 80, 24, "Close", "danger")
+    closeBtn:SetPoint("BOTTOMRIGHT", -14, 11)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    function UI.ShowCopyBox(titleText, subText, body)
+        f.text = body or ""
+        title:SetText(titleText or "|cffffd100RPCopy|r")
+        sub:SetText(subText or "")
+        eb:SetText(f.text)
+        f:Show()
+        eb:SetFocus()
+        eb:HighlightText()
+        eb:SetCursorPosition(0)
+        eb:HighlightText()
     end
 end
 

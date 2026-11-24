@@ -94,18 +94,86 @@ miniBtn:RegisterForDrag("LeftButton")
 miniBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 miniBtn:SetScript("OnDragStart", miniBtn.StartMoving)
 miniBtn:SetScript("OnDragStop", miniBtn.StopMovingOrSizing)
+UI.miniBtn = miniBtn
+
+-- Right-click menu (0.4.0): Start/Stop, Pause/Resume, Mark Moment, Story
+-- Book, Clear logs. A plain frame, so it works in combat too.
+do
+    local menu = CreateFrame("Frame", "RPCopyIconMenu", UIParent, UI.BACKDROP)
+    menu:SetSize(150, 10)
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:Hide()
+    UI.ApplyDarkGlass(menu, 0.05, 0.07, 0.10, 0.97, 0.82, 0.65, 0.30, 0.90)
+    UI.iconMenu = menu
+
+    local items = {
+        { key = "run", fn = function() RPCopy_ToggleRun() end },
+        { key = "pause", fn = function() RPCopy_ToggleRunPause() end },
+        { key = "mark", label = "Mark Moment", fn = function() if RPCopy_MarkMoment then RPCopy_MarkMoment() end end },
+        { key = "book", label = "Story Book", fn = function() if UI.ShowAdventuresSub then UI.ShowAdventuresSub("BOOK") end end },
+        { key = "clear", label = "Clear chat logs", fn = function()
+            ns.ClearSessionLogs()
+            print("|cff00ff00[RPCopy]|r All logs cleared.")
+        end },
+    }
+    for i, it in ipairs(items) do
+        local b = UI.CreateSleekButton(menu, 138, 20, it.label or "", it.key == "run" and "good" or nil)
+        b:SetPoint("TOP", 0, -6 - (i - 1) * 22)
+        b:SetScript("OnClick", function()
+            menu:Hide()
+            pcall(it.fn)
+        end)
+        it.btn = b
+    end
+    menu:SetHeight(12 + #items * 22)
+
+    local function Refresh()
+        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        local runBtn, pauseBtn, markBtn = items[1].btn, items[2].btn, items[3].btn
+        runBtn.accentStyle = run and "danger" or "good"
+        runBtn.ApplyNormalLook()
+        runBtn:SetText(run and "Stop & Save" or "Start Recording")
+        if run then pauseBtn:Enable() else pauseBtn:Disable() end
+        pauseBtn:SetText((run and run.paused) and "Resume" or "Pause")
+        if run and not run.paused then markBtn:Enable() else markBtn:Disable() end
+    end
+
+    function UI.ToggleIconMenu()
+        if menu:IsShown() then menu:Hide() return end
+        Refresh()
+        menu:ClearAllPoints()
+        local y = miniBtn:GetBottom() or 0
+        if y > 160 then
+            menu:SetPoint("TOPLEFT", miniBtn, "BOTTOMLEFT", 0, -2)
+        else
+            menu:SetPoint("BOTTOMLEFT", miniBtn, "TOPLEFT", 0, 2)
+        end
+        menu.idle = 0
+        menu:Show()
+    end
+
+    -- Closes a few seconds after the mouse leaves it
+    menu:SetScript("OnUpdate", function(self, elapsed)
+        if self:IsMouseOver() or miniBtn:IsMouseOver() then
+            self.idle = 0
+        else
+            self.idle = (self.idle or 0) + elapsed
+            if self.idle > 2.5 then self:Hide() end
+        end
+    end)
+end
+
 miniBtn:SetScript("OnClick", function(_, button)
     if button == "RightButton" then
-        ns.ClearSessionLogs()
-        print("|cff00ff00[RPCopy]|r All logs cleared.")
+        UI.ToggleIconMenu()
     else
         RPCopy_Toggle()
     end
 end)
-UI.miniBtn = miniBtn
 
--- Recording indicator: pulsing red dot + red border while a run records,
--- steady amber dot + amber border while paused, nothing when idle.
+-- Recording indicator (Options > Recording can turn it off):
+-- red label, pulsing red dot and border while a run records; dimmed with
+-- an amber dot and border while paused; the normal gold look when idle.
 do
     local dot = miniBtn:CreateTexture(nil, "OVERLAY")
     dot:SetSize(8, 8)
@@ -116,16 +184,23 @@ do
     local state, acc = nil, 0
     local function Apply(newState)
         state = newState
+        miniBtn:SetAlpha(1)
         if newState == "rec" then
             dot:SetVertexColor(1, 0.15, 0.15, 1)
             dot:Show()
+            miniBtn:SetText("|cffff4040RP|r")
+            miniBtn:SetBackdropColor(0.28, 0.06, 0.06, 0.96)
         elseif newState == "paused" then
             dot:SetVertexColor(1, 0.72, 0.30, 1)
             dot:SetAlpha(1)
             dot:Show()
+            miniBtn:SetText("|cffffb74dRP|r")
+            miniBtn:UnlockHighlight()
             miniBtn:SetBackdropBorderColor(1, 0.72, 0.30, 0.95)
+            miniBtn:SetAlpha(0.55)
         else
             dot:Hide()
+            miniBtn:SetText("|cffffd100RP|r")
             miniBtn:UnlockHighlight() -- restores the normal gold look
         end
     end
@@ -134,6 +209,7 @@ do
         acc = acc + elapsed
         local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
         local want = run and (run.paused and "paused" or "rec") or nil
+        if RPCopyDB and RPCopyDB.iconState == false then want = nil end
         if want ~= state then Apply(want) end
         if state == "rec" then
             local a = 0.55 + 0.45 * math.sin(GetTime() * 4)
@@ -161,13 +237,15 @@ do
         else
             GameTooltip:AddLine("Not recording an adventure", 0.7, 0.7, 0.7)
         end
-        GameTooltip:AddLine("Left-click: open   Right-click: clear logs", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("Left-click: open   Right-click: recording menu", 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end)
     miniBtn:HookScript("OnLeave", function()
         if GameTooltip then GameTooltip:Hide() end
-        state = nil -- re-apply the indicator colors after the hover look
+        state = "hover" -- re-apply the indicator colors after the hover look
     end)
+
+    function UI.RefreshRecordIcon() state = "refresh" end
 end
 
 -- =========================================================
@@ -195,6 +273,15 @@ SlashCmdList["RPCOPY"] = function(msg)
         RPCopy_Open("", "ADVENTURES")
     elseif low == "start" then
         RPCopy_StartRun()
+    elseif low == "book" or low == "stories" then
+        UI.ShowAdventuresSub("BOOK")
+    elseif low == "debug" then
+        UI.ShowCopyBox("|cffffd100RPCopy debug report|r",
+            "|cffb0bac5Select All, Ctrl+C, and paste it into your bug report. It holds no chat.|r",
+            ns.BuildDebugReport and ns.BuildDebugReport() or "Debug module not loaded.")
+    elseif low == "debug clear" then
+        if RPCopyDB then RPCopyDB.debugLog = {} end
+        print("|cff00ff00[RPCopy]|r Debug log cleared.")
     elseif low == "pause" or low == "resume" then
         local ok, status
         if low == "pause" then
@@ -203,11 +290,11 @@ SlashCmdList["RPCOPY"] = function(msg)
             ok, status = ns.ResumeAdventure and ns.ResumeAdventure()
         end
         print("|cff00ff00[RPCopy]|r " .. tostring(status or "Adventures module not loaded."))
-        if UI.frame:IsShown() and ns.state.section == "ADVENTURES" then pcall(UI.RefreshAdventuresTab) end
+        if UI.RefreshRunViews then pcall(UI.RefreshRunViews) end
     elseif low == "end" or low == "stop" then
         local saved = ns.GetActiveAdventure() and ns.EndAdventure("Ended Manually")
         print("|cff00ff00[RPCopy]|r " .. (saved and ("Saved adventure: " .. (saved.title or "Adventure")) or "No active adventure running."))
-        if UI.frame:IsShown() and ns.state.section == "ADVENTURES" then pcall(UI.RefreshAdventuresTab) end
+        if UI.RefreshRunViews then pcall(UI.RefreshRunViews) end
     elseif low == "diag" then
         if ns.DiagnoseTarget then
             for _, line in ipairs(ns.DiagnoseTarget()) do

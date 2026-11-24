@@ -103,7 +103,7 @@ READING THE LOG (HIDDEN CONTEXT)
    [NPC] [NPC Emote] lines spoken by bosses and named NPCs. [LEVEL] a level up. [SKILL] a profession skill-up. [PLACE] a new place reached.
    [ATMOSPHERE] the time of day (dawn, morning, midday, afternoon, dusk, night) and indoors or open sky: use it to set the mood of the scene.
    [LOOT] an item with who got it and where it came from (crafted, from a foe, quest reward, bought, traded, mail, gathered). [HIGHLIGHT] a moment the player marked: give it a scene.
-   [SHOT N] a screenshot taken at that moment; the "Screenshots" list in the header numbers them. Put the marker [Shot N] on its own line in the story where that picture fits best (each number once, in order). RPCopy hides the markers in game and the exporter shows the pictures there.
+   [SHOT N] a screenshot taken at that moment; the "Screenshots" list in the header numbers them. Put the marker [Shot N] on its own line in the story where that picture fits best (each number once, in order), plain and outside any color code: close every |c...|r before it. A marker changes nothing else: after it, keep coloring every name exactly as before. RPCopy hides the markers in game and the exporter shows the pictures there.
    Chat lines ([Party], [Say], [Emote], [Whisper]) are real quotes: weave them in verbatim.
 5. Do not shrink the run into a dry summary. Messy moments (wipes, near deaths, panicked chat, lucky loot) are what make it memorable.
 6. No Icons: never write |T or |A texture codes. RPCopy adds boss icons itself.

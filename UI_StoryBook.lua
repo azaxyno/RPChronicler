@@ -329,17 +329,22 @@ function UI.RefreshStoryBook()
         B.readBg:SetPoint("TOPLEFT", 0, -104)
     end
 
-    local shown = ns.StripShotMarkers(ns.NormalizeStoryText(adv.story))
+    local shown = ns.NormalizeStoryText(adv.story)
+    -- 0.5.3: auto-color the stored text once (markers kept), so the
+    -- exporter gets the same colors after a /reload
+    if RPCopyDB.autoColorStory ~= false and ns.AutoColorStory and adv.autoColored ~= ns.AUTOCOLOR_VERSION then
+        local ok, colored = pcall(ns.AutoColorStory, shown, adv)
+        if ok and type(colored) == "string" then
+            shown = colored
+            adv.story = colored
+            adv.autoColored = ns.AUTOCOLOR_VERSION
+        end
+    end
+    shown = ns.StripShotMarkers(shown)
     -- 0.5.2: an open-world story written with an old template ends with a
     -- dungeon footer of zeros; hide that line (the stats are shown above)
     if adv.kind == "world" then
         shown = shown:gsub("\n[^\n]*Bosses:%s*0%s*|*%s*Wipes:%s*0[^\n]*%s*$", "")
-    end
-    -- 0.5.2: auto-color when shown too, so stories imported before it
-    -- (or before a run gained names) are colored without a re-import
-    if RPCopyDB.autoColorStory ~= false and ns.AutoColorStory then
-        local ok, colored = pcall(ns.AutoColorStory, shown, adv)
-        if ok and type(colored) == "string" then shown = colored end
     end
     B.text:SetText(ns.DecorateStoryBosses(shown, adv))
     UpdateReaderHeight()

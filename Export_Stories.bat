@@ -120,12 +120,19 @@ function ConvertTo-StoryHtml([string]$s) {
     $s = [Net.WebUtility]::HtmlEncode((Get-CleanWowText $s))
     $sb = New-Object Text.StringBuilder
     $open = 0
-    $parts = [regex]::Split($s, '(\|c[0-9a-fA-F]{8}|\|r)')
+    $stack = New-Object System.Collections.ArrayList
+    # [Shot N] markers become pictures later: close the open colors around
+    # them and reopen them after, so a picture never breaks the coloring
+    $parts = [regex]::Split($s, '(\|c[0-9a-fA-F]{8}|\|r|\[[Ss]hot\s*\d+\])')
     foreach ($p in $parts) {
         if ($p -match '^\|c[0-9a-fA-F]{2}([0-9a-fA-F]{6})$') {
-            [void]$sb.Append('<span style="color:#' + $Matches[1] + '">'); $open++
+            [void]$sb.Append('<span style="color:#' + $Matches[1] + '">'); $open++; [void]$stack.Add($Matches[1])
         } elseif ($p -eq '|r') {
-            if ($open -gt 0) { [void]$sb.Append('</span>'); $open-- }
+            if ($open -gt 0) { [void]$sb.Append('</span>'); $open--; $stack.RemoveAt($stack.Count - 1) }
+        } elseif ($p -match '^\[[Ss]hot\s*\d+\]$') {
+            for ($k = 0; $k -lt $open; $k++) { [void]$sb.Append('</span>') }
+            [void]$sb.Append($p)
+            foreach ($c in $stack) { [void]$sb.Append('<span style="color:#' + $c + '">') }
         } else {
             [void]$sb.Append($p)
         }

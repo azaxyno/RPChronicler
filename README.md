@@ -14,7 +14,7 @@ RPCopy also remembers the **companions** you meet, records your **dungeons, raid
                              5 short in-character options
 ```
 
-- **Version:** 0.5.3 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.5.4 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide, on your PC only)
 - **License:** MIT
 

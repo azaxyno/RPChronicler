@@ -980,7 +980,7 @@ function ns.SetAdventureStory(advId, rawStoryText)
     CopyRunMeta(st, adv)
     if RPCopyDB.autoColorStory ~= false and ns.AutoColorStory then
         local ok, colored = pcall(ns.AutoColorStory, cleaned, st)
-        if ok and type(colored) == "string" then cleaned = colored end
+        if ok and type(colored) == "string" then cleaned = colored; st.autoColored = ns.AUTOCOLOR_VERSION end
     end
     st.story = cleaned
     st.importedAt = time()
@@ -1001,7 +1001,7 @@ function ns.SetStoryText(storyId, rawStoryText)
     local cleaned = ns.NormalizeStoryText(rawStoryText)
     if RPCopyDB.autoColorStory ~= false and ns.AutoColorStory then
         local ok, colored = pcall(ns.AutoColorStory, cleaned, st)
-        if ok and type(colored) == "string" then cleaned = colored end
+        if ok and type(colored) == "string" then cleaned = colored; st.autoColored = ns.AUTOCOLOR_VERSION end
     end
     st.story = cleaned
     st.importedAt = time()
@@ -1744,6 +1744,9 @@ end
 -- plain prose is touched; text the AI already colored is left alone.
 -- Options > Stories & Export can turn it off.
 -- =========================================================
+-- Bump when the coloring improves: stories colored by an older version
+-- are colored again once when the Story Book shows them.
+ns.AUTOCOLOR_VERSION = 2
 local PROSE_HEX = { eceff1 = true, e0e0e0 = true, f5e6c8 = true, d7c4a3 = true }
 
 -- 0.5.2: any light, nearly gray color counts as prose (the AI often wraps

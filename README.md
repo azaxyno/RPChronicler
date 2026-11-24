@@ -14,7 +14,7 @@ RPCopy also remembers the **companions** you meet, records your **dungeons, raid
                              5 short in-character options
 ```
 
-- **Version:** 0.5.0 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.5.1 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide, on your PC only)
 - **License:** MIT
 
@@ -368,6 +368,7 @@ WoW addons can't write to the clipboard. RPCopy puts the snapshot, selected, in 
 
 - **Instant** (default). Hold Ctrl a moment and RPCopy gets the box ready, so `Ctrl+C` copies on the first press. Other Ctrl shortcuts still work. If you press `Ctrl+C` very fast, the first press gets the box ready and a second copies.
 - **Two-press.** The first `Ctrl+C` gets the box ready, the second copies. Ctrl is never watched.
+- **Copy box.** `Ctrl+C` shows the snapshot, already selected, in a small box. Press `Ctrl+C` there to copy it, and the box closes by itself. Use it if the other styles don't copy on your PC. RPCopy also falls back to this box by itself when the hidden box can't take the text.
 
 In combat, Instant works as two-press unless you turn on **Instant in combat**. A custom Quick Copy key always works as two-press. If a copy doesn't land, `/rp debug` shows the last copy attempt.
 

@@ -72,7 +72,7 @@ S.choiceHead = UI.Label(f, "", "GameFontNormal")
 
 S.copyBtn = UI.CreateSleekButton(f, 210, 20, "", "tool")
 S.copyBtn.tipTitle = "|cffffd100Ctrl+C copy mode|r"
-S.copyBtn.tipText = "Instant: hold Ctrl a moment and press C, one press copies. Two-press: Ctrl+C arms, a second Ctrl+C copies."
+S.copyBtn.tipText = "Instant: hold Ctrl a moment and press C, one press copies. Two-press: Ctrl+C arms, a second Ctrl+C copies. Copy box: Ctrl+C shows the text selected in a small box, Ctrl+C there copies."
 S.copyWhy = UI.Label(f, "|cff8f9ba8How Ctrl+C copies the scene in the game world.|r", "GameFontHighlightSmall")
 
 S.later = UI.Label(f, "|cff8f9ba8You can change all of this later in Options > Privacy and Options > Recording.|r", "GameFontHighlightSmall")
@@ -142,10 +142,10 @@ local function Layout(list)
 end
 
 local function SyncCopyBtn()
-    S.copyBtn:SetText(S.copyMode == "TWOPRESS" and "Ctrl+C: Two-press" or "Ctrl+C: Instant")
+    S.copyBtn:SetText((S.copyMode == "TWOPRESS" and "Ctrl+C: Two-press") or (S.copyMode == "BOX" and "Ctrl+C: Copy box") or "Ctrl+C: Instant")
 end
 S.copyBtn:SetScript("OnClick", function()
-    S.copyMode = (S.copyMode == "TWOPRESS") and "INSTANT" or "TWOPRESS"
+    S.copyMode = ({ INSTANT = "TWOPRESS", TWOPRESS = "BOX", BOX = "INSTANT" })[S.copyMode] or "INSTANT"
     SyncCopyBtn()
 end)
 
@@ -186,7 +186,7 @@ function UI.OpenSetup(force)
         end
     end
     S.showCopy = force or seen < 1
-    S.copyMode = (RPCopyDB.copyMode == "TWOPRESS") and "TWOPRESS" or "INSTANT"
+    S.copyMode = (RPCopyDB.copyMode == "TWOPRESS" or RPCopyDB.copyMode == "BOX") and RPCopyDB.copyMode or "INSTANT"
     SyncCopyBtn()
     S.title:SetText((seen < 1 or force) and "|cffffd100Welcome to RPCopy - privacy and setup|r" or "|cffffd100RPCopy - new recording options|r")
     S.privacy:SetText(ns.PRIVACY_TEXT or "")

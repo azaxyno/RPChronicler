@@ -24,10 +24,15 @@ local ARM_DELAY = 0.25
 local DISARM_DELAY = 0.25
 
 local armEditBox = CreateFrame("EditBox", "RPCopySilentArmBox", UIParent)
-armEditBox:SetSize(1, 1)
+-- 0.5.1: a real size. A 1x1 multi-line box lays out no text on the modern
+-- client, so nothing is selected and Ctrl+C copies nothing. The box is
+-- still invisible (alpha), sits behind everything and takes no mouse.
+armEditBox:SetSize(400, 200)
 armEditBox:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 2, 2)
+armEditBox:SetFrameStrata("BACKGROUND")
 armEditBox:SetAutoFocus(false)
 armEditBox:SetMultiLine(true)
+if armEditBox.EnableMouse then armEditBox:EnableMouse(false) end
 armEditBox:SetAlpha(0.01)
 -- 0.5.0 (Ctrl+C fix): an EditBox with no font cannot hold or copy text on the
 -- modern client, and the default letter cap can cut a long snapshot.
@@ -94,6 +99,23 @@ function UI.BuildQuickCopyText(sliceId)
     end
     if snap == "" then snap = "[RPCopy] (nothing to copy yet)" end
     return snap
+end
+
+-- 0.5.1 "Copy box" style (and the fallback when the hidden box cannot arm):
+-- the snapshot, selected, in a small visible box. Ctrl+C there copies it
+-- and the box closes itself.
+function UI.ShowQuickCopyBox(reason)
+    UI.EnsureOptions()
+    if UI.frame:IsShown() then UI.frame:Hide() end
+    local tabCfg = ns.GetTabConfig(RPCopyDB.lastSliceId)
+    Q.label = (tabCfg and tabCfg.label) or "Chat"
+    local snap = UI.BuildQuickCopyText(tabCfg and tabCfg.id)
+    if not snap then return false end
+    UI.DisarmCtrlCopy()
+    CopyLog("copy", "copy box shown (" .. (reason or "style") .. "): len " .. #snap)
+    UI.ShowCopyBox("|cffffd100RPCopy|r |cff69ccf0[" .. Q.label .. "]|r",
+        "|cff9aa5b4Selected. Press|r |cffffd100Ctrl+C|r |cff9aa5b4to copy, it closes by itself.|r", snap, true)
+    return true
 end
 
 function UI.ArmCtrlCopy(mode)
@@ -263,9 +285,14 @@ do
             CopyLog("copy", "binding fired while armed but unfocused (focused frame " .. FocusName() .. "); re-arming")
             Q.isArmed = false
         end
-        if not Q.isArmed then
+        if RPCopyDB.copyMode == "BOX" then
+            UI.ShowQuickCopyBox("style")
+        elseif not Q.isArmed then
             if UI.ArmCtrlCopy("timed") then
                 UI.ShowToast(string.format("|cffffd100Ready|r |cff69ccf0[%s]|r - press |cffffd100CTRL-C|r again to copy", Q.label), 2.5, 0.85, 0.68, 0.30)
+            elseif not (GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() and GetCurrentKeyBoardFocus() ~= armEditBox) then
+                -- The hidden box could not take the text: use the visible one
+                UI.ShowQuickCopyBox("fallback")
             end
         else
             FinishCopy("binding")
@@ -276,8 +303,12 @@ end
 function RPCopy_QuickCopy()
     UI.EnsureOptions()
     if UI.frame:IsShown() then UI.frame:Hide() end
-    if UI.ArmCtrlCopy("timed") then
+    if RPCopyDB.copyMode == "BOX" then
+        UI.ShowQuickCopyBox("style")
+    elseif UI.ArmCtrlCopy("timed") then
         UI.ShowToast(string.format("|cffffd100Ready:|r Press |cffffd100CTRL-C|r now for |cff69ccf0[%s]|r", Q.label), 2.5, 0.85, 0.68, 0.30)
+    else
+        UI.ShowQuickCopyBox("fallback")
     end
 end
 

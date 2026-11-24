@@ -534,7 +534,8 @@ do
     local modeBtn = UI.CreateSleekButton(p, 146, 20, "", "tool")
     modeBtn:SetPoint("TOPLEFT", 140, -56)
     modeBtn:SetScript("OnClick", function()
-        RPCopyDB.copyMode = (RPCopyDB.copyMode == "INSTANT") and "TWOPRESS" or "INSTANT"
+        local nextMode = { INSTANT = "TWOPRESS", TWOPRESS = "BOX", BOX = "INSTANT" }
+        RPCopyDB.copyMode = nextMode[RPCopyDB.copyMode] or "INSTANT"
         if UI.DisarmCtrlCopy then UI.DisarmCtrlCopy() end
         UI.RefreshOptionsPage()
     end)
@@ -580,12 +581,16 @@ do
         local isCtrlC = RPCopyDB.quickCopyKey == "CTRL-C"
         if RPCopyDB.copyMode == "INSTANT" then
             modeBtn:SetText("|cffc2d8ffInstant (hold Ctrl)|r")
+        elseif RPCopyDB.copyMode == "BOX" then
+            modeBtn:SetText("|cffc2d8ffCopy box|r")
         else
             modeBtn:SetText("|cffc2d8ffTwo-press|r")
         end
         UI.SetToggleLook(combatBtn, RPCopyDB.instantInCombat, "Instant in combat: ON", "Instant in combat: OFF")
         if not isCtrlC then
             modeNote:SetText("|cff8f9ba8Your Quick Copy key arms the copy; then press Ctrl+C to copy. Copy style only applies to CTRL-C.|r")
+        elseif RPCopyDB.copyMode == "BOX" then
+            modeNote:SetText("|cff8f9ba8Copy box: Ctrl+C shows the snapshot selected in a small box. Press Ctrl+C there to copy, and it closes by itself. The safest style if the others do not copy.|r")
         elseif RPCopyDB.copyMode == "INSTANT" then
             modeNote:SetText("|cff8f9ba8Instant: hold Ctrl a moment, press C, done. Quick Ctrl+key combos still reach your keybinds. A very fast Ctrl+C asks for a second press.|r")
         else

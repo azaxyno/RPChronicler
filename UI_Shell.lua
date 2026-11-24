@@ -88,8 +88,9 @@ function UI.EnsureOptions()
     for _, field in ipairs({ "markMomentKey", "openWindowKey", "runStartKey", "runPauseKey", "runEndKey" }) do
         if type(db[field]) ~= "string" then db[field] = "" end
     end
-    -- Ctrl+C copy style: INSTANT (hold Ctrl, press C) or TWOPRESS (Ctrl+C twice)
-    if db.copyMode ~= "INSTANT" and db.copyMode ~= "TWOPRESS" then db.copyMode = "INSTANT" end
+    -- Ctrl+C copy style: INSTANT (hold Ctrl, press C), TWOPRESS (Ctrl+C twice)
+    -- or BOX (0.5.1: Ctrl+C shows the snapshot selected in a visible box)
+    if db.copyMode ~= "INSTANT" and db.copyMode ~= "TWOPRESS" and db.copyMode ~= "BOX" then db.copyMode = "INSTANT" end
     if db.instantInCombat == nil then db.instantInCombat = false end
     if not db.lastSliceId or db.lastSliceId == "" then db.lastSliceId = "CHAT" end
     if type(db.optionsPage) ~= "string" then db.optionsPage = "GENERAL" end
@@ -348,7 +349,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.5.0") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.5.1") .. "|r")
 end
 
 -- Left rail
@@ -793,6 +794,16 @@ do
         scroll:UpdateScrollChildRect()
     end)
     scroll:SetScrollChild(eb)
+    -- 0.5.1: a quick-copy box closes itself once Ctrl+C has copied
+    eb:SetScript("OnKeyDown", function(self, key)
+        if f.autoClose and key == "C" and IsControlKeyDown() then
+            self:HighlightText()
+            if ns.Debug then ns.Debug("copy", "copy box Ctrl+C: len " .. #(self:GetText() or "")) end
+            UI.ShowToast("|cffffd100Copied|r |cff5cb85cto clipboard!|r", 1.8, 0.36, 0.72, 0.36)
+            f.autoClose = false
+            if C_Timer and C_Timer.After then C_Timer.After(0.25, function() f:Hide() end) else f:Hide() end
+        end
+    end)
 
     local selBtn = UI.CreateSleekButton(f, 110, 24, "Select All", "gold")
     selBtn:SetPoint("BOTTOMLEFT", 14, 11)
@@ -806,8 +817,9 @@ do
     closeBtn:SetPoint("BOTTOMRIGHT", -14, 11)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
 
-    function UI.ShowCopyBox(titleText, subText, body)
+    function UI.ShowCopyBox(titleText, subText, body, autoClose)
         f.text = body or ""
+        f.autoClose = autoClose and true or false
         title:SetText(titleText or "|cffffd100RPCopy|r")
         sub:SetText(subText or "")
         eb:SetText(f.text)

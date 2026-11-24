@@ -331,7 +331,7 @@ titleText:SetText("|cffffd100RPCopy|r |cffd8dee9- Pick a Slice & Press Ctrl+C (E
 
 local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 verBadge:SetPoint("RIGHT", -34, 0)
-verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "3.9.0") .. "|r")
+verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "3.9.1") .. "|r")
 
 local closeBtn = CreateSleekButton(headerBar, 22, 20, "x", "danger")
 closeBtn:SetPoint("RIGHT", -5, 0)
@@ -652,9 +652,11 @@ local tplSubTitle = templateFrame:CreateFontString(nil, "OVERLAY", "GameFontHigh
 tplSubTitle:SetPoint("TOPLEFT", 14, -28)
 tplSubTitle:SetText("|cffb0bac5Paste this template into Gemini to generate the skill.|r")
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local tplCloseX = CreateSleekButton(templateFrame, 22, 20, "x", "danger")
 tplCloseX:SetPoint("TOPRIGHT", -8, -8)
 tplCloseX:SetScript("OnClick", function() templateFrame:Hide() end)
+end
 
 local tplBoxBg = CreateFrame("Frame", nil, templateFrame, BackdropTemplateMixin and "BackdropTemplate" or nil)
 tplBoxBg:SetPoint("TOPLEFT", 14, -48)
@@ -681,11 +683,13 @@ tplHighlightBtn:SetScript("OnClick", function()
     tplEditBox:HighlightText()
 end)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local tplCloseBtn = CreateSleekButton(templateFrame, 90, 22, "Close")
 tplCloseBtn:SetPoint("BOTTOMRIGHT", -14, 12)
 tplCloseBtn:SetScript("OnClick", function()
     templateFrame:Hide()
 end)
+end
 
 tplEditBox:SetScript("OnEscapePressed", function()
     templateFrame:Hide()
@@ -735,13 +739,17 @@ local impTitle = storyImportFrame:CreateFontString(nil, "OVERLAY", "GameFontNorm
 impTitle:SetPoint("TOPLEFT", 14, -12)
 impTitle:SetText("|cffffd100Import Adventure Chronicle (Paste Colored LLM Story)|r")
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local impSubTitle = storyImportFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 impSubTitle:SetPoint("TOPLEFT", 14, -28)
 impSubTitle:SetText("|cffd7c4a3Paste the full colored story below (Ctrl+V) and click Save Chronicle.|r")
+end
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local impCloseX = CreateSleekButton(storyImportFrame, 22, 20, "x", "danger")
 impCloseX:SetPoint("TOPRIGHT", -8, -8)
 impCloseX:SetScript("OnClick", function() storyImportFrame:Hide() end)
+end
 
 local impBoxBg = CreateFrame("Frame", nil, storyImportFrame, BackdropTemplateMixin and "BackdropTemplate" or nil)
 impBoxBg:SetPoint("TOPLEFT", 14, -48)
@@ -768,18 +776,22 @@ end)
 local impSaveBtn = CreateSleekButton(storyImportFrame, 136, 24, "Save Chronicle", "gold")
 impSaveBtn:SetPoint("BOTTOMLEFT", 14, 11)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local impClearInputBtn = CreateSleekButton(storyImportFrame, 96, 24, "Clear Box")
 impClearInputBtn:SetPoint("LEFT", impSaveBtn, "RIGHT", 6, 0)
 impClearInputBtn:SetScript("OnClick", function()
     impEditBox:SetText("")
     impEditBox:SetFocus()
 end)
+end
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local impCancelBtn = CreateSleekButton(storyImportFrame, 90, 24, "Cancel", "danger")
 impCancelBtn:SetPoint("BOTTOMRIGHT", -14, 11)
 impCancelBtn:SetScript("OnClick", function()
     storyImportFrame:Hide()
 end)
+end
 
 impEditBox:SetScript("OnEscapePressed", function()
     storyImportFrame:Hide()
@@ -865,9 +877,11 @@ pListPanel:SetPoint("TOPLEFT", 0, 0)
 pListPanel:SetPoint("BOTTOMLEFT", 0, 0)
 ApplyDarkGlass(pListPanel, 0.07, 0.09, 0.12, 0.90, 0.24, 0.28, 0.36, 0.80)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local pListHeader = pListPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 pListHeader:SetPoint("TOPLEFT", 10, -8)
 pListHeader:SetText("|cffffd100Saved Companions|r")
+end
 
 local pListScroll = CreateFrame("ScrollFrame", "RPCopyPlayerListScroll", pListPanel, "UIPanelScrollFrameTemplate")
 pListScroll:SetPoint("TOPLEFT", 6, -26)
@@ -881,13 +895,17 @@ local editorPanel = CreateFrame("Frame", nil, playersView)
 editorPanel:SetPoint("TOPLEFT", pListPanel, "TOPRIGHT", 10, 0)
 editorPanel:SetPoint("BOTTOMRIGHT", 0, 0)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local pFirstLbl = editorPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 pFirstLbl:SetPoint("TOPLEFT", 0, -4)
 pFirstLbl:SetText("First Name:")
+end
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local pLastLbl = editorPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 pLastLbl:SetPoint("TOPLEFT", 126, -4)
 pLastLbl:SetText("Last Name:")
+end
 
 local pAutoBtn = CreateSleekButton(editorPanel, 130, 20, "Auto-Update: ON")
 pAutoBtn:SetPoint("TOPRIGHT", 0, -2)
@@ -902,9 +920,11 @@ pLastInput:SetSize(312, 22)
 pLastInput:SetPoint("TOPLEFT", 130, -22)
 pLastInput:SetAutoFocus(false)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local pNoteLbl = editorPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 pNoteLbl:SetPoint("TOPLEFT", 0, -48)
 pNoteLbl:SetText("Permanent RP Note (editable - never overwritten):")
+end
 
 local pNoteBg = CreateFrame("Frame", nil, editorPanel, BackdropTemplateMixin and "BackdropTemplate" or nil)
 pNoteBg:SetHeight(56)
@@ -1114,9 +1134,11 @@ aListPanel:SetPoint("TOPLEFT", 0, 0)
 aListPanel:SetPoint("BOTTOMLEFT", 0, 0)
 ApplyDarkGlass(aListPanel, 0.07, 0.09, 0.12, 0.90, 0.24, 0.28, 0.36, 0.80)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local aListHeader = aListPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 aListHeader:SetPoint("TOPLEFT", 10, -8)
 aListHeader:SetText("|cffffd100Recorded Adventures|r")
+end
 
 local aListScroll = CreateFrame("ScrollFrame", "RPCopyAdvListScroll", aListPanel, "UIPanelScrollFrameTemplate")
 aListScroll:SetPoint("TOPLEFT", 6, -26)
@@ -1230,9 +1252,11 @@ emptyHeading:SetPoint("TOPLEFT", emptyBookIcon, "TOPRIGHT", 10, -2)
 emptyHeading:SetText("|cffffd100No Adventure Chronicle Yet|r")
 pcall(emptyHeading.SetFont, emptyHeading, "Fonts\\FRIZQT__.TTF", 15, "")
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local emptySubHeading = storyEmptyPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 emptySubHeading:SetPoint("TOPLEFT", emptyBookIcon, "TOPRIGHT", 10, -21)
 emptySubHeading:SetText("|cffd7c4a3Turn this dungeon run's chatter, wipes, and loot into a colored Warcraft story.|r")
+end
 
 local emptyDivider = storyEmptyPane:CreateTexture(nil, "ARTWORK")
 emptyDivider:SetHeight(1)
@@ -1802,9 +1826,11 @@ local kcTitle = keyCaptureFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal
 kcTitle:SetPoint("TOP", 0, -14)
 kcTitle:SetText("|cffffd100Press Any Key Combination...|r")
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local kcSub = keyCaptureFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 kcSub:SetPoint("TOP", 0, -36)
 kcSub:SetText("|cffb0bac5(e.g. CTRL-C, SHIFT-C, ALT-R)  -  Press ESC to cancel|r")
+end
 
 local IGNORED_KEYS = {
     LSHIFT = true, RSHIFT = true,
@@ -1880,9 +1906,11 @@ oListPanel:SetPoint("TOPLEFT", 0, -68)
 oListPanel:SetPoint("BOTTOMLEFT", 0, 0)
 ApplyDarkGlass(oListPanel, 0.07, 0.09, 0.12, 0.90, 0.24, 0.28, 0.36, 0.80)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local oListHeader = oListPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 oListHeader:SetPoint("TOPLEFT", 10, -8)
 oListHeader:SetText("|cffffd100Custom Tabs|r")
+end
 
 local oAddTabBtn = CreateSleekButton(oListPanel, 54, 18, "+ New", "gold")
 oAddTabBtn:SetPoint("TOPRIGHT", -6, -5)
@@ -1899,9 +1927,11 @@ local oEditorPanel = CreateFrame("Frame", nil, optionsView)
 oEditorPanel:SetPoint("TOPLEFT", oListPanel, "TOPRIGHT", 10, 0)
 oEditorPanel:SetPoint("BOTTOMRIGHT", 0, 0)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local oNameLbl = oEditorPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 oNameLbl:SetPoint("TOPLEFT", 0, -2)
 oNameLbl:SetText("Tab Button Name:")
+end
 
 local oNameInput = CreateFrame("EditBox", "RPCopyOptTabName", oEditorPanel, "InputBoxTemplate")
 oNameInput:SetSize(180, 20)
@@ -1914,9 +1944,11 @@ oMoveUpBtn:SetPoint("TOPRIGHT", -68, -16)
 local oMoveDownBtn = CreateSleekButton(oEditorPanel, 64, 20, "Down")
 oMoveDownBtn:SetPoint("TOPRIGHT", 0, -16)
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local oPrefixLbl = oEditorPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 oPrefixLbl:SetPoint("TOPLEFT", 0, -42)
 oPrefixLbl:SetText("Skill Call (Line 1, invokes your AI skill):")
+end
 
 local oPrefixInput = CreateFrame("EditBox", "RPCopyOptTabPrefix", oEditorPanel, "InputBoxTemplate")
 oPrefixInput:SetSize(436, 20)
@@ -1929,9 +1961,11 @@ oPrefixTip:SetWidth(442)
 oPrefixTip:SetJustifyH("LEFT")
 oPrefixTip:SetText("|cffffd100Tip:|r Default is |cff69ccf0use aloria|r. Change it for another character (e.g. |cff69ccf0use elaini|r), or clear it to export raw data.")
 
+do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local oSourcesLbl = oEditorPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 oSourcesLbl:SetPoint("TOPLEFT", 0, -110)
 oSourcesLbl:SetText("Included Context & Message Logs:")
+end
 
 local SOURCE_DEFS = {
     { key = "incDirect",    label = "Direct Msg (Last Whisper/Say)" },

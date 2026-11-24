@@ -16,7 +16,7 @@ You build a **character skill** in your AI once. The skill knows who your charac
 
 Along the way, RPCopy remembers the **companions** you meet, so your AI knows who they are next time. It also records your **dungeon and raid runs**, so the AI can turn them into colored story chronicles you read inside the game.
 
-- **Version:** 3.9.0 (interface `16001`, WoW: Forever)
+- **Version:** 3.9.1 (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide)
 - **License:** MIT
 

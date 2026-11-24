@@ -1,32 +1,41 @@
 local ADDON_NAME, ns = ...
 local UI = ns.UI
-local A = UI.adventures
 
 -- =========================================================
--- STORY BOOK (0.4.0): Adventures > Story Book
--- A library of every run with an imported story: a large reader, the
--- details parsed from the story (title, instance, duration, zone, date,
--- party, kills, wipes, deaths, chapters), Share as plain text, Edit
--- Details, Re-Import, Delete Story and a jump back to the recording.
+-- STORY BOOK (0.5.0: its own section, right below Adventures)
+-- A library of every imported story: a large reader, the details parsed
+-- from the story (title, instance, duration, zone, date, party, stats,
+-- chapters), Share as plain text, Edit Details, Re-Import, Delete and a
+-- jump to the recording while it still exists. Stories live in
+-- RPCopyDB.stories, so deleting a recording never deletes its story.
 -- =========================================================
 local B = { cards = {} }
 UI.storyBook = B
-local root = A.bookView
+local root = UI.NewSection("BOOK", "Story Book", "The stories your AI wrote from your runs.")
+UI.AddRailButton("BOOK", "Story Book", UI.ICONS.STORY, "Read, share and edit the stories your AI wrote from your runs.")
 
-local function StoryRuns()
-    local list = {}
-    for _, adv in ipairs((UI.AllRuns and UI.AllRuns()) or {}) do
-        if adv.story and adv.story ~= "" then table.insert(list, adv) end
-    end
-    return list
+local function StoryList()
+    return ns.GetStories()
 end
 
-local function SelectedBookRun(list)
-    for _, adv in ipairs(list) do
-        if adv.id == ns.state.bookAdventureId then return adv end
+local function SelectedStory(list)
+    for _, st in ipairs(list) do
+        if st.id == ns.state.bookStoryId then return st end
     end
-    if list[1] then ns.state.bookAdventureId = list[1].id end
+    if list[1] then ns.state.bookStoryId = list[1].id end
     return list[1]
+end
+
+-- Opens the Story Book, on a story when given
+function UI.OpenStoryBook(storyId)
+    if storyId then ns.state.bookStoryId = storyId end
+    if not UI.frame:IsShown() then
+        RPCopy_Open("", "BOOK")
+    elseif ns.state.section ~= "BOOK" then
+        UI.ShowSection("BOOK")
+    else
+        UI.RefreshStoryBook()
+    end
 end
 
 -- Left: the library
@@ -96,11 +105,35 @@ B.reimportBtn.tipText = "Replace this story with a new one. Details you edited b
 B.recBtn = UI.CreateSleekButton(B.right, 74, 22, "Recording", "tool")
 B.recBtn:SetPoint("LEFT", B.reimportBtn, "RIGHT", 4, 0)
 B.recBtn.tipTitle = "|cffffd100Recording|r"
-B.recBtn.tipText = "Open the run this story was written from (Summary and Full Log)."
+B.recBtn.tipText = "Open the run this story was written from (Summary and Full Log), while the recording still exists."
 B.delBtn = UI.CreateSleekButton(B.right, 56, 22, "Delete", "danger")
 B.delBtn:SetPoint("TOPRIGHT", 0, -76)
 B.delBtn.tipTitle = "|cffff6b6bDelete Story|r"
 B.delBtn.tipText = "Click twice. Removes the story only; the recording stays."
+
+-- 0.5.0: a dismissible tip on making HTML pages outside the game
+B.tip = CreateFrame("Frame", nil, B.right, UI.BACKDROP)
+B.tip:SetHeight(44)
+B.tip:SetPoint("TOPLEFT", 0, -102)
+B.tip:SetPoint("TOPRIGHT", 0, -102)
+UI.ApplyDarkGlass(B.tip, 0.10, 0.09, 0.06, 0.92, 0.60, 0.48, 0.22, 0.70)
+do
+    local t = B.tip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    t:SetPoint("TOPLEFT", 8, -5)
+    t:SetPoint("BOTTOMRIGHT", -30, 5)
+    t:SetJustifyH("LEFT")
+    t:SetJustifyV("TOP")
+    t:SetText("|cffffd100Web pages with screenshots:|r |cffd7c4a3/reload or log out first so the game saves your stories, then double-click " ..
+        "|cfff5e6c8Export_Stories.bat|cffd7c4a3 in Interface\\AddOns\\RPCopy. The pages appear in the |cfff5e6c8RPCopy Stories|cffd7c4a3 folder of _forever_.|r")
+    local x = UI.CreateSleekButton(B.tip, 20, 18, "x", "danger")
+    x:SetPoint("TOPRIGHT", -5, -5)
+    x.tipTitle = "|cffffd100Hide this tip|r"
+    x.tipText = "Bring it back in Options > Stories & Export."
+    x:SetScript("OnClick", function()
+        RPCopyDB.exportTip = false
+        UI.RefreshStoryBook()
+    end)
+end
 
 -- The reader (warm parchment)
 B.readBg = CreateFrame("Frame", nil, B.right, UI.BACKDROP)
@@ -225,7 +258,7 @@ local function MakeCard(parent)
 end
 
 function UI.RefreshStoryBook()
-    local list = StoryRuns()
+    local list = StoryList()
     for _, c in ipairs(B.cards) do c:Hide() end
     for idx, adv in ipairs(list) do
         local card = B.cards[idx]
@@ -239,7 +272,7 @@ function UI.RefreshStoryBook()
         card.icon:SetTexture(ns.GetAdventureIcon(adv))
         card.titleLbl:SetText("|cfff5e6c8" .. info.title .. "|r")
         card.subLbl:SetText("|cffb0a080" .. ((info.instance ~= "" and info.instance) or ns.GetRunKindLabel(adv)) .. " - " .. (info.date or "") .. "|r")
-        local sel = (adv.id == ns.state.bookAdventureId)
+        local sel = (adv.id == ns.state.bookStoryId)
         card.isSelected = sel
         if sel then
             card:SetBackdropColor(0.22, 0.16, 0.08, 0.96)
@@ -249,7 +282,7 @@ function UI.RefreshStoryBook()
             card:SetBackdropBorderColor(0.40, 0.31, 0.16, 0.85)
         end
         card:SetScript("OnClick", function()
-            ns.state.bookAdventureId = adv.id
+            ns.state.bookStoryId = adv.id
             B.delBtn.armedAt = nil
             UI.RefreshStoryBook()
         end)
@@ -257,7 +290,7 @@ function UI.RefreshStoryBook()
     end
     B.listChild:SetHeight(math.max(10, #list * 48))
 
-    local adv = SelectedBookRun(list)
+    local adv = SelectedStory(list)
     if not adv then
         B.right:Hide()
         B.empty:Show()
@@ -283,10 +316,20 @@ function UI.RefreshStoryBook()
     table.insert(metaParts, info.date)
     B.meta:SetText("|cffd7c4a3" .. table.concat(metaParts, "  -  ") .. "|r")
     B.party:SetText("|cffb0a080Party:|r |cfff5e6c8" .. ((info.party ~= "" and info.party) or "solo") .. "|r")
-    B.stats:SetText(string.format("|cffb0a080Bosses:|r |cff5cb85c%s|r   |cffb0a080Wipes:|r |cffff6b6b%s|r   |cffb0a080Deaths:|r |cffffb74d%s|r   |cffb0a080Chapters:|r |cfff5e6c8%d|r",
-        tostring(info.kills), tostring(info.wipes), tostring(info.deaths), #(info.chapters or {})))
+    B.stats:SetText(ns.GetBookStats(info))
+    if ns.StoryRun(adv) then B.recBtn:Enable() else B.recBtn:Disable() end
 
-    B.text:SetText(ns.DecorateStoryBosses(ns.NormalizeStoryText(adv.story), adv))
+    B.readBg:ClearAllPoints()
+    B.readBg:SetPoint("BOTTOMRIGHT", 0, 0)
+    if RPCopyDB.exportTip ~= false then
+        B.tip:Show()
+        B.readBg:SetPoint("TOPLEFT", 0, -150)
+    else
+        B.tip:Hide()
+        B.readBg:SetPoint("TOPLEFT", 0, -104)
+    end
+
+    B.text:SetText(ns.DecorateStoryBosses(ns.StripShotMarkers(ns.NormalizeStoryText(adv.story)), adv))
     UpdateReaderHeight()
     if B.shownId ~= adv.id then
         B.shownId = adv.id
@@ -296,19 +339,19 @@ function UI.RefreshStoryBook()
 end
 
 local function CurrentBookRun()
-    return SelectedBookRun(StoryRuns())
+    return SelectedStory(StoryList())
 end
 
 B.importBtn:SetScript("OnClick", function()
     UI.OpenStoryImportModal(nil)
 end)
 B.reimportBtn:SetScript("OnClick", function()
-    local adv = CurrentBookRun()
-    if adv then UI.OpenStoryImportModal(adv) end
+    local st = CurrentBookRun()
+    if st then UI.OpenStoryImportModal(nil, st) end
 end)
 B.recBtn:SetScript("OnClick", function()
-    local adv = CurrentBookRun()
-    if adv then UI.ShowAdventuresSub("REC", adv.id) end
+    local run = ns.StoryRun(CurrentBookRun())
+    if run then UI.OpenRecording(run.id, "SUMMARY") end
 end)
 B.shareBtn:SetScript("OnClick", function()
     local adv = CurrentBookRun()
@@ -329,8 +372,8 @@ B.delBtn:SetScript("OnClick", function(self)
         return
     end
     self.armedAt = nil
-    ns.DeleteAdventureStory(adv.id)
-    ns.state.bookAdventureId = nil
+    ns.DeleteStory(adv.id)
+    ns.state.bookStoryId = nil
     UI.SetStatus("Story deleted. The recording is still in Recordings.", "good")
     UI.RefreshStoryBook()
 end)
@@ -393,7 +436,7 @@ do
     cancel:SetScript("OnClick", function() f:Hide() end)
 
     save:SetScript("OnClick", function()
-        local adv = f.advId and ns.FindAdventure(f.advId)
+        local adv = f.advId and ns.FindStory(f.advId)
         if adv then
             local before = ns.GetBookInfo(adv)
             for i, fd in ipairs(FIELDS) do
@@ -416,6 +459,9 @@ do
         boxes[1]:SetFocus()
     end)
 end
+
+UI.SetSectionOnShow("BOOK", function() UI.RefreshStoryBook() end)
+root:SetScript("OnHide", function() UI.HideTooltip() end)
 
 UI.AddReflow(function()
     local w = B.scroll:GetWidth()

@@ -27,9 +27,11 @@ local function Push(line)
     end
 end
 
--- kind: "info", "run", "error", "blocked", "verbose"
+-- kind: "info", "run", "error", "blocked", "copy", "verbose"
+-- 0.5.0: Options > Debug can switch the log off (errors are still kept).
 function ns.Debug(kind, msg)
     if kind == "verbose" and not (RPCopyDB and RPCopyDB.debugVerbose) then return end
+    if RPCopyDB and RPCopyDB.debugEnabled == false and kind ~= "error" and kind ~= "blocked" then return end
     local text = tostring(msg or ""):gsub("[\r\n]+", " / ")
     if #text > 400 then text = text:sub(1, 400) .. "..." end
     Push(string.format("[%s] %s: %s", Stamp(), kind or "info", text))
@@ -99,6 +101,21 @@ function ns.BuildDebugReport()
     add(string.format("Saved runs: %d | Live run: %s | Companions: %d",
         #(db.adventures or {}), run and ((run.paused and "paused" or "recording") .. " (" .. (run.kind or "?") .. ")") or "none",
         (function() local n = 0 for _ in pairs(db.players or {}) do n = n + 1 end return n end)()))
+    -- 0.5.0: what Forever actually hands us for names (Companions 2.0 check)
+    local st = ns.state or {}
+    local tName, tFull, tPvp = "-", "-", "-"
+    if UnitExists and UnitExists("target") then
+        tName = ns.SafeStr and ns.SafeStr(UnitName and UnitName("target")) or "?"
+        tFull = ns.SafeStr and ns.SafeStr(ns.GetUnitFullName and ns.GetUnitFullName("target")) or "?"
+        tPvp = ns.SafeStr and ns.SafeStr(UnitPVPName and UnitPVPName("target")) or "?"
+    end
+    add(string.format("Names: last chat author raw [%s] | target UnitName [%s], full [%s], PVP name [%s]",
+        tostring(st.lastRawAuthor or "-"), tostring(tName), tostring(tFull), tostring(tPvp)))
+    local q = ns.UI and ns.UI.quick
+    if q then
+        add(string.format("Quick copy: key %s, quick %s, armed %s, last text length %s",
+            tostring(db.quickCopyKey), tostring(db.quickCtrlC), tostring(q.isArmed), tostring(q.textLen or 0)))
+    end
     add("")
     add("Log (oldest first):")
     local log = (ready and db.debugLog) or pending

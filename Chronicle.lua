@@ -30,6 +30,9 @@ local C = {
     questDone = {},       -- title -> time logged
     npcAt = {}, npcSaid = {},
     petName = nil, tameAt = 0,
+    streak = nil,         -- 0.5.0: the trash streak being folded into one line
+    subPending = nil,     -- the subzone waiting to settle
+    objDone = {}, objSeeded = false, objPending = false,
 }
 
 local function Run()
@@ -40,7 +43,15 @@ end
 
 local function Line(cat, text)
     if cat and not ns.LogOn(cat) then return end
-    if ns.RecordAdventureLine then ns.RecordAdventureLine(text) end
+    if ns.RecordAdventureLine then return ns.RecordAdventureLine(text) end
+end
+
+local function Later(sec, fn)
+    if C_Timer and C_Timer.After then C_Timer.After(sec, fn) else fn() end
+end
+
+local function Clock(t)
+    return (date and t) and date("%H:%M", t) or "?"
 end
 
 local function Me()
@@ -102,6 +113,7 @@ function ns.FightBegin()
     C.fight = {
         start = GetTime(), enemies = {}, order = {}, swaps = {}, low = {}, fell = {},
         kills = 0, killNames = {}, fled = 0, coin = 0,
+        spells = {}, spellOrder = {},
     }
     C.enemySeen = {}
     if UnitExists("target") then ns.FightSeeUnit("target") end
@@ -123,6 +135,8 @@ local function NoteKill(name, kind, u)
     local run = Run()
     if not run then return end
     run.foesDefeated = (run.foesDefeated or 0) + 1
+    run.killCounts = run.killCounts or {}
+    run.killCounts[name] = (run.killCounts[name] or 0) + 1
     local f = C.fight
     if f then
         f.kills = f.kills + 1
@@ -141,9 +155,22 @@ end
 -- Called by the combat poller for every unit token it looks at, and on
 -- UNIT_HEALTH: living enemies join the fight, dead ones count as kills.
 function ns.FightSeeUnit(u)
-    if not UnitExists(u) or UnitIsPlayer(u) then return end
+    if not UnitExists(u) then return end
     local key = UnitKey(u)
     if not key then return end
+    if UnitIsPlayer(u) then
+        -- 0.5.0: an enemy player who dies in your fight counts as a PvP kill
+        if C.fight and UnitIsDead(u) and UnitCanAttack("player", u) and not C.killSeen[key] then
+            C.killSeen[key] = true
+            local run = Run()
+            if run then
+                run.pvpKills = (run.pvpKills or 0) + 1
+                local who = ns.GetUnitFullName and ns.GetUnitFullName(u) or ns.SafeStr(UnitName(u))
+                if who then Line("kills", string.format("[PVP] %s defeats %s", Me(), who)) end
+            end
+        end
+        return
+    end
     local name = ns.SafeStr(UnitName(u))
     if not name then return end
     if UnitIsDead(u) then
@@ -181,7 +208,45 @@ function ns.FightNoteDeath(who, isSelf)
     local f = C.fight
     if not f or not who then return end
     table.insert(f.fell, who)
-    if isSelf then f.selfDied = true end
+    if isSelf then
+        f.selfDied = true
+        local run = Run()
+        if run and UnitExists("target") and UnitIsPlayer("target") and UnitCanAttack("player", "target") then
+            run.pvpDeaths = (run.pvpDeaths or 0) + 1
+        end
+    end
+end
+
+-- 0.5.0: abilities used in the fight, for the [FIGHT] line. Returns true
+-- when the spell was folded (so no standalone [SPELL] line is needed).
+function ns.FightNoteSpell(who, spell)
+    local f = C.fight
+    if not f or not who or not spell or not ns.LogOn("fights") then return false end
+    local list = f.spells[who]
+    if not list then
+        if #f.spellOrder >= 4 then return true end
+        list = {}
+        f.spells[who] = list
+        table.insert(f.spellOrder, who)
+    end
+    for _, sp in ipairs(list) do if sp == spell then return true end end
+    if #list < 4 then table.insert(list, spell) end
+    return true
+end
+
+local function SpellText(spells, order)
+    local parts = {}
+    for _, who in ipairs(order) do
+        local list = spells[who]
+        if list and #list > 0 then
+            if who == "you" then
+                table.insert(parts, 1, "used " .. table.concat(list, ", "))
+            else
+                table.insert(parts, who .. ": " .. table.concat(list, ", "))
+            end
+        end
+    end
+    return table.concat(parts, "; ")
 end
 
 function ns.FightNoteCoin(copper)
@@ -260,7 +325,48 @@ function ns.FightFlush()
     if dur < ns.Limit("minFightSec") and f.kills == 0 and #f.fell == 0 then return end
     if not foes and f.kills == 0 and #f.fell == 0 then return end
 
+    local run = Run()
+    local main = MainFoe(f)
+    local now = time()
+    -- 0.5.0: plain trash fights against the same foe fold into one line
+    -- that is updated in place: "[FIGHTS] 14x Windsong Crawler (20:07-20:15)"
+    local plain = main and f.kills > 0 and #f.order == 1 and f.enemies[main].kind == "normal"
+        and #f.swaps == 0 and #f.low == 0 and #f.fell == 0
+    if plain and ns.LogOn("fightStreaks") then
+        local sk = C.streak
+        if sk and sk.foe == main and sk.run == run.id and (now - sk.last) <= 300 then
+            sk.kills = sk.kills + f.kills
+            sk.seen = sk.seen + f.enemies[main].count
+            sk.fled = sk.fled + ((f.fled > 0) and 1 or 0)
+            sk.coin = sk.coin + f.coin
+            sk.last = now
+            for _, who in ipairs(f.spellOrder) do
+                for _, sp in ipairs(f.spells[who]) do
+                    sk.spells[who] = sk.spells[who] or {}
+                    if not sk.spells[who][sp] then
+                        sk.spells[who][sp] = true
+                        sk.spellList[who] = sk.spellList[who] or {}
+                        if #sk.spellList[who] < 4 then table.insert(sk.spellList[who], sp) end
+                        local known = false
+                        for _, w in ipairs(sk.spellOrder) do if w == who then known = true end end
+                        if not known and #sk.spellOrder < 4 then table.insert(sk.spellOrder, who) end
+                    end
+                end
+            end
+            local tail = {}
+            table.insert(tail, (sk.kills >= sk.seen) and "all defeated" or string.format("defeated %d of %d", sk.kills, sk.seen))
+            if sk.fled > 0 then table.insert(tail, sk.fled .. " fled briefly") end
+            local st = SpellText(sk.spellList, sk.spellOrder)
+            if st ~= "" then table.insert(tail, st) end
+            if sk.coin > 0 and ns.LogOn("loot") then table.insert(tail, "looted " .. ns.FormatCopper(sk.coin)) end
+            local text = string.format("[FIGHTS] %dx %s (%s-%s) - %s", sk.seen, main, Clock(sk.first), Clock(now), table.concat(tail, " - "))
+            if ns.UpdateAdventureLine and ns.UpdateAdventureLine(sk.handle, text) then return end
+        end
+    end
+
     local bits = {}
+    local spellText = SpellText(f.spells, f.spellOrder)
+    if spellText ~= "" then table.insert(bits, spellText) end
     if f.fled > 0 then table.insert(bits, (f.fledName and (f.fledName .. " ") or "") .. "fled " .. Times(f.fled)) end
     for _, s in ipairs(f.swaps) do table.insert(bits, s) end
     if #f.low > 0 then table.insert(bits, table.concat(f.low, ", ") .. " got low") end
@@ -273,12 +379,32 @@ function ns.FightFlush()
     elseif f.kills > 0 then
         outcome = (f.kills > 1) and ("defeated " .. f.kills .. " foes") or "defeated"
     elseif f.fled > 0 then
-        outcome = "the foe escaped"
+        outcome = "it escaped"
+    elseif IsInGroup and IsInGroup() then
+        outcome = "the party disengaged"
     else
-        outcome = "fight broke off"
+        outcome = "you disengaged"
     end
     table.insert(bits, outcome)
-    Line(nil, string.format("[FIGHT] vs %s (%ds) - %s", foes or "unknown foes", dur, table.concat(bits, " - ")))
+    local handle = Line(nil, string.format("[FIGHT] vs %s (%ds) - %s", foes or "unknown foes", dur, table.concat(bits, " - ")))
+    if plain and handle then
+        local sl, so = {}, {}
+        for _, who in ipairs(f.spellOrder) do
+            table.insert(so, who)
+            sl[who] = {}
+            for _, sp in ipairs(f.spells[who]) do table.insert(sl[who], sp) end
+        end
+        local seenSp = {}
+        for who, list in pairs(sl) do
+            seenSp[who] = {}
+            for _, sp in ipairs(list) do seenSp[who][sp] = true end
+        end
+        C.streak = { foe = main, run = run.id, handle = handle, first = now - dur, last = now,
+            kills = f.kills, seen = f.enemies[main].count, fled = (f.fled > 0) and 1 or 0, coin = f.coin,
+            spells = seenSp, spellList = sl, spellOrder = so }
+    else
+        C.streak = nil
+    end
 end
 
 -- =========================================================
@@ -329,6 +455,7 @@ local function OnZone(newArea)
         C.lastZone = zone
         C.lastSub = sub
         if not first then
+            if ns.NoteRunPlace then ns.NoteRunPlace(zone) end
             Line("places", "[PLACE] Travelled to " .. zone)
             ns.RecordAtmosphere(false)
         end
@@ -336,10 +463,20 @@ local function OnZone(newArea)
     end
     if sub and sub ~= "" and sub ~= zone and sub ~= C.lastSub then
         C.lastSub = sub
-        if (now - (C.subAt[sub] or -999)) >= 300 then
-            C.subAt[sub] = now
+        -- 0.5.0: a subzone must hold for 20s (no Lake <-> Highlands ping-pong)
+        -- and is logged again at most every 10 minutes
+        local token = {}
+        C.subPending = token
+        Later(20, function()
+            if C.subPending ~= token then return end
+            C.subPending = nil
+            if not Run() or ns.SafeStr(GetSubZoneText()) ~= sub then return end
+            local t = GetTime()
+            if (t - (C.subAt[sub] or -9999)) < 600 then return end
+            C.subAt[sub] = t
+            if ns.NoteRunPlace then ns.NoteRunPlace(sub) end
             Line("places", string.format("[PLACE] Entered %s (%s)", sub, zone or "?"))
-        end
+        end)
     elseif sub == "" or sub == zone then
         C.lastSub = sub
     end
@@ -407,7 +544,8 @@ local function OnPetChange()
     local now = GetTime()
     if name and (now - C.tameAt) < 20 and name ~= C.petName then
         C.tameAt = 0
-        Line("milestones", string.format("[MILESTONE] %s tamed a new pet: %s", Me(), name))
+        local species = ns.GetPetSpecies and ns.GetPetSpecies("pet")
+        Line("milestones", string.format("[MILESTONE] %s tamed a new pet: %s%s", Me(), name, species and (" (" .. species .. ")") or ""))
     end
     C.petName = name or C.petName
 end
@@ -534,10 +672,49 @@ local function OnQuestTurnedIn(questID)
     if C.questDone[key] and (GetTime() - C.questDone[key]) < 60 then return end
     C.questDone[key] = GetTime()
     local to = (q.title == title and q.npc) and (" for " .. q.npc) or ""
+    local run = Run()
+    run.questsDone = (run.questsDone or 0) + 1
     Line("quests", string.format("[QUEST] Completed: %s%s", title, to))
     if q.title == title and q.text and q.reward and ns.LogOn("npcDialogue") then
         Line("quests", string.format("[QUEST TEXT] %s: \"%s\"", q.npc or "Quest giver", q.text))
     end
+end
+
+-- 0.5.0: one line when a quest objective is done (not per kill tick).
+-- The first scan of a run only learns what is already done.
+local function ScanObjectives()
+    C.objPending = false
+    if not Run() or not C_QuestLog or not C_QuestLog.GetNumQuestLogEntries or not C_QuestLog.GetInfo
+        or not C_QuestLog.GetQuestObjectives then return end
+    local seed = not C.objSeeded
+    local okN, num = pcall(C_QuestLog.GetNumQuestLogEntries)
+    num = okN and ns.SafeNum(num) or nil
+    if not num then return end
+    for i = 1, num do
+        local ok, info = pcall(C_QuestLog.GetInfo, i)
+        if ok and type(info) == "table" and not info.isHeader and info.questID then
+            local okO, objs = pcall(C_QuestLog.GetQuestObjectives, info.questID)
+            if okO and type(objs) == "table" then
+                for j, o in ipairs(objs) do
+                    local k = tostring(info.questID) .. ":" .. j
+                    local done = (type(o) == "table" and o.finished) and true or false
+                    local before = C.objDone[k]
+                    C.objDone[k] = done
+                    if done and before == false and not seed and ns.LogOn("questObjectives") then
+                        local what = Trim(ns.SafeStr(o.text) or "", 80)
+                        Line("quests", string.format("[QUEST] Objective done: %s%s", ns.SafeStr(info.title) or "a quest", what ~= "" and (" - " .. what) or ""))
+                    end
+                end
+            end
+        end
+    end
+    C.objSeeded = true
+end
+
+local function QueueObjectiveScan()
+    if C.objPending or not Run() then return end
+    C.objPending = true
+    Later(1.5, function() pcall(ScanObjectives) end)
 end
 
 -- =========================================================
@@ -698,6 +875,7 @@ do
         "QUEST_DETAIL", "QUEST_COMPLETE", "QUEST_ACCEPTED", "QUEST_TURNED_IN",
         "MERCHANT_SHOW", "MERCHANT_CLOSED", "MAIL_SHOW", "MAIL_CLOSED", "TRADE_SHOW", "TRADE_CLOSED",
         "LOOT_OPENED", "LOOT_CLOSED", "GROUP_ROSTER_UPDATE", "GROUP_JOINED",
+        "QUEST_LOG_UPDATE", "UNIT_QUEST_LOG_CHANGED",
     }
     for _, ev in ipairs(EV) do pcall(f.RegisterEvent, f, ev) end
 
@@ -740,7 +918,12 @@ do
             wasGrouped = grouped
         elseif event == "PLAYER_LEVEL_UP" then
             local lvl = ns.SafeNum(a1)
-            if lvl and Run() then Line("levels", string.format("[LEVEL] %s reached level %d", Me(), lvl)) end
+            local run = Run()
+            if lvl and run then
+                run.levelEnd = lvl
+                if not run.levelStart then run.levelStart = lvl - 1 end
+                Line("levels", string.format("[LEVEL] %s reached level %d", Me(), lvl))
+            end
         elseif event == "CHAT_MSG_SKILL" then
             local msg = ns.SafeStr(a1)
             if msg then OnSkill(msg) end
@@ -773,6 +956,8 @@ do
         elseif event == "TRADE_CLOSED" then C.ctx.trade, C.ctx.tradeAt = false, GetTime()
         elseif event == "LOOT_OPENED" then OnLootOpened()
         elseif event == "LOOT_CLOSED" then C.ctx.loot, C.ctx.lootAt = false, GetTime()
+        elseif event == "QUEST_LOG_UPDATE" or (event == "UNIT_QUEST_LOG_CHANGED" and a1 == "player") then
+            QueueObjectiveScan()
         end
     end
 
@@ -790,8 +975,13 @@ function ns.ResetChronicle()
     C.atmoAt, C.atmoPhase = 0, nil
     C.skillLineAt, C.questDone, C.npcAt, C.npcSaid = {}, {}, {}, {}
     C.subAt = {}
+    C.streak, C.subPending = nil, nil
+    C.objDone, C.objSeeded, C.objPending = {}, false, false
+    QueueObjectiveScan()
     C.lastZone = ns.SafeStr(GetRealZoneText())
     C.lastSub = ns.SafeStr(GetSubZoneText())
+    -- the place a run starts in is already known: no [PLACE] for a quick return
+    if C.lastSub and C.lastSub ~= "" then C.subAt[C.lastSub] = GetTime() end
 end
 
 ns.ChronicleState = C -- for the test harness

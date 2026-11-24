@@ -19,6 +19,9 @@ local UI = ns.UI
 -- a Ctrl+C that arrives before the box is armed arms it for a second press.
 -- =========================================================
 local ARM_DELAY = 0.25
+-- 0.5.0: a longer grace before focus is dropped, so the client has finished
+-- its native copy of the highlighted text (0.05s was too short on some PCs).
+local DISARM_DELAY = 0.25
 
 local armEditBox = CreateFrame("EditBox", "RPCopySilentArmBox", UIParent)
 armEditBox:SetSize(1, 1)
@@ -26,9 +29,14 @@ armEditBox:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 2, 2)
 armEditBox:SetAutoFocus(false)
 armEditBox:SetMultiLine(true)
 armEditBox:SetAlpha(0.01)
+-- 0.5.0 (Ctrl+C fix): an EditBox with no font cannot hold or copy text on the
+-- modern client, and the default letter cap can cut a long snapshot.
+if armEditBox.SetFontObject and ChatFontNormal then pcall(armEditBox.SetFontObject, armEditBox, ChatFontNormal) end
+if armEditBox.SetMaxLetters then pcall(armEditBox.SetMaxLetters, armEditBox, 0) end
+if armEditBox.SetMaxBytes then pcall(armEditBox.SetMaxBytes, armEditBox, 0) end
 armEditBox:Hide()
 
-local Q = { isArmed = false, mode = nil, label = "Chat", expiresAt = 0, ctrlDownAt = nil, holdUsed = false }
+local Q = { isArmed = false, mode = nil, label = "Chat", expiresAt = 0, ctrlDownAt = nil, holdUsed = false, textLen = 0 }
 UI.quick = Q
 
 local MODIFIER_KEYS = {
@@ -38,6 +46,17 @@ local MODIFIER_KEYS = {
 
 local function InCombat()
     return (InCombatLockdown and InCombatLockdown()) or false
+end
+
+local function CopyLog(kind, msg)
+    if ns.Debug then ns.Debug(kind, msg) end
+end
+
+local function FocusName()
+    local f = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    if not f then return "none" end
+    local ok, n = pcall(f.GetName, f)
+    return (ok and n) or "unnamed"
 end
 
 function UI.IsCtrlCCopy()
@@ -60,6 +79,23 @@ function UI.DisarmCtrlCopy()
     end
 end
 
+-- Builds the quick-copy text. Errors go to the debug log (they were silent
+-- before 0.5.0), and secret values never reach the EditBox.
+function UI.BuildQuickCopyText(sliceId)
+    local ok, snap = pcall(ns.BuildSnapshot, sliceId or "CHAT", "", false)
+    if not ok then
+        CopyLog("error", "Quick copy: snapshot failed: " .. tostring(snap))
+        UI.ShowToast("|cffff6b6bRPCopy:|r the snapshot failed to build. See /rp debug.", 3.0, 0.75, 0.28, 0.28)
+        return nil
+    end
+    if type(snap) ~= "string" or (ns.IsSecret and ns.IsSecret(snap)) then
+        CopyLog("error", "Quick copy: snapshot was not plain text")
+        return nil
+    end
+    if snap == "" then snap = "[RPCopy] (nothing to copy yet)" end
+    return snap
+end
+
 function UI.ArmCtrlCopy(mode)
     UI.EnsureOptions()
     -- SetText/SetFocus on our own non-secure EditBox is not a protected
@@ -70,39 +106,60 @@ function UI.ArmCtrlCopy(mode)
 
     local tabCfg = ns.GetTabConfig(RPCopyDB.lastSliceId)
     Q.label = (tabCfg and tabCfg.label) or "Chat"
-    local ok, snap = pcall(ns.BuildSnapshot, (tabCfg and tabCfg.id) or "CHAT", "", false)
-    if not ok or type(snap) ~= "string" then return false end
+    local snap = UI.BuildQuickCopyText(tabCfg and tabCfg.id)
+    if not snap then return false end
 
     armEditBox:Show()
     armEditBox:SetText(snap)
     armEditBox:SetFocus()
+    armEditBox:SetCursorPosition(0)
     armEditBox:HighlightText()
     Q.isArmed = true
     Q.mode = mode or "timed"
     Q.expiresAt = (Q.mode == "timed") and (GetTime() + 3.0) or 0
-    return true
+    local got = armEditBox:GetText() or ""
+    Q.textLen = #got
+    local hasFocus = armEditBox:HasFocus() and true or false
+    CopyLog("verbose", string.format("copy armed %s: len %d (built %d), focus %s", Q.mode, Q.textLen, #snap, tostring(hasFocus)))
+    if not hasFocus or Q.textLen == 0 then
+        CopyLog("copy", string.format("arm problem: len %d of %d, focus %s, focused frame %s", Q.textLen, #snap, tostring(hasFocus), FocusName()))
+    end
+    return hasFocus and Q.textLen > 0
 end
 
-local function FinishCopy()
-    UI.ShowToast(string.format("|cffffd100Copied|r |cff69ccf0[%s]|r |cff5cb85cto clipboard!|r", Q.label), 1.8, 0.36, 0.72, 0.36)
-    -- Let the EditBox finish its native copy before focus is dropped
+local function DisarmLater()
     if C_Timer and C_Timer.After then
-        C_Timer.After(0.05, UI.DisarmCtrlCopy)
+        C_Timer.After(DISARM_DELAY, UI.DisarmCtrlCopy)
     else
         UI.DisarmCtrlCopy()
     end
 end
 
-armEditBox:SetScript("OnUpdate", function()
-    if Q.isArmed and Q.mode == "timed" and Q.expiresAt > 0 and GetTime() > Q.expiresAt then
+local function FinishCopy(via)
+    -- Highlight once more right before the native copy reads it
+    armEditBox:HighlightText()
+    CopyLog("copy", string.format("copy via %s: len %d, focus %s, focused frame %s", via or "?", #(armEditBox:GetText() or ""), tostring(armEditBox:HasFocus() and true or false), FocusName()))
+    UI.ShowToast(string.format("|cffffd100Copied|r |cff69ccf0[%s]|r |cff5cb85cto clipboard!|r", Q.label), 1.8, 0.36, 0.72, 0.36)
+    Q.copying = true
+    -- Let the EditBox finish its native copy before focus is dropped
+    DisarmLater()
+end
+
+armEditBox:SetScript("OnUpdate", function(self)
+    if not Q.isArmed then return end
+    if Q.mode == "timed" and Q.expiresAt > 0 and GetTime() > Q.expiresAt then
         UI.DisarmCtrlCopy()
+        return
     end
+    -- Keep the whole text highlighted while armed (a click or a cursor move
+    -- would otherwise leave nothing selected for the native copy)
+    if not Q.copying then self:HighlightText() end
 end)
 
 armEditBox:SetScript("OnKeyDown", function(_, key)
     if not Q.isArmed then return end
     if key == "C" and IsControlKeyDown() then
-        FinishCopy()
+        FinishCopy("box")
     elseif key == "ESCAPE" then
         UI.DisarmCtrlCopy()
     elseif Q.mode == "hold" and not MODIFIER_KEYS[key] then
@@ -114,7 +171,11 @@ end)
 
 armEditBox:SetScript("OnEscapePressed", UI.DisarmCtrlCopy)
 armEditBox:SetScript("OnEditFocusLost", function()
+    if Q.isArmed and not Q.copying then
+        CopyLog("copy", "armed box lost focus to " .. FocusName())
+    end
     Q.isArmed = false
+    Q.copying = false
     Q.mode = nil
     Q.expiresAt = 0
     armEditBox:Hide()
@@ -131,14 +192,17 @@ do
                 Q.holdUsed = false
             end
             if not Q.isArmed and not Q.holdUsed and (now - Q.ctrlDownAt) >= ARM_DELAY and UI.IsInstantCopyActive() then
-                UI.ArmCtrlCopy("hold")
+                if not UI.ArmCtrlCopy("hold") then
+                    -- Do not rebuild the snapshot every frame of this hold
+                    Q.holdUsed = true
+                end
             end
         elseif Q.ctrlDownAt then
             Q.ctrlDownAt = nil
             Q.holdUsed = false
-            if Q.isArmed and Q.mode == "hold" then
+            if Q.isArmed and Q.mode == "hold" and not Q.copying then
                 if C_Timer and C_Timer.After then
-                    C_Timer.After(0.05, function()
+                    C_Timer.After(DISARM_DELAY, function()
                         if Q.isArmed and Q.mode == "hold" and not IsControlKeyDown() then
                             UI.DisarmCtrlCopy()
                         end
@@ -192,12 +256,19 @@ do
     silentCopyBtn:SetScript("OnClick", function()
         local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
         if focused and focused ~= armEditBox then return end
+        -- 0.5.0: this button only fires when the key did NOT reach a focused
+        -- box. If we think we are armed but the box has no focus, the native
+        -- copy cannot have happened, so never claim "Copied": re-arm instead.
+        if Q.isArmed and not armEditBox:HasFocus() then
+            CopyLog("copy", "binding fired while armed but unfocused (focused frame " .. FocusName() .. "); re-arming")
+            Q.isArmed = false
+        end
         if not Q.isArmed then
             if UI.ArmCtrlCopy("timed") then
                 UI.ShowToast(string.format("|cffffd100Ready|r |cff69ccf0[%s]|r - press |cffffd100CTRL-C|r again to copy", Q.label), 2.5, 0.85, 0.68, 0.30)
             end
         else
-            FinishCopy()
+            FinishCopy("binding")
         end
     end)
 end
@@ -215,21 +286,22 @@ function RPCopy_CaptureTarget()
     local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     if focused then return end
 
-    local targetName = nil
-    if UnitExists("target") and UnitIsPlayer("target") then
-        targetName = ns.GetUnitFullName("target")
+    -- 0.5.0: players, NPCs and companion pets can all be companions
+    local targetName, unit = nil, nil
+    if UnitExists("target") and not (UnitIsUnit and UnitIsUnit("target", "player")) then
+        targetName, unit = ns.UnitCompanionName("target"), "target"
     elseif UnitExists("mouseover") and UnitIsPlayer("mouseover") then
-        targetName = ns.GetUnitFullName("mouseover")
+        targetName, unit = ns.GetUnitFullName("mouseover"), "mouseover"
     elseif ns.state.lastDirectAuthor then
         targetName = ns.state.lastDirectAuthor
     end
 
     if not targetName or targetName == "" then
-        UI.ShowToast("|cffff6b6bRPCopy:|r Target a player (or hover/whisper) first!", 2.0, 0.75, 0.28, 0.28)
+        UI.ShowToast("|cffff6b6bRPCopy:|r Target someone (or hover/whisper) first!", 2.0, 0.75, 0.28, 0.28)
         return
     end
 
-    local key, isNew = ns.SaveOrUpdatePlayer(targetName)
+    local key, isNew = ns.SaveOrUpdatePlayer(targetName, unit)
     if key then
         local entry = RPCopyDB.players[key]
         local detail = ""
@@ -260,7 +332,58 @@ C.strip:SetHeight(24)
 
 C.boxBg = CreateFrame("Frame", nil, view, UI.BACKDROP)
 C.boxBg:SetPoint("TOPLEFT", C.strip, "BOTTOMLEFT", 0, -6)
-C.boxBg:SetPoint("BOTTOMRIGHT", 0, 30)
+C.boxBg:SetPoint("BOTTOMRIGHT", 0, 52)
+
+-- 0.5.0: "Nearby companions": targeted, in your group, or chatting lately.
+-- Click one to open their notes. Options > Companions can hide it.
+C.nearby = CreateFrame("Button", nil, view)
+C.nearby:SetHeight(18)
+C.nearby:SetPoint("BOTTOMLEFT", 0, 30)
+C.nearby:SetPoint("BOTTOMRIGHT", 0, 30)
+C.nearbyText = C.nearby:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+C.nearbyText:SetAllPoints(C.nearby)
+C.nearbyText:SetJustifyH("LEFT")
+C.nearbyText:SetWordWrap(false)
+C.nearby:SetScript("OnEnter", function(self)
+    local lines = {}
+    for _, n in ipairs(self.list or {}) do table.insert(lines, n.key .. " |cff8f9ba8(" .. n.why .. ")|r") end
+    UI.Tooltip(self, "|cffffd100Nearby companions|r", #lines > 0 and table.concat(lines, "\n") or "Nobody right now.",
+        "Click to open the first one in Companions.")
+end)
+C.nearby:SetScript("OnLeave", UI.HideTooltip)
+C.nearby:SetScript("OnClick", function(self)
+    local first = self.list and self.list[1]
+    if first then
+        UI.ShowSection("PLAYERS")
+        if UI.OpenCompanion then UI.OpenCompanion(first.key) end
+    end
+end)
+
+function UI.RefreshNearbyChip()
+    local on = RPCopyDB and RPCopyDB.nearbyChip ~= false
+    local list = on and ns.NearbyCompanions and ns.NearbyCompanions() or {}
+    C.nearby.list = list
+    if not on then
+        C.nearby:Hide()
+        C.boxBg:SetPoint("BOTTOMRIGHT", 0, 30)
+        return
+    end
+    C.boxBg:SetPoint("BOTTOMRIGHT", 0, 52)
+    C.nearby:Show()
+    if #list == 0 then
+        C.nearbyText:SetText("|cff8f9ba8Nearby companions: none|r")
+        return
+    end
+    local names = {}
+    for i, n in ipairs(list) do
+        if i > 4 then break end
+        local e = RPCopyDB.players[n.key]
+        local cf = e and (e.classFile or ns.ClassToken(e.class))
+        table.insert(names, cf and ns.ColorizeClass(n.key, cf) or ("|cff80d8ff" .. n.key .. "|r"))
+    end
+    local more = (#list > 4) and (" |cff8f9ba8+" .. (#list - 4) .. "|r") or ""
+    C.nearbyText:SetText("|cffffd100Nearby companions:|r " .. table.concat(names, ", ") .. more)
+end
 UI.ApplyPanelLook(C.boxBg)
 
 C.scroll = CreateFrame("ScrollFrame", "RPCopyScrollFrame", C.boxBg, "UIPanelScrollFrameTemplate")
@@ -322,7 +445,13 @@ end
 function UI.RefreshBox()
     UI.UpdateExpandButtonLabel()
     UI.SyncCopyChip()
-    C.editBox:SetText(ns.BuildSnapshot(ns.state.activeFilter, ns.state.activeNote, ns.state.isExpanded))
+    pcall(UI.RefreshNearbyChip)
+    local ok, snap = pcall(ns.BuildSnapshot, ns.state.activeFilter, ns.state.activeNote, ns.state.isExpanded)
+    if not ok then
+        if ns.Debug then ns.Debug("error", "Copy view: snapshot failed: " .. tostring(snap)) end
+        snap = "[RPCopy] The snapshot failed to build. Type /rp debug and send the report."
+    end
+    C.editBox:SetText(type(snap) == "string" and snap or "")
     C.editBox:SetFocus()
     C.editBox:HighlightText()
 end

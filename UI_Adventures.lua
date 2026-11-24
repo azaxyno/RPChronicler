@@ -8,6 +8,8 @@ local function RefreshIfOpen()
     if UI.RefreshRecordIcon then pcall(UI.RefreshRecordIcon) end
     if UI.frame:IsShown() and ns.state.section == "ADVENTURES" and UI.RefreshAdventuresTab then
         UI.RefreshAdventuresTab()
+    elseif UI.frame:IsShown() and ns.state.section == "BOOK" and UI.RefreshStoryBook then
+        UI.RefreshStoryBook()
     end
 end
 UI.RefreshRunViews = RefreshIfOpen
@@ -139,9 +141,15 @@ do
             imp.title:SetText("|cffff6b6bPaste a story first before saving!|r")
             return
         end
-        if f.targetAdvId and ns.SetAdventureStory(f.targetAdvId, raw) then
+        local ok, storyId
+        if f.targetStoryId and not ns.FindAdventure(f.targetAdvId or "") then
+            ok, storyId = ns.SetStoryText(f.targetStoryId, raw)
+        elseif f.targetAdvId then
+            ok, storyId = ns.SetAdventureStory(f.targetAdvId, raw)
+        end
+        if ok then
             f:Hide()
-            if UI.ShowAdventuresSub then UI.ShowAdventuresSub("BOOK", f.targetAdvId) end
+            if UI.OpenStoryBook then UI.OpenStoryBook(storyId) end
             UI.SetStatus("Story saved to the Story Book.", "good")
         end
     end)
@@ -170,6 +178,13 @@ UI.AllRuns = AllRuns
 
 local function ShowImportRun()
     local runs = AllRuns()
+    -- Re-importing a story whose recording was deleted: no run to pick
+    local st = imp.frame.targetStoryId and ns.FindStory(imp.frame.targetStoryId)
+    if st and not ns.StoryRun(st) then
+        imp.runLabel:SetText(string.format("|cfff5e6c8%s|r |cff9aa5b4- replaces this story (its recording was deleted)|r", st.title or "Story"))
+        imp.prev:Disable(); imp.next:Disable()
+        return {}, 0
+    end
     local idx = 1
     for i, adv in ipairs(runs) do
         if adv.id == imp.frame.targetAdvId then idx = i end
@@ -177,7 +192,7 @@ local function ShowImportRun()
     local adv = runs[idx]
     imp.frame.targetAdvId = adv and adv.id or nil
     if adv then
-        local has = (adv.story and adv.story ~= "") and "  |cffffb74d(has a story: saving replaces it)|r" or ""
+        local has = ns.RunHasStory(adv) and "  |cffffb74d(has a story: saving replaces it)|r" or ""
         imp.runLabel:SetText(string.format("|cfff5e6c8%s|r |cff9aa5b4- %s - %s (%d of %d)|r%s",
             adv.title or "Adventure", ns.GetRunKindLabel(adv), adv.startDate or "-", idx, #runs, has))
     else
@@ -197,7 +212,10 @@ end
 imp.prev:SetScript("OnClick", function() StepImportRun(-1) end)
 imp.next:SetScript("OnClick", function() StepImportRun(1) end)
 
-local function OpenStoryImportModal(adv)
+-- adv: the run to import for (nil = the selected one); st: a story to replace
+local function OpenStoryImportModal(adv, st)
+    imp.frame.targetStoryId = st and st.id or nil
+    if st and not adv then adv = ns.StoryRun(st) end
     imp.frame.targetAdvId = adv and adv.id or (ns.state.selectedAdventureId)
     imp.title:SetText("|cffffd100Import Story from your AI|r")
     imp.editBox:SetText("")
@@ -210,29 +228,17 @@ UI.OpenStoryImportModal = OpenStoryImportModal
 -- =========================================================
 -- ADVENTURES section: record bar, run list, Summary | Full Log | Story
 -- =========================================================
-local view = UI.NewSection("ADVENTURES", "Adventures", "Recordings holds your runs. Story Book holds the stories your AI wrote.")
-UI.AddRailButton("ADVENTURES", "Adventures", UI.ICONS.ADVENTURES, "Record runs and read their stories in the Story Book.")
+-- 0.5.0: Adventures holds the recordings only; the Story Book is its own
+-- section right below it (UI_StoryBook.lua)
+local view = UI.NewSection("ADVENTURES", "Adventures", "Your recorded runs: Summary, Full Log for your AI, and a link to each story.")
+UI.AddRailButton("ADVENTURES", "Adventures", UI.ICONS.ADVENTURES, "Record dungeon, raid and open-world runs.")
 
 local A = { cards = {} }
 UI.adventures = A
 
--- Sub-tabs: Recordings | Story Book
-A.recTab = UI.CreateSleekButton(view, 96, 22, "Recordings")
-A.recTab:SetPoint("TOPLEFT", 0, 0)
-A.recTab:SetIcon(UI.ICONS.ADVENTURES, 14)
-A.bookTab = UI.CreateSleekButton(view, 104, 22, "Story Book")
-A.bookTab:SetPoint("LEFT", A.recTab, "RIGHT", 4, 0)
-A.bookTab:SetIcon(UI.ICONS.STORY, 14)
-A.bookTab.tipTitle = "|cffffd100Story Book|r"
-A.bookTab.tipText = "Every run with a story from your AI: read, share, edit details or import a new one."
-
 A.recView = CreateFrame("Frame", nil, view)
-A.recView:SetPoint("TOPLEFT", 0, -28)
+A.recView:SetPoint("TOPLEFT", 0, 0)
 A.recView:SetPoint("BOTTOMRIGHT", 0, 0)
-A.bookView = CreateFrame("Frame", nil, view)
-A.bookView:SetPoint("TOPLEFT", 0, -28)
-A.bookView:SetPoint("BOTTOMRIGHT", 0, 0)
-A.bookView:Hide()
 
 -- Record bar
 A.recBar = CreateFrame("Frame", nil, A.recView, UI.BACKDROP)
@@ -452,16 +458,20 @@ local function UpdateHero(adv, isLive)
     end
     A.heroIcon:SetTexture(ns.GetAdventureIcon(adv))
     local livePrefix = isLive and (adv.paused and "|cffffb74d[PAUSED]|r " or "|cffff5252[REC]|r ") or ""
-    local storyBadge = (adv.story and adv.story ~= "") and "  |cffffd100[Story]|r" or ""
+    local storyBadge = ns.RunHasStory(adv) and "  |cffffd100[Story]|r" or ""
     A.heroTitle:SetText(livePrefix .. "|cffffd100" .. (adv.title or "Adventure") .. "|r" .. storyBadge)
     local durSec = ns.GetRunDuration(adv)
     local interrupted = adv.interrupted and "  -  |cffffb74dinterrupted|r|cffb0bac5" or ""
     local reloads = (adv.reloads and adv.reloads > 0) and string.format("  -  %d reload%s", adv.reloads, adv.reloads == 1 and "" or "s") or ""
     A.heroMeta:SetText(string.format("|cffb0bac5%s  -  %s  -  %s  -  %s%s%s|r",
         ns.GetRunKindLabel(adv), adv.zone or "Unknown", adv.startDate or "-", ns.FormatDuration(durSec), reloads, interrupted))
-    A.heroStats:SetText(string.format(
-        "|cff8f9ba8Bosses:|r |cff5cb85c%d|r   |cff8f9ba8Foes:|r |cff5cb85c%d|r   |cff8f9ba8Wipes:|r |cffff6b6b%d|r   |cff8f9ba8Deaths:|r |cffffb74d%d|r   |cff8f9ba8Shots:|r |cff69ccf0%d|r",
-        #(adv.bossKills or {}), adv.foesDefeated or 0, adv.wipes or 0, adv.deaths or 0, #(adv.shots or {})))
+    -- 0.5.0: the stats fit the run type, and zeros are hidden
+    local HEX = { Bosses = "5cb85c", Foes = "5cb85c", Wipes = "ff6b6b", Deaths = "ffb74d", Shots = "69ccf0", Levels = "69ccf0", Quests = "ffd100" }
+    local bits = {}
+    for _, h in ipairs(ns.GetRunHeroStats(adv)) do
+        table.insert(bits, string.format("|cff8f9ba8%s:|r |cff%s%s|r", h.label, HEX[h.label] or "eceff1", tostring(h.value)))
+    end
+    A.heroStats:SetText(#bits > 0 and table.concat(bits, "   ") or "|cff8f9ba8Nothing counted yet|r")
 end
 
 local function UpdateRecordBar(active)
@@ -500,19 +510,6 @@ end
 
 function UI.RefreshAdventuresTab()
     UI.EnsureOptions()
-    if ns.state.adventureSub == "BOOK" then
-        A.recTab:UnlockHighlight()
-        A.bookTab:LockHighlight()
-        A.recView:Hide()
-        A.bookView:Show()
-        A.editBox:ClearFocus()
-        if UI.RefreshStoryBook then UI.RefreshStoryBook() end
-        return
-    end
-    A.recTab:LockHighlight()
-    A.bookTab:UnlockHighlight()
-    A.bookView:Hide()
-    A.recView:Show()
     local active = ns.GetActiveAdventure()
     UpdateRecordBar(active)
 
@@ -533,12 +530,19 @@ function UI.RefreshAdventuresTab()
         card:SetPoint("TOPLEFT", 0, -(idx - 1) * 48)
         card.icon:SetTexture(ns.GetAdventureIcon(adv))
         local prefix = item.isLive and (adv.paused and "|cffffb74d[P]|r " or "|cffff5252[REC]|r ") or ""
-        local bookStar = (adv.story and adv.story ~= "") and " |cffffd100*|r" or ""
+        local bookStar = ns.RunHasStory(adv) and " |cffffd100*|r" or ""
         card.titleLbl:SetText(prefix .. "|cfff0f4f8" .. (adv.title or "Adventure") .. "|r" .. bookStar)
         local durSec = ns.GetRunDuration(adv)
         local kindShort = (adv.kind == "raid" and "Raid") or (adv.kind == "dungeon" and "Dgn") or "World"
-        card.subLbl:SetText(string.format("|cff8f9ba8%s - %s - %dk - %dw|r",
-            kindShort, ns.FormatDuration(durSec), #(adv.bossKills or {}), adv.wipes or 0))
+        local extra
+        if adv.kind == "world" then
+            extra = string.format("%d foes", adv.foesDefeated or 0)
+            local _, gained = ns.GetRunLevels(adv)
+            if gained > 0 then extra = extra .. " - +" .. gained .. " lvl" end
+        else
+            extra = string.format("%dk - %dw", #(adv.bossKills or {}), adv.wipes or 0)
+        end
+        card.subLbl:SetText(string.format("|cff8f9ba8%s - %s - %s|r", kindShort, ns.FormatDuration(durSec), extra))
 
         local selected = (ns.state.selectedAdventureId == adv.id)
         card.isSelected = selected
@@ -564,7 +568,7 @@ function UI.RefreshAdventuresTab()
     UpdateHero(selected, (active and selected and active.id == selected.id) or false)
     A.delBtn:SetText("Delete")
 
-    local hasStory = selected and selected.story and selected.story ~= ""
+    local hasStory = selected and ns.RunHasStory(selected)
     A.storyBtn:SetText(hasStory and "Story *" or "Story")
     A.storyBtn.tipText = hasStory and "Open this run's story in the Story Book." or "Import a story for this run from your AI."
     if selected then A.storyBtn:Enable() else A.storyBtn:Disable() end
@@ -606,12 +610,10 @@ function UI.RefreshAdventuresTab()
     end
 end
 
--- Recordings | Story Book
-function UI.ShowAdventuresSub(sub, advId)
-    ns.state.adventureSub = (sub == "BOOK") and "BOOK" or "REC"
-    if advId then
-        if ns.state.adventureSub == "BOOK" then ns.state.bookAdventureId = advId else ns.state.selectedAdventureId = advId end
-    end
+-- Opens Adventures on a run. mode: "SUMMARY" or "FULL" (nil keeps it)
+function UI.OpenRecording(advId, mode)
+    if advId then ns.state.selectedAdventureId = advId end
+    if mode then ns.state.adventureViewMode = mode end
     if not UI.frame:IsShown() then
         RPCopy_Open("", "ADVENTURES")
     elseif ns.state.section ~= "ADVENTURES" then
@@ -621,21 +623,30 @@ function UI.ShowAdventuresSub(sub, advId)
     end
 end
 
+-- Old name (0.4.0 had sub-tabs): "BOOK" opens the Story Book section
+function UI.ShowAdventuresSub(sub, advId)
+    if sub == "BOOK" then
+        local st = advId and ns.StoryForRun(advId)
+        if UI.OpenStoryBook then UI.OpenStoryBook(st and st.id or nil) end
+    else
+        UI.OpenRecording(advId)
+    end
+end
+
 local function SetMode(mode)
     ns.state.adventureViewMode = mode
     UI.RefreshAdventuresTab()
 end
 A.summaryBtn:SetScript("OnClick", function() SetMode("SUMMARY") end)
 A.fullBtn:SetScript("OnClick", function() SetMode("FULL") end)
-A.recTab:SetScript("OnClick", function() UI.ShowAdventuresSub("REC") end)
-A.bookTab:SetScript("OnClick", function() UI.ShowAdventuresSub("BOOK") end)
 
 -- Story: jump to this run's story, or import one
 A.storyBtn:SetScript("OnClick", function()
     local adv = GetSelectedAdventure()
     if not adv then return end
-    if adv.story and adv.story ~= "" then
-        UI.ShowAdventuresSub("BOOK", adv.id)
+    local st = ns.StoryForRun(adv.id)
+    if st then
+        if UI.OpenStoryBook then UI.OpenStoryBook(st.id) end
     else
         OpenStoryImportModal(adv)
     end
@@ -684,14 +695,16 @@ A.delBtn:SetScript("OnClick", function(self)
             if not self.armedAt or GetTime() - self.armedAt > 4 then
                 self.armedAt = GetTime()
                 self:SetText("|cffff6b6bSure?|r")
-                UI.SetStatus("Click Delete again to remove " .. (adv.title or "this run") .. ".", "error")
+                local keeps = ns.RunHasStory(adv) and " Its story stays in the Story Book." or ""
+                UI.SetStatus("Click Delete again to remove " .. (adv.title or "this run") .. "." .. keeps, "error")
                 return
             end
             self.armedAt = nil
             table.remove(RPCopyDB.adventures, i)
             if ns.Debug then ns.Debug("run", "deleted run " .. tostring(adv.title)) end
             ns.state.selectedAdventureId = nil
-            UI.SetStatus("Adventure deleted.", "good")
+            adv.storyId = nil
+            UI.SetStatus("Recording deleted.", "good")
             UI.RefreshAdventuresTab()
             return
         end

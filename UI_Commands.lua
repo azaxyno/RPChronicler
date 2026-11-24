@@ -100,7 +100,7 @@ UI.miniBtn = miniBtn
 -- Book, Clear logs. A plain frame, so it works in combat too.
 do
     local menu = CreateFrame("Frame", "RPCopyIconMenu", UIParent, UI.BACKDROP)
-    menu:SetSize(150, 10)
+    menu:SetSize(170, 10)
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:Hide()
     UI.ApplyDarkGlass(menu, 0.05, 0.07, 0.10, 0.97, 0.82, 0.65, 0.30, 0.90)
@@ -110,14 +110,19 @@ do
         { key = "run", fn = function() RPCopy_ToggleRun() end },
         { key = "pause", fn = function() RPCopy_ToggleRunPause() end },
         { key = "mark", label = "Mark Moment", fn = function() if RPCopy_MarkMoment then RPCopy_MarkMoment() end end },
-        { key = "book", label = "Story Book", fn = function() if UI.ShowAdventuresSub then UI.ShowAdventuresSub("BOOK") end end },
+        -- 0.5.0: straight to the live run's Full Log
+        { key = "open", label = "Open current recording", fn = function()
+            local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+            if run and UI.OpenRecording then UI.OpenRecording(run.id, "FULL") end
+        end },
+        { key = "book", label = "Story Book", fn = function() if UI.OpenStoryBook then UI.OpenStoryBook() end end },
         { key = "clear", label = "Clear chat logs", fn = function()
             ns.ClearSessionLogs()
             print("|cff00ff00[RPCopy]|r All logs cleared.")
         end },
     }
     for i, it in ipairs(items) do
-        local b = UI.CreateSleekButton(menu, 138, 20, it.label or "", it.key == "run" and "good" or nil)
+        local b = UI.CreateSleekButton(menu, 158, 20, it.label or "", it.key == "run" and "good" or nil)
         b:SetPoint("TOP", 0, -6 - (i - 1) * 22)
         b:SetScript("OnClick", function()
             menu:Hide()
@@ -129,7 +134,8 @@ do
 
     local function Refresh()
         local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
-        local runBtn, pauseBtn, markBtn = items[1].btn, items[2].btn, items[3].btn
+        local runBtn, pauseBtn, markBtn, openBtn = items[1].btn, items[2].btn, items[3].btn, items[4].btn
+        if run then openBtn:Enable() else openBtn:Disable() end
         runBtn.accentStyle = run and "danger" or "good"
         runBtn.ApplyNormalLook()
         runBtn:SetText(run and "Stop & Save" or "Start Recording")
@@ -274,7 +280,12 @@ SlashCmdList["RPCOPY"] = function(msg)
     elseif low == "start" then
         RPCopy_StartRun()
     elseif low == "book" or low == "stories" then
-        UI.ShowAdventuresSub("BOOK")
+        UI.OpenStoryBook()
+    elseif low == "setup" or low == "privacy" then
+        if UI.OpenSetup then UI.OpenSetup(true) end
+    elseif low == "wipe" then
+        UI.ShowPrompt("|cffff6b6bDelete ALL RPCopy data?|r\nEvery recording, story, companion and setting is removed, then the UI reloads. This cannot be undone.",
+            "Delete everything", function() ns.WipeAllData() end, "Cancel", nil)
     elseif low == "debug" then
         UI.ShowCopyBox("|cffffd100RPCopy debug report|r",
             "|cffb0bac5Select All, Ctrl+C, and paste it into your bug report. It holds no chat.|r",

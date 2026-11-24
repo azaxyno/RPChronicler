@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: RPCopy
 ## Notes: AI RP Context Snapshot & Colored Adventure Chronicle Journal
-## Version: 0.4.0
+## Version: 0.5.0
 ## SavedVariables: RPCopyDB
 # CurseForge: once the project exists, change the next line to
 # "## X-Curse-Project-ID: <project id>" (two #, no space before X)
@@ -9,6 +9,7 @@
 
 Core.lua
 Debug.lua
+Companions.lua
 Snapshot.lua
 Adventures.lua
 Screenshots.lua
@@ -20,4 +21,5 @@ UI_Companions.lua
 UI_Adventures.lua
 UI_StoryBook.lua
 UI_Options.lua
+UI_Setup.lua
 UI_Commands.lua

@@ -39,19 +39,7 @@ end
 if not ns.SetAdventureStory then
     ns.SetAdventureStory = function(advId, rawStoryText)
         if ns.EnsureDB then ns.EnsureDB() end
-        local cleaned = (rawStoryText or ""):match("^%s*(.-)%s*$")
-        cleaned = cleaned:gsub("||", "|")
-        cleaned = cleaned:gsub("^```[%w_-]*%s*\n?", ""):gsub("\n?```%s*$", "")
-        cleaned = cleaned:gsub("★", "*")
-        cleaned = cleaned:match("^%s*(.-)%s*$")
-
-        local openCount = 0
-        for _ in cleaned:gmatch("|c%x%x%x%x%x%x%x%x") do openCount = openCount + 1 end
-        local closeCount = 0
-        for _ in cleaned:gmatch("|r") do closeCount = closeCount + 1 end
-        if openCount > closeCount then
-            cleaned = cleaned .. string.rep("|r", openCount - closeCount)
-        end
+        local cleaned = ns.NormalizeStoryText(rawStoryText)
 
         local active = ns.GetActiveAdventure()
         if active and active.id == advId then
@@ -73,85 +61,85 @@ name: <character-name>-rp-<class>
 description: Generate short, casual World of Warcraft roleplay responses for <Character Full Name> (<Faction> <Race> <Class>) inspired by <Persona Inspiration>. Use when the user uploads a WoW chat screenshot, mentions "<trigger>" (such as "use <trigger>"), or asks for <Class> RP replies in General, Say, Whisper, or Party chat.
 ---
 
-# WoW RP <Faction> <Race> <Class> (<Persona Inspiration> Persona)
+WOW RP <FACTION> <RACE> <CLASS> (<PERSONA INSPIRATION> PERSONA)
 
 Generate short, casual in-character English roleplay replies for <Character Full Name>, a <personality summary> <Faction>-aligned <Race> <Class> in World of Warcraft, capturing the voice and quirks of <Persona Inspiration>.
 
-## When to Use
+WHEN TO USE
 
-- The user pastes an RPCopy context snapshot starting with `use <trigger>` (containing `[Location]`, `[Target]`, `[S]`, `[G]`, `[P]`, `[W]`, `[Loot]`, etc.) or uploads a WoW chat screenshot.
-- The user mentions the trigger words `<trigger>` or `<surname>` (for example: "use <trigger>", "<trigger> reply").
+- The user pastes an RPCopy context snapshot starting with "use <trigger>" (containing [Location], [Target], [S], [G], [P], [W], [Loot], etc.) or uploads a WoW chat screenshot.
+- The user mentions the trigger words "<trigger>" or "<surname>" (for example: "use <trigger>", "<trigger> reply").
 - The user asks for quick in-character <Class> roleplay responses.
 
-## Core Personality (5 Distinct Angles)
+CORE PERSONALITY (5 DISTINCT ANGLES)
 
-1. **Signature Quirk / Theatrical Angle**:
+1. Signature Quirk / Theatrical Angle:
    - Frames ordinary moments with <Character Full Name>'s signature flair (e.g., dramatic titles, deadpan grand declarations, or noble poise), then drops right back into casual speech.
    - Invents overly dramatic names for ordinary beasts, spells, gear, or low-level mobs.
 
-2. **Petty & Witty Banter**:
+2. Petty & Witty Banter:
    - Invents grandiose lore excuses to dodge mundane chores, walking, or blame ("my keen senses are currently sealed for greater prey").
    - Turns trivial moments into playful rivalry and gets flustered if treated like a novice.
 
-3. **Heart & Everyday Habits**:
+3. Heart & Everyday Habits:
    - Carries grounded adventurer habits into Azeroth (counting every copper, hating repair/reagent bills, hoarding free food, protecting loot rights).
    - Loyal to <Faction> and teammates, with a soft spot for <favorite thing/creatures>.
 
-4. **Class / Companion / Lore Chaos (Option 4)**:
+4. Class / Companion / Lore Chaos (Option 4):
    - Obsessed with <class-specific gimmick: e.g., taming dangerous elites, forbidden arcane theory, questionable engineering>, giving them ridiculous names, and blaming accidental pulls on <pet/spells/fate>.
 
-5. **Unhinged Overkill Mode (Option 5)**:
+5. Unhinged Overkill Mode (Option 5):
    - Over-the-top <Class> mode: eager to solve every minor problem by unloading big AoE/traps/cooldowns on the entire room, then immediately <Feign / Blink / Vanish / bubble> while the party handles the aggro.
 
-## Channel Context & Formatting Rules
+CHANNEL CONTEXT & FORMATTING RULES
 
-1. **No Channel Prefixes**: Never start replies with `/1`, `/p`, `/s`, `/w`, or `/y`. Output pure, copy-paste-ready text.
-2. **Adapt to the Chat Channel Context**: Check `[G]`, `[P]`, `[S]`, `[W]`, `[Y]` tags and tailor RP accordingly.
-3. **Always Output RP in English**: Write all 5 RP chat options in natural, casual lowercase English.
-4. **Keep It Short**: 1-2 short sentences max per option so it fits fast-paced WoW chat.]]
+1. No Channel Prefixes: Never start replies with /1, /p, /s, /w, or /y. Output pure, copy-paste-ready text.
+2. Adapt to the Chat Channel Context: Check [G], [P], [S], [W], [Y] tags and tailor RP accordingly.
+3. Always Output RP in English: Write all 5 RP chat options in natural, casual lowercase English.
+4. Keep It Short: 1-2 short sentences max per option so it fits fast-paced WoW chat.]]
 
 local STORY_SKILL_TEMPLATE_TEXT = [[---
 name: wow-adventure-story
 description: Transform World of Warcraft dungeon, raid, or adventure logs from RPCopy into vivid, entertaining narrative stories formatted with WoW color escape codes (|cffRRGGBB...|r) for direct import into the RPCopy addon Story tab. Use when the user pastes an RPCopy adventure log, mentions "adventure story", "dungeon story", "create a story", "use story", or asks to turn a WoW run, party chat, wipes, or gameplay session into a colored in-game chronicle.
 ---
 
-# WoW Adventure Storyteller (RPCopy Colored Chronicle)
+WOW ADVENTURE STORYTELLER (RPCOPY COLORED CHRONICLE)
 
-Turn exported World of Warcraft adventure logs from RPCopy into rich, entertaining stories formatted with native WoW color escape codes (`|cffRRGGBB...|r`) so they can be pasted directly into RPCopy's Story tab and read cleanly in-game.
+Turn exported World of Warcraft adventure logs from RPCopy into rich, entertaining stories formatted with native WoW color escape codes (|cffRRGGBB...|r) so they can be pasted directly into RPCopy's Story tab and read cleanly in-game.
 
-## When to Use
+WHEN TO USE
 
-- The user pastes a full or partial RPCopy Adventure Log (containing `[ADVENTURE]`, roster, wipes, boss kills, loot, highlights, or timeline chat).
-- The user uses a trigger such as `use story`, `adventure story`, or asks to generate a story from a dungeon, raid, or open-world session.
+- The user pastes a full or partial RPCopy Adventure Log (containing [ADVENTURE], roster, wipes, boss kills, loot, highlights, or timeline chat).
+- The user uses a trigger such as "use story" or "adventure story", or asks to generate a story from a dungeon, raid, or open-world session.
 
-## Storytelling & Accuracy Principles
+STORYTELLING & ACCURACY PRINCIPLES
 
-1. **Stay Faithful to the Log (No Invented Events or Fake Quotes)**: Build the narrative strictly from the real roster, bosses, HP/mana milestones, wipes, loot, and chat quotes recorded in the timeline. Use dramatic fantasy prose to describe the scenes, but never fabricate bosses, wipes, loot drops, or player quotes that do not appear in the log.
-2. **Use Combat & HP Context from Timestamps**: Pay close attention to `[HH:MM:SS]` timestamps, `[BOSS HP]` milestones (such as `5% HP`), `[LOW MANA]`, `[DANGER]`, and combat tags on chat lines (such as `[Party | vs Boss 5% HP]`) so you accurately connect when someone panicked, asked for water, or celebrated relative to the fight.
-3. **Do Not Limit What Happened**: Never compress the run into a dry summary or skip messy moments. Include everything that made the session memorable - wipes, ninja pulls, someone begging for conjured water, OOM panic, clutch heals, dramatic boss kills, and loot drops.
-4. **Weave Real Quotes and Roles Naturally**: Use the roster's classes and roles (`[Tank]`, `[Healer]`, `[DPS]`) to give each party member a distinct presence, and embed their actual quotes from the timeline verbatim.
+1. Stay Faithful to the Log (No Invented Events or Fake Quotes): Build the narrative strictly from the real roster, bosses, HP/mana milestones, wipes, loot, and chat quotes recorded in the timeline. Use dramatic fantasy prose to describe the scenes, but never fabricate bosses, wipes, loot drops, or player quotes that do not appear in the log.
+2. Use Combat & HP Context from Timestamps: Pay close attention to [HH:MM:SS] timestamps, [BOSS HP] milestones (such as 5% HP), [LOW MANA], [DANGER], and combat tags on chat lines (such as [Party | vs Boss 5% HP]) so you accurately connect when someone panicked, asked for water, or celebrated relative to the fight.
+3. Do Not Limit What Happened: Never compress the run into a dry summary or skip messy moments. Include everything that made the session memorable - wipes, ninja pulls, someone begging for conjured water, OOM panic, clutch heals, dramatic boss kills, and loot drops.
+4. Weave Real Quotes and Roles Naturally: Use the roster's classes and roles ([Tank], [Healer], [DPS]) to give each party member a distinct presence, and embed their actual quotes from the timeline verbatim.
 
-## RPCopy Color Palette (`|cffRRGGBB...|r`)
+RPCOPY COLOR PALETTE (|cffRRGGBB...|r)
 
-Color the output using WoW's native hex escape format (`|cffRRGGBBtext|r`) so the story renders vividly on RPCopy's warm dark-parchment reader:
+Color the output using WoW's native hex escape format (|cffRRGGBBtext|r) so the story renders vividly on RPCopy's warm dark-parchment reader:
 
-- **Story Title & Chapter Headers**: `|cffffd100` (Gold)
-- **Zone, Instance & Scene Subheaders**: `|cff40e0d0` (Teal) or `|cffb39ddb` (Lavender)
-- **Main Narrative Prose**: `|cffeceff1` (Bright Off-White)
-- **Player Names (Match WoW Class Color)**: Warrior `|cffC79C6E`, Paladin `|cffF58CBA`, Hunter `|cffABD473`, Rogue `|cffFFF569`, Priest `|cffFFFFFF`, Death Knight `|cffC41F3B`, Shaman `|cff0070DE`, Mage `|cff69CCF0`, Warlock `|cff9482C9`, Monk `|cff00FF96`, Druid `|cffFF7D0A`, Demon Hunter `|cffA330C9`, Evoker `|cff33937F`
-- **Bosses & Elite Threats**: `|cffff8000` (Orange)
-- **Wipes, Deaths & Danger**: `|cffff5252` (Red)
-- **Victories, Clutch Saves & Healing**: `|cff66bb6a` (Green)
-- **Notable Loot Drops**: `|cffffd700` (Loot Gold) or `|cffe066ff` (Epic Purple)
-- **Quoted Party / Say Dialogue**: `|cffaaaaff` (Party Blue) or `|cffffffff` (Say White)
-- **Footer Stats & Metadata**: `|cff9e9e9e` (Muted Gray)
+- Story Title & Chapter Headers: |cffffd100 (Gold)
+- Zone, Instance & Scene Subheaders: |cff40e0d0 (Teal) or |cffb39ddb (Lavender)
+- Main Narrative Prose: |cffeceff1 (Bright Off-White)
+- Player Names (Match WoW Class Color): Warrior |cffC79C6E, Paladin |cffF58CBA, Hunter |cffABD473, Rogue |cffFFF569, Priest |cffFFFFFF, Death Knight |cffC41F3B, Shaman |cff0070DE, Mage |cff69CCF0, Warlock |cff9482C9, Monk |cff00FF96, Druid |cffFF7D0A, Demon Hunter |cffA330C9, Evoker |cff33937F
+- Bosses & Elite Threats: |cffff8000 (Orange)
+- Wipes, Deaths & Danger: |cffff5252 (Red)
+- Victories, Clutch Saves & Healing: |cff66bb6a (Green)
+- Notable Loot Drops: |cffffd700 (Loot Gold) or |cffe066ff (Epic Purple)
+- Quoted Party / Say Dialogue: |cffaaaaff (Party Blue) or |cffffffff (Say White)
+- Footer Stats & Metadata: |cff9e9e9e (Muted Gray)
 
-## Formatting Rules for WoW Compatibility
+FORMATTING RULES FOR WOW COMPATIBILITY
 
-1. **Single Copy-Paste Code Block**: Output the entire colored story inside one fenced code block (` ```text `) so the user can copy and paste it straight into RPCopy.
-2. **Close Every Color Tag**: Always pair every `|cffRRGGBB` with a closing `|r`.
-3. **Zero Markdown Inside the Code Block**: Never use `**bold**`, `*italics*`, `# headers`, or bullet symbols inside the WoW text block. Use WoW color tags and blank lines for structure.
-4. **ASCII Characters Only**: Use standard ASCII punctuation (`-`, `'`, `"`, `*`) inside the code block so WoW fonts never render missing-glyph boxes.]]
+1. Single Copy-Paste Code Block: Output the entire colored story inside one fenced text code block so the user can copy and paste it straight into RPCopy.
+2. Close Every Color Tag: Always pair every |cffRRGGBB with a closing |r.
+3. Zero Markdown Inside the Code Block: Never use bold or italic asterisks, pound-sign headers, or bullet symbols inside the WoW text block. Use WoW color tags and blank lines for structure.
+4. ASCII Characters Only: Use standard ASCII punctuation (- ' " *) inside the code block so WoW fonts never render missing-glyph boxes.]]
 
 -- =========================================================
 -- Inject OOC Channel Logs into Snapshot When Tab Enables It
@@ -389,20 +377,47 @@ armEditBox:SetMultiLine(true)
 armEditBox:SetAlpha(0.01)
 armEditBox:Hide()
 
+-- =========================================================
+-- Quick Copy
+-- WoW addons cannot write to the system clipboard. The only way to copy is
+-- the game's own Ctrl+C inside a focused EditBox with highlighted text.
+--
+-- "Instant" mode (quick copy key = CTRL-C): the moment you press Ctrl down,
+-- an invisible EditBox takes focus with the snapshot pre-highlighted, so the
+-- C of your Ctrl+C lands in it and copies on the FIRST press. Focus is
+-- released as soon as C is pressed, any other key is pressed, or Ctrl is let
+-- go, so movement keys are only held up while Ctrl itself is held.
+--
+-- "Two-press" mode (any other custom key, /rp quick, or the keybinding):
+-- the key arms the box, then Ctrl+C copies, auto-cancelling after 3 seconds.
+-- =========================================================
 local isArmed = false
+local armMode = nil -- "hold" (instant) or "timed" (two-press)
 local armedTabLabel = "Chat"
 local armExpiresAt = 0
+
+local MODIFIER_KEYS = {
+    LSHIFT = true, RSHIFT = true,
+    LCTRL = true, RCTRL = true,
+    LALT = true, RALT = true,
+    LMETA = true, RMETA = true,
+}
+
+local function IsInstantCopyMode()
+    return RPCopyDB and RPCopyDB.quickCtrlC and (RPCopyDB.quickCopyKey == "CTRL-C")
+end
 
 local function DisarmCtrlCopy()
     if isArmed then
         isArmed = false
+        armMode = nil
         armExpiresAt = 0
         armEditBox:ClearFocus()
         armEditBox:Hide()
     end
 end
 
-local function ArmCtrlCopy()
+local function ArmCtrlCopy(mode)
     EnsureUIOptions()
     if InCombatLockdown and InCombatLockdown() then return false end
     if copyFrame:IsShown() then return false end
@@ -421,12 +436,23 @@ local function ArmCtrlCopy()
     armEditBox:SetFocus()
     armEditBox:HighlightText()
     isArmed = true
-    armExpiresAt = GetTime() + 3.0
+    armMode = mode or "timed"
+    armExpiresAt = (armMode == "timed") and (GetTime() + 3.0) or 0
     return true
 end
 
+local function FinishCopy()
+    ShowToast(string.format("|cffffd100Copied|r |cff69ccf0[%s]|r |cff5cb85cto clipboard!|r", armedTabLabel), 1.8, 0.36, 0.72, 0.36)
+    -- Let the EditBox finish its native copy before focus is dropped
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.05, DisarmCtrlCopy)
+    else
+        DisarmCtrlCopy()
+    end
+end
+
 armEditBox:SetScript("OnUpdate", function()
-    if isArmed and armExpiresAt > 0 and GetTime() > armExpiresAt then
+    if isArmed and armMode == "timed" and armExpiresAt > 0 and GetTime() > armExpiresAt then
         DisarmCtrlCopy()
     end
 end)
@@ -434,13 +460,11 @@ end)
 armEditBox:SetScript("OnKeyDown", function(_, key)
     if not isArmed then return end
     if key == "C" and IsControlKeyDown() then
-        ShowToast(string.format("|cffffd100Copied|r |cff69ccf0[%s]|r |cff5cb85cto clipboard!|r", armedTabLabel), 1.8, 0.36, 0.72, 0.36)
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0.05, DisarmCtrlCopy)
-        else
-            DisarmCtrlCopy()
-        end
+        FinishCopy()
     elseif key == "ESCAPE" then
+        DisarmCtrlCopy()
+    elseif armMode == "hold" and not MODIFIER_KEYS[key] then
+        -- Ctrl+<anything else>: get out of the way immediately
         DisarmCtrlCopy()
     end
 end)
@@ -448,8 +472,33 @@ end)
 armEditBox:SetScript("OnEscapePressed", DisarmCtrlCopy)
 armEditBox:SetScript("OnEditFocusLost", function()
     isArmed = false
+    armMode = nil
     armExpiresAt = 0
     armEditBox:Hide()
+end)
+
+-- Ctrl watcher for instant mode (polls modifier state; no protected calls)
+local ctrlWatcher = CreateFrame("Frame", "RPCopyCtrlWatcher", UIParent)
+local ctrlWasDown = false
+ctrlWatcher:SetScript("OnUpdate", function()
+    local down = IsControlKeyDown() and true or false
+    if down == ctrlWasDown then return end
+    ctrlWasDown = down
+    if down then
+        if not isArmed and IsInstantCopyMode() then
+            ArmCtrlCopy("hold")
+        end
+    elseif isArmed and armMode == "hold" then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.05, function()
+                if isArmed and armMode == "hold" and not IsControlKeyDown() then
+                    DisarmCtrlCopy()
+                end
+            end)
+        else
+            DisarmCtrlCopy()
+        end
+    end
 end)
 
 local silentCopyBtn = CreateFrame("Button", "RPCopySilentCopyBtn", UIParent)
@@ -461,17 +510,11 @@ silentCopyBtn:SetScript("OnClick", function()
     if focused and focused ~= armEditBox then return end
 
     if not isArmed then
-        if ArmCtrlCopy() then
-            local keyHint = (RPCopyDB and RPCopyDB.quickCopyKey) or "CTRL-C"
-            ShowToast(string.format("|cffffd100Armed|r |cff69ccf0[%s]|r - Press |cffffd100%s|r again to copy!", armedTabLabel, keyHint), 2.5, 0.85, 0.68, 0.30)
+        if ArmCtrlCopy("timed") then
+            ShowToast(string.format("|cffffd100Armed|r |cff69ccf0[%s]|r - Press |cffffd100CTRL-C|r to copy!", armedTabLabel), 2.5, 0.85, 0.68, 0.30)
         end
     else
-        ShowToast(string.format("|cffffd100Copied|r |cff69ccf0[%s]|r |cff5cb85cto clipboard!|r", armedTabLabel), 1.8, 0.36, 0.72, 0.36)
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0.05, DisarmCtrlCopy)
-        else
-            DisarmCtrlCopy()
-        end
+        FinishCopy()
     end
 end)
 
@@ -534,7 +577,10 @@ local function UpdateOverrideBindings()
         ClearOverrideBindings(bindManagerFrame)
     end
     if SetOverrideBindingClick then
-        if RPCopyDB.quickCtrlC and RPCopyDB.quickCopyKey and RPCopyDB.quickCopyKey ~= "" then
+        -- Instant CTRL-C mode needs no binding: the Ctrl watcher arms the box
+        -- and the real Ctrl+C keystroke must reach the EditBox to copy.
+        if RPCopyDB.quickCtrlC and RPCopyDB.quickCopyKey and RPCopyDB.quickCopyKey ~= ""
+            and RPCopyDB.quickCopyKey ~= "CTRL-C" then
             SetOverrideBindingClick(bindManagerFrame, false, RPCopyDB.quickCopyKey, "RPCopySilentCopyBtn")
         end
         if RPCopyDB.quickCapture and RPCopyDB.captureTargetKey and RPCopyDB.captureTargetKey ~= "" then
@@ -556,9 +602,8 @@ function RPCopy_QuickCopy()
     if copyFrame:IsShown() then
         copyFrame:Hide()
     end
-    if ArmCtrlCopy() then
-        local keyHint = (RPCopyDB and RPCopyDB.quickCopyKey) or "CTRL-C"
-        ShowToast(string.format("|cffffd100Ready:|r Press |cffffd100%s|r now for |cff69ccf0[%s]|r", keyHint, armedTabLabel), 2.5, 0.85, 0.68, 0.30)
+    if ArmCtrlCopy("timed") then
+        ShowToast(string.format("|cffffd100Ready:|r Press |cffffd100CTRL-C|r now for |cff69ccf0[%s]|r", armedTabLabel), 2.5, 0.85, 0.68, 0.30)
     end
 end
 
@@ -625,15 +670,22 @@ tplEditBox:SetScript("OnEscapePressed", function()
     templateFrame:Hide()
 end)
 
+-- Escape '|' as '||' so the EditBox shows literal |cffRRGGBB codes instead of
+-- rendering them as colors (unclosed codes would otherwise bleed across lines).
+local function EscapeForEditBox(text)
+    local escaped = (text or ""):gsub("|", "||")
+    return escaped
+end
+
 local function OpenSkillTemplateModal(mode)
     if mode == "STORY" then
         tplTitle:SetText("|cffffd100RPCopy - WoW Adventure Story Skill Template (Press Ctrl+C to Copy)|r")
         tplSubTitle:SetText("|cffb0bac5Paste this template into Gemini once to create the 'wow-adventure-story' skill.|r")
-        tplEditBox:SetText(STORY_SKILL_TEMPLATE_TEXT)
+        tplEditBox:SetText(EscapeForEditBox(STORY_SKILL_TEMPLATE_TEXT))
     else
         tplTitle:SetText("|cffffd100RPCopy - Character RP Skill Template (Press Ctrl+C to Copy)|r")
         tplSubTitle:SetText("|cffb0bac5Paste this template into Gemini to generate a character RP skill matching your trigger.|r")
-        tplEditBox:SetText(RP_SKILL_TEMPLATE_TEXT)
+        tplEditBox:SetText(EscapeForEditBox(RP_SKILL_TEMPLATE_TEXT))
     end
     templateFrame:Show()
     tplEditBox:SetFocus()
@@ -1472,7 +1524,8 @@ RefreshAdventuresTab = function()
             emptyHeading:SetText("|cffffd100No Adventure Chronicle Yet|r")
             storyEmptyPane:Hide()
             storyReadPane:Show()
-            local renderText = (selectedAdv.story or ""):gsub("||", "|"):gsub("★", "*")
+            -- Re-normalize on render so stories saved by older versions display cleanly
+            local renderText = ns.NormalizeStoryText(selectedAdv.story)
             storyBodyText:SetText(renderText)
             UpdateStoryScrollHeight()
             storyScroll:SetVerticalScroll(0)
@@ -1698,6 +1751,11 @@ local keyCaptureFrame = CreateFrame("Frame", "RPCopyKeyCaptureModal", UIParent, 
 keyCaptureFrame:SetSize(340, 82)
 keyCaptureFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
 keyCaptureFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+-- OnKeyDown only fires on keyboard-enabled frames. The frame is hidden except
+-- while capturing, so it never swallows keys during normal play.
+if keyCaptureFrame.EnableKeyboard then
+    keyCaptureFrame:EnableKeyboard(true)
+end
 keyCaptureFrame:Hide()
 ApplyDarkGlass(keyCaptureFrame, 0.06, 0.08, 0.12, 0.98, 0.90, 0.73, 0.32, 0.95)
 

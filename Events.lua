@@ -21,7 +21,12 @@ end
 
 local function CheckInstanceAdventureState(isInitialLogin)
     ns.EnsureDB()
-    local inInstance, instanceType = IsInInstance and IsInInstance()
+    -- NOTE: "IsInInstance and IsInInstance()" would truncate to ONE return value,
+    -- leaving instanceType nil forever. Call it explicitly to keep both values.
+    local inInstance, instanceType = false, nil
+    if IsInInstance then
+        inInstance, instanceType = IsInInstance()
+    end
     local isDungeonOrRaid = inInstance and (instanceType == "party" or instanceType == "raid")
     local active = ns.GetActiveAdventure and ns.GetActiveAdventure()
 
@@ -256,13 +261,28 @@ local EVENTS = {
     "QUEST_TURNED_IN",
 }
 
+-- The Forever client runs on the modern (secret-values) engine, where
+-- COMBAT_LOG_EVENT_UNFILTERED is protected. Registering it from an addon
+-- raises ADDON_ACTION_FORBIDDEN ("blocked from an action only available to
+-- the Blizzard UI") on every load, and pcall cannot suppress that popup.
+-- Boss kills still come from ENCOUNTER_END and your own deaths from PLAYER_DEAD.
+local PROTECTED_EVENTS = {}
+if issecretvalue then
+    PROTECTED_EVENTS["COMBAT_LOG_EVENT_UNFILTERED"] = true
+end
+ns.combatLogAvailable = not PROTECTED_EVENTS["COMBAT_LOG_EVENT_UNFILTERED"]
+
 for _, ev in ipairs(EVENTS) do
-    pcall(eventFrame.RegisterEvent, eventFrame, ev)
+    if not PROTECTED_EVENTS[ev] then
+        pcall(eventFrame.RegisterEvent, eventFrame, ev)
+    end
 end
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_LOGIN" then
         ns.EnsureDB()
+        -- Version banner, read from the toc's ## Version field (see Core.lua)
+        print(string.format("|cffffd100RPCopy|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
         CheckInstanceAdventureState(true)
     elseif event == "PLAYER_ENTERING_WORLD" then
         local isInitialLogin = ...

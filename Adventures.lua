@@ -415,26 +415,9 @@ end
 
 function ns.SetAdventureStory(advId, rawStoryText)
     ns.EnsureDB()
-    local cleaned = (rawStoryText or ""):match("^%s*(.-)%s*$")
-
-    -- WoW EditBox doubles pasted '|' into '||' when pasting via Ctrl+V
-    cleaned = cleaned:gsub("||", "|")
-
-    -- Strip surrounding markdown code fences if copied from LLM output
-    cleaned = cleaned:gsub("^```[%w_-]*%s*\n?", ""):gsub("\n?```%s*$", "")
-    cleaned = cleaned:match("^%s*(.-)%s*$")
-
-    -- Normalize non-ASCII star glyphs to clean ASCII '*' so classic fonts never render '[]'
-    cleaned = cleaned:gsub("★", "*")
-
-    -- Auto-close any dangling |cffRRGGBB color escape sequence
-    local openCount = 0
-    for _ in cleaned:gmatch("|c%x%x%x%x%x%x%x%x") do openCount = openCount + 1 end
-    local closeCount = 0
-    for _ in cleaned:gmatch("|r") do closeCount = closeCount + 1 end
-    if openCount > closeCount then
-        cleaned = cleaned .. string.rep("|r", openCount - closeCount)
-    end
+    -- Normalizes || -> |, strips code fences and Markdown, maps non-ASCII
+    -- glyphs to ASCII, and auto-closes dangling color escapes (see Core.lua)
+    local cleaned = ns.NormalizeStoryText(rawStoryText)
 
     if activeRun and activeRun.id == advId then
         activeRun.story = cleaned

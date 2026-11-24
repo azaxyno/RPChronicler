@@ -312,6 +312,67 @@ function ns.CleanChatKeepColors(msg)
     return cleaned
 end
 
+-- =========================================================
+-- Story / Pasted Text Normalizer (WoW font + EditBox safe)
+-- Byte escapes keep this source file pure ASCII.
+-- =========================================================
+local GLYPH_MAP = {
+    { "\226\152\133", "*" },   -- black star
+    { "\226\152\134", "*" },   -- white star
+    { "\226\128\148", "-" },   -- em dash
+    { "\226\128\147", "-" },   -- en dash
+    { "\226\128\152", "'" },   -- left single quote
+    { "\226\128\153", "'" },   -- right single quote / apostrophe
+    { "\226\128\156", "\"" },  -- left double quote
+    { "\226\128\157", "\"" },  -- right double quote
+    { "\226\128\166", "..." }, -- ellipsis
+    { "\226\128\162", "-" },   -- bullet
+    { "\226\134\146", "->" },  -- right arrow
+    { "\194\160", " " },       -- non-breaking space
+}
+
+function ns.NormalizeGlyphs(text)
+    local s = tostring(text or "")
+    for _, pair in ipairs(GLYPH_MAP) do
+        s = s:gsub(pair[1], pair[2])
+    end
+    return s
+end
+
+-- Cleans LLM output for display: || -> |, code fences, Markdown, glyphs,
+-- and auto-closes dangling |cffRRGGBB escapes. Always returns one string.
+function ns.NormalizeStoryText(raw)
+    local s = (tostring(raw or "")):match("^%s*(.-)%s*$")
+
+    -- WoW EditBox doubles pasted '|' into '||'
+    s = s:gsub("||", "|")
+
+    -- Surrounding Markdown code fences
+    s = s:gsub("^```[%w_-]*%s*\n?", "")
+    s = s:gsub("\n?```%s*$", "")
+
+    -- Inline Markdown: **bold**, __bold__, `code`
+    s = s:gsub("%*%*(.-)%*%*", "%1")
+    s = s:gsub("__(.-)__", "%1")
+    s = s:gsub("`([^`\n]*)`", "%1")
+    s = s:gsub("%*%*", "")
+
+    -- Line-start Markdown: # headers and > quotes
+    s = s:gsub("^#+%s*", ""):gsub("\n#+%s*", "\n")
+    s = s:gsub("^>%s?", ""):gsub("\n>%s?", "\n")
+
+    s = ns.NormalizeGlyphs(s)
+    s = s:match("^%s*(.-)%s*$")
+
+    local openCount, closeCount = 0, 0
+    for _ in s:gmatch("|c%x%x%x%x%x%x%x%x") do openCount = openCount + 1 end
+    for _ in s:gmatch("|r") do closeCount = closeCount + 1 end
+    if openCount > closeCount then
+        s = s .. string.rep("|r", openCount - closeCount)
+    end
+    return s
+end
+
 function ns.FormatToPattern(fmt)
     if type(fmt) ~= "string" then return nil end
     local p = fmt:gsub("%%%d?%$?s", "\001"):gsub("%%%d?%$?d", "\002")

@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: RPCopy
 ## Notes: AI RP Context Snapshot & Colored Adventure Chronicle Journal
-## Version: 3.8.0
+## Version: 3.9.0
 ## SavedVariables: RPCopyDB
 
 Core.lua

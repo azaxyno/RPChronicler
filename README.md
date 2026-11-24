@@ -16,7 +16,7 @@ You build a **character skill** in your AI once. The skill knows who your charac
 
 Along the way, RPCopy remembers the **companions** you meet, so your AI knows who they are next time. It also records your **dungeon and raid runs**, so the AI can turn them into colored story chronicles you read inside the game.
 
-- **Version:** 3.8.0 (interface `16001`, WoW: Forever)
+- **Version:** 3.9.0 (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide)
 - **License:** MIT
 
@@ -187,7 +187,7 @@ The flow is:
 2. **Copy the Full Log** from the run in the Adventures view.
 3. **Paste it into your AI** with the `wow-adventure-story` skill. The skill's template is in the Story view. The AI returns a story written with WoW color codes.
 4. **Import Story** on the same run. The story is saved with that run.
-5. **Read it in game** in the Story reader, with gold chapter titles, class-colored party names and orange bosses.
+5. **Read it in game** in the Story reader, with gold chapter titles, class-colored party names and orange bosses. Drag the grip in the window's bottom-right corner to make it bigger and see more of the story at once. Right-click the grip to reset the size.
 
 ![The in-game Story reader showing a colored Shadowfang Keep chapter](docs/story-viewer.png)
 
@@ -220,6 +220,7 @@ How it works:
 | `/rp capture` | Save or update your target (or mouseover, or last whisperer) as a companion |
 | `/rp mark [note]` | Bookmark the latest moment, or your note, in the active run |
 | `/rp clear` | Clear the session chat, combat, NPC and loot buffers |
+| (window) | Drag the bottom-right grip to resize the RPCopy window, right-click it to reset. The size is saved. |
 | `/rp btn` | Show or hide the draggable floating `[RP]` button (right-click it to clear logs) |
 
 ## Keybindings

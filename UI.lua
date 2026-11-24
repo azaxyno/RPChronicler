@@ -331,7 +331,7 @@ titleText:SetText("|cffffd100RPCopy|r |cffd8dee9- Pick a Slice & Press Ctrl+C (E
 
 local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 verBadge:SetPoint("RIGHT", -34, 0)
-verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "3.8.0") .. "|r")
+verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "3.9.0") .. "|r")
 
 local closeBtn = CreateSleekButton(headerBar, 22, 20, "x", "danger")
 closeBtn:SetPoint("RIGHT", -5, 0)
@@ -2346,6 +2346,116 @@ miniBtn:SetScript("OnClick", function(_, button)
         RPCopy_Toggle()
     end
 end)
+
+-- =========================================================
+-- Resizable Main Window
+-- Drag the corner grip to resize; right-click the grip to reset.
+-- copyFrame is a plain (non-secure) frame, so this is safe in combat.
+-- Wrapped in do...end: UI.lua's main chunk is close to Lua's 200-local cap.
+-- =========================================================
+do
+    local DEFAULT_W, DEFAULT_H = 680, 490
+    local MIN_W, MIN_H = 680, 490
+
+    local function MaxSize()
+        local w = (UIParent and UIParent:GetWidth()) or 1600
+        local h = (UIParent and UIParent:GetHeight()) or 1000
+        return math.max(MIN_W, math.floor(w - 40)), math.max(MIN_H, math.floor(h - 40))
+    end
+
+    copyFrame:SetResizable(true)
+    if copyFrame.SetResizeBounds then
+        local mw, mh = MaxSize()
+        copyFrame:SetResizeBounds(MIN_W, MIN_H, mw, mh)
+    else
+        if copyFrame.SetMinResize then copyFrame:SetMinResize(MIN_W, MIN_H) end
+        if copyFrame.SetMaxResize then copyFrame:SetMaxResize(MaxSize()) end
+    end
+    if copyFrame.SetClampedToScreen then copyFrame:SetClampedToScreen(true) end
+
+    -- Keep scroll children and wrapped text as wide as their (anchored) panels
+    local function Reflow()
+        local w = scrollFrame:GetWidth()
+        if w and w > 50 then
+            editBox:SetWidth(w)
+            editBox:SetHeight(math.max(scrollFrame:GetHeight() or 0, 100))
+        end
+        w = advScroll:GetWidth()
+        if w and w > 50 then advEditBox:SetWidth(w) end
+        w = storyScroll:GetWidth()
+        if w and w > 50 then
+            storyScrollChild:SetWidth(w)
+            storyBodyText:SetWidth(w - 4)
+            UpdateStoryScrollHeight()
+        end
+        w = roBox:GetWidth()
+        if w and w > 50 then
+            roRaceText:SetWidth(w - 20)
+            roGuildText:SetWidth(w - 20)
+            roSeenText:SetWidth(w - 20)
+            roChatText:SetWidth(w - 20)
+            roChatText:SetHeight(math.max(60, (roBox:GetHeight() or 240) - 84))
+        end
+    end
+
+    local function ClampSize(w, h)
+        local mw, mh = MaxSize()
+        w = math.min(math.max(tonumber(w) or DEFAULT_W, MIN_W), mw)
+        h = math.min(math.max(tonumber(h) or DEFAULT_H, MIN_H), mh)
+        return math.floor(w), math.floor(h)
+    end
+
+    local function SaveSize()
+        if not RPCopyDB then return end
+        RPCopyDB.frameW, RPCopyDB.frameH = ClampSize(copyFrame:GetWidth(), copyFrame:GetHeight())
+    end
+
+    copyFrame:HookScript("OnSizeChanged", Reflow)
+    copyFrame:HookScript("OnShow", function()
+        if RPCopyDB and RPCopyDB.frameW and RPCopyDB.frameH then
+            copyFrame:SetSize(ClampSize(RPCopyDB.frameW, RPCopyDB.frameH))
+        end
+        Reflow()
+    end)
+
+    local grip = CreateFrame("Button", "RPCopyResizeGrip", copyFrame)
+    grip:SetSize(12, 12)
+    grip:SetPoint("BOTTOMRIGHT", -1, 1)
+    grip:SetFrameLevel(copyFrame:GetFrameLevel() + 20)
+    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    grip:RegisterForClicks("RightButtonUp")
+    grip:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then
+            copyFrame:StartSizing("BOTTOMRIGHT")
+        end
+    end)
+    grip:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" then
+            copyFrame:StopMovingOrSizing()
+            SaveSize()
+            Reflow()
+        end
+    end)
+    grip:SetScript("OnClick", function()
+        copyFrame:SetSize(DEFAULT_W, DEFAULT_H)
+        if RPCopyDB then RPCopyDB.frameW, RPCopyDB.frameH = nil, nil end
+        Reflow()
+        titleText:SetText("|cffffd100RPCopy|r - Window size reset.")
+    end)
+    grip:SetScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+            GameTooltip:SetText("|cffffd100Resize|r", 1, 1, 1)
+            GameTooltip:AddLine("Drag to resize. Right-click to reset.", 0.85, 0.85, 0.85)
+            GameTooltip:Show()
+        end
+    end)
+    grip:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+end
 
 function RPCopy_Open(note)
     EnsureUIOptions()

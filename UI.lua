@@ -116,7 +116,7 @@ WHEN TO USE
 STORYTELLING & ACCURACY PRINCIPLES
 
 1. Stay Faithful to the Log (No Invented Events or Fake Quotes): Build the narrative strictly from the real roster, bosses, HP/mana milestones, wipes, loot, and chat quotes recorded in the timeline. Use dramatic fantasy prose to describe the scenes, but never fabricate bosses, wipes, loot drops, or player quotes that do not appear in the log.
-2. Use Combat & HP Context from Timestamps: Pay close attention to [HH:MM:SS] timestamps, [BOSS HP] milestones (such as 5% HP), [LOW MANA], [DANGER], and combat tags on chat lines (such as [Party | vs Boss 5% HP]) so you accurately connect when someone panicked, asked for water, or celebrated relative to the fight.
+2. Use Timestamps & HP as Hidden Context Only: The [HH:MM:SS] timestamps, [BOSS HP] milestones, [LOW MANA], [DANGER], [AGGRO] lines and combat tags on chat lines (such as [Party | vs Boss 5% HP]) tell you the order and intensity of events, so you can connect when someone panicked, asked for water, or celebrated relative to the fight. Use them only to understand the run. The story itself must NEVER mention clock times, timestamps, durations in minutes or seconds, or any HP, mana or health percentages or numbers. Turn them into in-world prose instead: "at 4% HP" becomes "with the beast staggering on its last breath", "7% mana" becomes "her mana all but spent", "at 20:14" becomes "as they stepped inside".
 3. Do Not Limit What Happened: Never compress the run into a dry summary or skip messy moments. Include everything that made the session memorable - wipes, ninja pulls, someone begging for conjured water, OOM panic, clutch heals, dramatic boss kills, and loot drops.
 4. Weave Real Quotes and Roles Naturally: Use the roster's classes and roles ([Tank], [Healer], [DPS]) to give each party member a distinct presence, and embed their actual quotes from the timeline verbatim.
 
@@ -140,7 +140,8 @@ FORMATTING RULES FOR WOW COMPATIBILITY
 1. Single Copy-Paste Code Block: Output the entire colored story inside one fenced text code block so the user can copy and paste it straight into RPCopy.
 2. Close Every Color Tag: Always pair every |cffRRGGBB with a closing |r.
 3. Zero Markdown Inside the Code Block: Never use bold or italic asterisks, pound-sign headers, or bullet symbols inside the WoW text block. Use WoW color tags and blank lines for structure.
-4. ASCII Characters Only: Use standard ASCII punctuation (- ' " *) inside the code block so WoW fonts never render missing-glyph boxes.]]
+4. ASCII Characters Only: Use standard ASCII punctuation (- ' " *) inside the code block so WoW fonts never render missing-glyph boxes.
+5. No Out-of-Character Numbers: Before you answer, check the story for any timestamp (such as 20:14 or 20:14:07), any percent sign, and any HP or mana number, and rewrite those sentences in-world. The footer may list boss kills, wipes and deaths, but no times or percentages.]]
 
 -- =========================================================
 -- Inject OOC Channel Logs into Snapshot When Tab Enables It
@@ -317,6 +318,10 @@ copyFrame:SetScript("OnDragStart", copyFrame.StartMoving)
 copyFrame:SetScript("OnDragStop", copyFrame.StopMovingOrSizing)
 copyFrame:Hide()
 ApplyDarkGlass(copyFrame, 0.05, 0.06, 0.08, 0.95, 0.78, 0.62, 0.28, 0.60)
+-- ESC closes the window (the game hides frames listed in UISpecialFrames)
+if type(UISpecialFrames) == "table" then
+    table.insert(UISpecialFrames, "RPCopyFrame")
+end
 
 -- Top Header Strip
 local headerBar = CreateFrame("Frame", nil, copyFrame, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -331,7 +336,7 @@ titleText:SetText("|cffffd100RPCopy|r |cffd8dee9- Pick a Slice & Press Ctrl+C (E
 
 local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 verBadge:SetPoint("RIGHT", -34, 0)
-verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.1.0") .. "|r")
+verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.2.0") .. "|r")
 
 local closeBtn = CreateSleekButton(headerBar, 22, 20, "x", "danger")
 closeBtn:SetPoint("RIGHT", -5, 0)
@@ -1254,20 +1259,26 @@ pcall(emptyHeading.SetFont, emptyHeading, "Fonts\\FRIZQT__.TTF", 15, "")
 
 do -- scoped: keeps UI.lua main chunk under the 200-local cap
 local emptySubHeading = storyEmptyPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+-- Two anchors give it the panel's width, so it wraps and reflows when the window resizes
 emptySubHeading:SetPoint("TOPLEFT", emptyBookIcon, "TOPRIGHT", 10, -21)
+emptySubHeading:SetPoint("TOPRIGHT", storyEmptyPane, "TOPRIGHT", -16, -37)
+emptySubHeading:SetJustifyH("LEFT")
+emptySubHeading:SetJustifyV("TOP")
+emptySubHeading:SetWordWrap(true)
+if emptySubHeading.SetMaxLines then emptySubHeading:SetMaxLines(2) end
 emptySubHeading:SetText("|cffd7c4a3Turn this dungeon run's chatter, wipes, and loot into a colored Warcraft story.|r")
 end
 
 local emptyDivider = storyEmptyPane:CreateTexture(nil, "ARTWORK")
 emptyDivider:SetHeight(1)
-emptyDivider:SetPoint("TOPLEFT", 16, -60)
-emptyDivider:SetPoint("TOPRIGHT", -16, -60)
+emptyDivider:SetPoint("TOPLEFT", 16, -66)
+emptyDivider:SetPoint("TOPRIGHT", -16, -66)
 emptyDivider:SetTexture(SOLID_TEX)
 emptyDivider:SetVertexColor(0.82, 0.65, 0.30, 0.45)
 
 local emptyStepsText = storyEmptyPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-emptyStepsText:SetPoint("TOPLEFT", 18, -70)
-emptyStepsText:SetPoint("TOPRIGHT", -18, -70)
+emptyStepsText:SetPoint("TOPLEFT", 18, -76)
+emptyStepsText:SetPoint("TOPRIGHT", -18, -76)
 emptyStepsText:SetJustifyH("LEFT")
 emptyStepsText:SetSpacing(5)
 emptyStepsText:SetText(
@@ -1310,13 +1321,16 @@ storyBodyText:SetShadowOffset(1, -1)
 storyBodyText:SetShadowColor(0, 0, 0, 0.95)
 pcall(storyBodyText.SetFont, storyBodyText, "Fonts\\FRIZQT__.TTF", 13, "")
 
-local advToggleRunBtn = CreateSleekButton(aRightPanel, 132, 22, "Start New Run", "gold")
+local advToggleRunBtn = CreateSleekButton(aRightPanel, 116, 22, "Start New Run", "gold")
 advToggleRunBtn:SetPoint("BOTTOMLEFT", 0, 2)
 
-local advMarkBtn = CreateSleekButton(aRightPanel, 124, 22, "* Mark Moment")
-advMarkBtn:SetPoint("LEFT", advToggleRunBtn, "RIGHT", 5, 0)
+advToggleRunBtn.pauseBtn = CreateSleekButton(aRightPanel, 64, 22, "Pause")
+advToggleRunBtn.pauseBtn:SetPoint("LEFT", advToggleRunBtn, "RIGHT", 4, 0)
 
-local advShotsToggleBtn = CreateSleekButton(aRightPanel, 134, 22, "Auto-Shots: OFF")
+local advMarkBtn = CreateSleekButton(aRightPanel, 104, 22, "* Mark Moment")
+advMarkBtn:SetPoint("LEFT", advToggleRunBtn.pauseBtn, "RIGHT", 4, 0)
+
+local advShotsToggleBtn = CreateSleekButton(aRightPanel, 122, 22, "Auto-Shots: OFF")
 advShotsToggleBtn:SetPoint("BOTTOMRIGHT", 0, 2)
 
 local aRunCards = {}
@@ -1406,7 +1420,7 @@ local function UpdateHeroHeader(adv, isLive)
     end
 
     heroIcon:SetTexture(ns.GetAdventureIcon(adv))
-    local livePrefix = isLive and "|cff5cb85c[LIVE]|r " or ""
+    local livePrefix = isLive and (adv.paused and "|cffffb74d[PAUSED]|r " or "|cffff5252[REC]|r ") or ""
     local storyBadge = (adv.story and adv.story ~= "") and "  |cffffd100[Chronicle]|r" or ""
     heroTitle:SetText(livePrefix .. "|cffffd100" .. (adv.title or "Adventure") .. "|r" .. storyBadge)
 
@@ -1487,11 +1501,24 @@ RefreshAdventuresTab = function()
     SyncToggleLabels()
 
     local active = ns.GetActiveAdventure()
+    local pauseBtn = advToggleRunBtn.pauseBtn
     if active then
         advToggleRunBtn:SetText("|cffff6b6bEnd & Save Run|r")
-        advMarkBtn:Enable()
+        pauseBtn:Enable()
+        if active.paused then
+            pauseBtn:SetText("|cff5cb85cResume|r")
+            pauseBtn:LockHighlight()
+            advMarkBtn:Disable()
+        else
+            pauseBtn:SetText("|cffffb74dPause|r")
+            pauseBtn:UnlockHighlight()
+            advMarkBtn:Enable()
+        end
     else
         advToggleRunBtn:SetText("|cff5cb85cStart New Run|r")
+        pauseBtn:SetText("Pause")
+        pauseBtn:UnlockHighlight()
+        pauseBtn:Disable()
         advMarkBtn:Disable()
     end
 
@@ -1514,7 +1541,7 @@ RefreshAdventuresTab = function()
         card:SetPoint("TOPLEFT", 0, -(idx - 1) * 50)
         card.icon:SetTexture(ns.GetAdventureIcon(adv))
 
-        local prefix = item.isLive and "|cff5cb85c[LIVE]|r " or ""
+        local prefix = item.isLive and (adv.paused and "|cffffb74d[PAUSED]|r " or "|cffff5252[REC]|r ") or ""
         local bookStar = (adv.story and adv.story ~= "") and " |cffffd100*|r" or ""
         card.titleLbl:SetText(prefix .. "|cfff0f4f8" .. (adv.title or "Adventure") .. "|r" .. bookStar)
 
@@ -1659,6 +1686,18 @@ advToggleRunBtn:SetScript("OnClick", function()
         ns.state.selectedAdventureId = newRun.id
         titleText:SetText("|cffffd100RPCopy|r - Recording adventure: " .. newRun.title)
     end
+    RefreshAdventuresTab()
+end)
+
+advToggleRunBtn.pauseBtn:SetScript("OnClick", function()
+    if not ns.GetActiveAdventure() or not ns.PauseAdventure then return end
+    local ok, msg
+    if ns.IsAdventurePaused() then
+        ok, msg = ns.ResumeAdventure()
+    else
+        ok, msg = ns.PauseAdventure()
+    end
+    titleText:SetText("|cffffd100RPCopy|r - " .. (msg or ""))
     RefreshAdventuresTab()
 end)
 
@@ -2381,6 +2420,72 @@ miniBtn:SetScript("OnClick", function(_, button)
     end
 end)
 
+-- Recording indicator: pulsing red dot + red border while a run records,
+-- steady amber dot + amber border while paused, nothing when idle.
+do
+    local dot = miniBtn:CreateTexture(nil, "OVERLAY")
+    dot:SetSize(8, 8)
+    dot:SetPoint("CENTER", miniBtn, "TOPRIGHT", -2, -2)
+    dot:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+    dot:Hide()
+
+    local state, acc = nil, 0
+    local function Apply(newState)
+        state = newState
+        if newState == "rec" then
+            dot:SetVertexColor(1, 0.15, 0.15, 1)
+            dot:Show()
+        elseif newState == "paused" then
+            dot:SetVertexColor(1, 0.72, 0.30, 1)
+            dot:SetAlpha(1)
+            dot:Show()
+            miniBtn:SetBackdropBorderColor(1, 0.72, 0.30, 0.95)
+        else
+            dot:Hide()
+            miniBtn:UnlockHighlight() -- restores the normal gold look
+        end
+    end
+
+    miniBtn:HookScript("OnUpdate", function(_, elapsed)
+        acc = acc + elapsed
+        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        local want = run and (run.paused and "paused" or "rec") or nil
+        if want ~= state then Apply(want) end
+        if state == "rec" then
+            local a = 0.55 + 0.45 * math.sin(GetTime() * 4)
+            dot:SetAlpha(0.35 + 0.65 * math.abs(a))
+            if acc >= 0.1 then
+                acc = 0
+                if not miniBtn:IsMouseOver() then
+                    miniBtn:SetBackdropBorderColor(1, 0.25, 0.25, 0.55 + 0.4 * math.abs(a))
+                end
+            end
+        end
+    end)
+
+    miniBtn:HookScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+        GameTooltip:SetText("|cffffd100RPCopy|r", 1, 1, 1)
+        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        if run and run.paused then
+            GameTooltip:AddLine("|cffffb74dRecording paused:|r " .. (run.title or "Adventure"), 1, 1, 1)
+            GameTooltip:AddLine("/rp resume to continue", 0.7, 0.7, 0.7)
+        elseif run then
+            GameTooltip:AddLine("|cffff5252Recording:|r " .. (run.title or "Adventure"), 1, 1, 1)
+            GameTooltip:AddLine("/rp pause to pause", 0.7, 0.7, 0.7)
+        else
+            GameTooltip:AddLine("Not recording an adventure", 0.7, 0.7, 0.7)
+        end
+        GameTooltip:AddLine("Left-click: open   Right-click: clear logs", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end)
+    miniBtn:HookScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+        state = nil -- re-apply the indicator colors after the hover look
+    end)
+end
+
 -- =========================================================
 -- Resizable Main Window
 -- Drag the corner grip to resize; right-click the grip to reset.
@@ -2462,6 +2567,15 @@ do
     grip:RegisterForClicks("RightButtonUp")
     grip:SetScript("OnMouseDown", function(_, button)
         if button == "LeftButton" then
+            -- The window is anchored at CENTER, so sizing from the corner made the
+            -- top-left move too, which fed back into the size and made it jump to
+            -- max for a moment. Pin the current top-left first so only the
+            -- bottom-right corner follows the mouse.
+            local left, top = copyFrame:GetLeft(), copyFrame:GetTop()
+            if left and top then
+                copyFrame:ClearAllPoints()
+                copyFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+            end
             copyFrame:StartSizing("BOTTOMRIGHT")
         end
     end)
@@ -2529,6 +2643,28 @@ SlashCmdList["RPCOPY"] = function(msg)
         return
     elseif low == "btn" then
         if miniBtn:IsShown() then miniBtn:Hide() else miniBtn:Show() end
+        return
+    elseif low == "pause" or low == "resume" then
+        local ok, status
+        if low == "pause" then
+            ok, status = ns.PauseAdventure and ns.PauseAdventure()
+        else
+            ok, status = ns.ResumeAdventure and ns.ResumeAdventure()
+        end
+        print("|cff00ff00[RPCopy]|r " .. tostring(status or "Adventures module not loaded."))
+        if RefreshAdventuresTab and copyFrame:IsShown() then pcall(RefreshAdventuresTab) end
+        return
+    elseif low == "end" or low == "stop" then
+        local saved = ns.GetActiveAdventure() and ns.EndAdventure("Ended Manually")
+        print("|cff00ff00[RPCopy]|r " .. (saved and ("Saved adventure: " .. (saved.title or "Adventure")) or "No active adventure running."))
+        if RefreshAdventuresTab and copyFrame:IsShown() then pcall(RefreshAdventuresTab) end
+        return
+    elseif low == "diag" then
+        if ns.DiagnoseTarget then
+            for _, line in ipairs(ns.DiagnoseTarget()) do
+                print("|cffffd100[RPCopy diag]|r " .. line)
+            end
+        end
         return
     elseif low:match("^mark") then
         local noteArg = trimmed:match("^mark%s+(.+)$")

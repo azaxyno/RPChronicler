@@ -16,7 +16,7 @@ You build a **character skill** in your AI once. The skill knows who your charac
 
 Along the way, RPCopy remembers the **companions** you meet, so your AI knows who they are next time. It also records your **dungeon and raid runs**, so the AI can turn them into colored story chronicles you read inside the game.
 
-- **Version:** 0.1.0 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.2.0 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide)
 - **License:** MIT
 
@@ -194,17 +194,25 @@ The flow is:
 How it works:
 
 - **Automatic logging** starts when you enter a dungeon or raid and stops when you leave. You can also start a run manually anywhere.
+- **Recording light.** While a run records, the floating `[RP]` button shows a pulsing red dot and a red border. While it's paused, the dot and border turn amber. Hover the button to see which run it is.
+- **Pause and Resume.** Use the **Pause** button in the Adventures view, or `/rp pause` and `/rp resume`. A paused run records nothing until you resume it, and it isn't ended when you leave the instance.
+- **Survives /reload and disconnects.** The live run is saved as you play. After a `/reload` or a disconnect it picks up where it left off, with a note in chat, if you're back within 2 minutes or in the same dungeon. If you come back later and somewhere else, the run comes back **paused**, so nothing unrelated gets mixed in: type `/rp resume` to continue it or `/rp end` to save it.
 - **Timestamped `[HH:MM:SS]` timeline** with these tags:
   - `[BOSS ENGAGED]` when a boss is pulled
-  - `[BOSS HP]` at 50%, 20% and 5%
+  - `[BOSS HP]` at 50%, 20% and 5%, read live from the boss, your target, your focus and your party's targets (no combat log needed). Classic dungeon bosses without a skull are recognized too, and bosses you've fought once are remembered.
+  - `[BOSS RESET]` when a boss survives the pull (wipe, reset or evade). Its HP milestones start fresh on the next attempt.
+  - `[AGGRO]` when an enemy switches from one party member to another, for example `[AGGRO] Hungry Bandit turns from Aloria to Grakk`
   - `[DANGER]` at low HP, and `[LOW MANA]` at low mana
   - `[DEATH]` for your own deaths
   - `[WIPE #N]`
   - `[REZ]` for resurrections
   - `[LOOT]` for Uncommon or better drops
+  - `[NPC Emote]` lines such as `Hungry Bandit attempts to run away in fear!`
+- **Roles always shown.** When nobody has picked a role, RPCopy guesses Tank, Healer or DPS from forms and stances, your own talents, who keeps holding aggro, and finally the class, so the roster and snapshots always show one.
 - **Fight context on chat.** Chat is tagged with the fight it happened in, for example `[Party | vs Boss 5% HP] Healer: OOM!!`, so the story knows exactly when someone panicked.
 - **Mark Moment.** Set a key in **Options > Mark Moment** (or use the WoW keybinding or `/rp mark [note]`) to star a moment as a highlight. With Auto-Shots on, it also takes a screenshot.
-- **Full Log** export, then **Import Story**. Copy the log into an AI that has the `wow-adventure-story` skill (its template is in the Story view). Paste the colored chronicle back, and read it in the in-game **Story** reader. The story skill is told to use only what's in the log: no invented bosses, loot or quotes.
+- **Full Log** export, then **Import Story**. Copy the log into an AI that has the `wow-adventure-story` skill (its template is in the Story view). Paste the colored chronicle back, and read it in the in-game **Story** reader. The story skill is told to use only what's in the log: no invented bosses, loot or quotes. Timestamps and HP or mana percentages help the AI order the story, but the story itself never mentions them; it describes them in-world instead.
+- **Export stories to files.** Double-click `Export_Stories.bat` in the RPCopy folder. It writes every saved run to `World of Warcraft\_forever_\RPCopy Stories\`: the story as a colored web page and as plain text, the Full Log, and an `index.html`. It needs only Windows PowerShell, which every Windows has. The game saves your data on `/reload` or logout, so do one of those first to include your newest story.
 - **Auto screenshots** (turn on **Auto-Shots**) at key moments during a run: every boss kill, marked moments, level-ups, quests and new zones. Boss kills and marks always get a shot; the others are spaced at least 20 seconds apart. Boss kills are detected from the encounter end, or from the boss dying on your target or boss frame. Shots are combat-safe and capped per run.
 - Up to 40 runs are archived.
 
@@ -219,8 +227,11 @@ How it works:
 | `/rp quick` | Quick-copy the last used slice |
 | `/rp capture` | Save or update your target (or mouseover, or last whisperer) as a companion |
 | `/rp mark [note]` | Bookmark the latest moment, or your note, in the active run |
+| `/rp pause` / `/rp resume` | Pause or resume recording the active run |
+| `/rp end` | End and save the active run |
+| `/rp diag` | Print what RPCopy can read about your target (boss detection, health, its target) and your guessed role. Handy when boss HP lines don't show up |
 | `/rp clear` | Clear the session chat, combat, NPC and loot buffers |
-| (window) | Drag the bottom-right grip to resize the RPCopy window, right-click it to reset. The size is saved. |
+| (window) | Drag the bottom-right grip to resize the RPCopy window, right-click it to reset. The size is saved. Press `Esc` to close it. |
 | `/rp btn` | Show or hide the draggable floating `[RP]` button (right-click it to clear logs) |
 
 ## Keybindings
@@ -264,7 +275,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 2 | `Snapshot.lua` | Builds snapshot text from the active slice's settings | `BuildSnapshot`, `GetTabConfig`, `ResetDefaultTabs`, `HandleConversationCapture`, `ClearSessionLogs` |
 | 3 | `Adventures.lua` | Run lifecycle, timeline telemetry, Full Log export, story storage | `StartAdventure`, `EndAdventure`, `RecordAdventureBossHP`, `RecordAdventureChat`, `BuildAdventureFullLog`, `SetAdventureStory`, `MarkAdventureHighlight` |
 | 4 | `Screenshots.lua` | Debounced, combat-safe automatic screenshots | `RequestScreenshot` |
-| 5 | `Events.lua` | Central event dispatcher (chat, combat log, unit health and power, loot, instance changes) that routes to `ns.*` | internal `RPCopyEventFrame` |
+| 5 | `Events.lua` | Central event dispatcher (chat, unit health and power, threat, loot, instance changes) that routes to `ns.*`, plus the combat poller for boss HP, pull ends and aggro | internal `RPCopyEventFrame` |
 | 6 | `UI.lua` | Main window, slice tabs, Companions / Adventures / Options views, Story reader, skill template and import modals, `Ctrl+C` override, slash commands | `RPCopy_Open`, `RPCopy_Toggle`, `RPCopy_QuickCopy`, `RPCopy_CaptureTarget` |
 | | `Bindings.xml` | Keybinding definitions | |
 
@@ -275,6 +286,8 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | `tabs` | Your slice tabs (label, trigger, section toggles) |
 | `players[name]` | Companions: your note, level, race, class, guild, last seen, last 5 chat lines |
 | `adventures` | Up to 40 runs: zone, dates, duration, party, wipes, deaths, boss kills, loot, highlights, timeline, screenshots, export text, story |
+| `activeRun` | The run being recorded right now (with its paused state), so it survives `/reload` and disconnects |
+| `knownBosses` | Names of bosses you've fought, so classic bosses without a skull are recognized next time |
 | `quickCtrlC`, `autoScreenshots` | Feature toggles |
 
 Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or `/rp clear`.
@@ -286,7 +299,7 @@ Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or 
 - WoW fonts can't draw Unicode symbols such as stars, arrows or smart quotes, so all in-game text is plain ASCII. Colors use `|cffRRGGBB...|r` escape codes only, never Markdown.
 - Text pasted into WoW edit boxes turns `|` into `||`. `ns.NormalizeStoryText` converts it back, strips code fences, and closes any open color tags before the story is rendered.
 - Screenshots fade `UIParent` with `SetAlpha` instead of hiding it, which avoids `ADDON_ACTION_BLOCKED` in combat.
-- The Forever client runs on the modern engine, where `COMBAT_LOG_EVENT_UNFILTERED` is Blizzard-only. Registering it shows the "blocked from an action only available to the Blizzard UI" popup on every load, so RPCopy skips it when `issecretvalue` exists. Boss kills come from `ENCOUNTER_END` and your own deaths from `PLAYER_DEAD`. If that popup ever shows up, `Logs/taint.log` in the game folder names the file and line.
+- The Forever client runs on the modern engine, where `COMBAT_LOG_EVENT_UNFILTERED` is Blizzard-only. Registering it shows the "blocked from an action only available to the Blizzard UI" popup on every load, so RPCopy never registers it. A light poller (a plain frame, no protected calls) reads boss HP from `boss1-5`, `target`, `focus` and `partyNtarget`, ends pulls when the whole group leaves combat, and tracks aggro from each enemy's target (target, party targets and nameplates). Boss kills come from `ENCOUNTER_END` or a dead boss unit, and your own deaths from `PLAYER_DEAD`. Values the client hides as "secret" are skipped instead of erroring; `/rp diag` shows what is readable. If that popup ever shows up, `Logs/taint.log` in the game folder names the file and line.
 - **Versioning.** Bump `## Version` in `RPCopy.toc` with every change: a patch bump (0.1.0 to 0.1.1) for small fixes, a minor bump (0.1 to 0.2) for big updates. RPCopy is in alpha, so versions stay below 1.0. The chat banner on load reads it, so you can tell at a glance which build is running. Each version is tagged and published as a GitHub Release with a downloadable zip.
 
 ---

@@ -6,10 +6,47 @@ local lastCapturedQuestTitle = ""
 
 local function IsBossUnit(unit)
     if not UnitExists(unit) then return false end
+    if unit:match("^boss%d+$") then return true end
     local cls = ns.SafeStr(UnitClassification(unit))
     local lvl = ns.SafeNum(UnitLevel(unit))
-    return (cls == "worldboss") or (lvl ~= nil and lvl < 0)
+    if (cls == "worldboss") or (lvl ~= nil and lvl < 0) then return true end
+    local name = ns.SafeStr(UnitName(unit))
+    if name and RPCopyDB and RPCopyDB.knownBosses and RPCopyDB.knownBosses[name] then return true end
+    local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
+    if name and activeBoss and activeBoss == name then return true end
+    -- Classic dungeon bosses are plain elites (no skull, often no boss frames).
+    -- Inside an instance, an elite with several times your max health counts.
+    if cls == "elite" or cls == "rareelite" then
+        local inInstance = IsInInstance and IsInInstance()
+        if inInstance then
+            local hpMax = ns.SafeNum(UnitHealthMax(unit))
+            local myMax = ns.SafeNum(UnitHealthMax("player"))
+            if hpMax and myMax and myMax > 0 and hpMax >= myMax * 4 then return true end
+        end
+    end
+    return false
 end
+ns.IsBossUnit = IsBossUnit
+
+-- Health percent that survives the modern engine: plain numbers first, then
+-- UnitHealthPercent where it exists. Returns nil when the value is secret.
+local function GetUnitHealthPct(unit)
+    local hp = ns.SafeNum(UnitHealth(unit))
+    local hpMax = ns.SafeNum(UnitHealthMax(unit))
+    if hp and hpMax and hpMax > 0 then
+        return math.floor((hp / hpMax) * 100)
+    end
+    if UnitHealthPercent then
+        local ok, v = pcall(UnitHealthPercent, unit)
+        v = ok and ns.SafeNum(v) or nil
+        if v then
+            if v <= 1 and v ~= math.floor(v) then v = v * 100 end
+            return math.floor(v)
+        end
+    end
+    return nil
+end
+ns.GetUnitHealthPct = GetUnitHealthPct
 
 local function CheckInstanceAdventureState(isInitialLogin)
     ns.EnsureDB()
@@ -29,17 +66,34 @@ local function CheckInstanceAdventureState(isInitialLogin)
                 ns.StartAdventure(zoneName, true)
             end
         else
-            if not isInitialLogin then
-                active.reloads = (active.reloads or 0) + 1
-            end
-            if ns.SyncAdventureRoster then
+            local zoneName2 = ns.SafeStr(GetRealZoneText())
+            if active.isAuto and zoneName2 and active.instanceName and zoneName2 ~= active.instanceName then
+                -- A different dungeon than the run we were recording
+                ns.EndAdventure("Entered " .. zoneName2)
+                ns.StartAdventure(zoneName2, true)
+            elseif ns.SyncAdventureRoster then
                 ns.SyncAdventureRoster()
             end
         end
     else
-        if active and active.isAuto and ns.EndAdventure then
+        -- A paused run stays put until you resume or end it
+        if active and active.isAuto and not active.paused and ns.EndAdventure then
             ns.EndAdventure("Left Instance")
         end
+    end
+end
+
+local restoredThisSession = false
+local function RestoreRunOnce()
+    if restoredThisSession then return end
+    restoredThisSession = true
+    if not ns.RestoreSavedAdventure then return end
+    local result, run = ns.RestoreSavedAdventure()
+    local title = run and run.title or "Adventure"
+    if result == "resumed" then
+        print("|cffffd100RPCopy|r |cff5cb85cStill recording|r |cffeceff1" .. title .. "|r |cff9aa5b4(restored after reload)|r")
+    elseif result == "paused" then
+        print("|cffffd100RPCopy|r |cffffb74dRecording paused|r |cffeceff1" .. title .. "|r |cff9aa5b4- type /rp resume to continue or /rp end to save it|r")
     end
 end
 
@@ -84,19 +138,36 @@ local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawCh
     end
 end
 
-local function HandleNpcChat(kindLabel, rawMsg, rawAuthor)
+local function HandleNpcChat(kindLabel, rawMsg, rawAuthor, isEmote)
     local cleanMsg = ns.CleanText(rawMsg)
     if not cleanMsg or cleanMsg == "" then return end
-    local npcName = ns.StripRealm(rawAuthor) or "NPC"
+    local npcName = ns.SafeStr(rawAuthor) or "NPC"
 
-    local line = string.format("%s %s: %s",
-        ns.ColorText("[" .. kindLabel .. "]", ns.COLORS.npc),
-        ns.ColorText(npcName, ns.COLORS.npcName),
-        ns.ColorText(cleanMsg, ns.COLORS.npcText))
+    -- Monster emotes arrive as "%s attempts to run away in fear!"
+    if cleanMsg:find("%s", 1, true) then
+        cleanMsg = cleanMsg:gsub("%%s", (npcName:gsub("%%", "%%%%")))
+        isEmote = true
+    elseif isEmote and not cleanMsg:find(npcName, 1, true) then
+        cleanMsg = npcName .. ": " .. cleanMsg
+    end
+
+    local line
+    if isEmote then
+        line = ns.ColorText("[NPC Emote]", ns.COLORS.npc) .. " " .. ns.ColorText(cleanMsg, ns.COLORS.npcText)
+    else
+        line = string.format("%s %s: %s",
+            ns.ColorText("[" .. kindLabel .. "]", ns.COLORS.npc),
+            ns.ColorText(npcName, ns.COLORS.npcName),
+            ns.ColorText(cleanMsg, ns.COLORS.npcText))
+    end
 
     ns.PushLog(ns.logs.npc, line)
     if ns.RecordAdventureChat then
-        ns.RecordAdventureChat(kindLabel, npcName, cleanMsg)
+        if isEmote then
+            ns.RecordAdventureChat("NPC Emote", npcName, cleanMsg, true)
+        else
+            ns.RecordAdventureChat(kindLabel, npcName, cleanMsg)
+        end
     end
 end
 
@@ -251,69 +322,6 @@ local function CaptureQuestContext(prefixLabel, questID)
     ns.PushLog(ns.logs.npc, ns.ColorText("[Quest]", ns.COLORS.quest) .. " " .. ns.ColorText(ns.state.lastQuestInfo, ns.COLORS.npcText))
 end
 
-local function ProcessCombatLog()
-    if not CombatLogGetCurrentEventInfo then return end
-    local _, subEvent, _, _, sourceName, _, _, _, destName, destFlags = CombatLogGetCurrentEventInfo()
-
-    subEvent = ns.SafeStr(subEvent)
-    if not subEvent then return end
-    local srcClean = ns.StripRealm(sourceName)
-    local dstClean = ns.StripRealm(destName)
-
-    if dstClean and (subEvent == "SWING_DAMAGE" or subEvent == "SPELL_DAMAGE" or subEvent == "SPELL_PERIODIC_DAMAGE" or subEvent == "RANGE_DAMAGE" or subEvent == "ENVIRONMENTAL_DAMAGE") then
-        local spellName = nil
-        if subEvent == "SWING_DAMAGE" then
-            spellName = "Melee"
-        elseif subEvent == "ENVIRONMENTAL_DAMAGE" then
-            spellName = ns.SafeStr(select(12, CombatLogGetCurrentEventInfo())) or "Environment"
-        else
-            spellName = ns.SafeStr(select(13, CombatLogGetCurrentEventInfo()))
-        end
-        if srcClean and spellName then
-            lastKillerByVictim[dstClean] = srcClean .. "'s " .. spellName
-        elseif srcClean then
-            lastKillerByVictim[dstClean] = srcClean
-        elseif spellName then
-            lastKillerByVictim[dstClean] = spellName
-        end
-    elseif subEvent == "SPELL_RESURRECT" and dstClean then
-        if ns.RecordAdventureRez then
-            ns.RecordAdventureRez(srcClean, dstClean)
-        end
-    elseif subEvent == "UNIT_DIED" and dstClean then
-        local isPlayerVictim = false
-        if type(destFlags) == "number" and COMBATLOG_OBJECT_TYPE_PLAYER and COMBATLOG_OBJECT_AFFILIATION_MINE and COMBATLOG_OBJECT_AFFILIATION_PARTY and COMBATLOG_OBJECT_AFFILIATION_RAID then
-            local isPlayerObj = bit.band(destFlags, COMBATLOG_OBJECT_TYPE_PLAYER) > 0
-            local groupMask = bit.bor(COMBATLOG_OBJECT_AFFILIATION_MINE, COMBATLOG_OBJECT_AFFILIATION_PARTY, COMBATLOG_OBJECT_AFFILIATION_RAID)
-            local isGroupObj = bit.band(destFlags, groupMask) > 0
-            isPlayerVictim = isPlayerObj and isGroupObj
-        end
-
-        if isPlayerVictim then
-            local now = GetTime()
-            if not recentLoggedDeaths[dstClean] or (now - recentLoggedDeaths[dstClean]) > 3 then
-                recentLoggedDeaths[dstClean] = now
-                local selfName = ns.StripRealm(UnitName("player"))
-                if ns.RecordAdventureDeath then
-                    ns.RecordAdventureDeath(dstClean, dstClean == selfName, lastKillerByVictim[dstClean])
-                end
-                ns.PushLog(ns.logs.combat, ns.ColorText("[Death]", ns.COLORS.death) .. " " .. dstClean .. " died")
-            end
-        else
-            local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
-            local isCurrentTargetBoss = UnitExists("target") and (ns.StripRealm(UnitName("target")) == dstClean) and IsBossUnit("target")
-            if (activeBoss and activeBoss:lower() == dstClean:lower()) or isCurrentTargetBoss then
-                if ns.RecordAdventureBossKill then
-                    ns.RecordAdventureBossKill(dstClean)
-                end
-                if ns.RequestScreenshot then
-                    ns.RequestScreenshot("boss", "Defeated " .. dstClean)
-                end
-            end
-        end
-    end
-end
-
 local eventFrame = CreateFrame("Frame", "RPCopyEventFrame")
 local EVENTS = {
     "PLAYER_LOGIN",
@@ -328,7 +336,9 @@ local EVENTS = {
     "ENCOUNTER_END",
     "UNIT_HEALTH",
     "UNIT_POWER_UPDATE",
-    "COMBAT_LOG_EVENT_UNFILTERED",
+    "UNIT_THREAT_SITUATION_UPDATE",
+    "UNIT_THREAT_LIST_UPDATE",
+    "PLAYER_LOGOUT",
     "PLAYER_DEAD",
     "PLAYER_LEVEL_UP",
     "CHAT_MSG_SAY",
@@ -364,17 +374,209 @@ local EVENTS = {
 -- The Forever client runs on the modern (secret-values) engine, where
 -- COMBAT_LOG_EVENT_UNFILTERED is protected. Registering it from an addon
 -- raises ADDON_ACTION_FORBIDDEN ("blocked from an action only available to
--- the Blizzard UI") on every load, and pcall cannot suppress that popup.
--- Boss kills still come from ENCOUNTER_END and your own deaths from PLAYER_DEAD.
-local PROTECTED_EVENTS = {}
-if issecretvalue then
-    PROTECTED_EVENTS["COMBAT_LOG_EVENT_UNFILTERED"] = true
-end
-ns.combatLogAvailable = not PROTECTED_EVENTS["COMBAT_LOG_EVENT_UNFILTERED"]
+-- the Blizzard UI"), so RPCopy never registers it. Boss HP, pull ends and
+-- aggro come from the combat poller below; boss kills from ENCOUNTER_END
+-- and dead units; your own deaths from PLAYER_DEAD.
+ns.combatLogAvailable = false
 
 for _, ev in ipairs(EVENTS) do
-    if not PROTECTED_EVENTS[ev] then
-        pcall(eventFrame.RegisterEvent, eventFrame, ev)
+    pcall(eventFrame.RegisterEvent, eventFrame, ev)
+end
+
+-- =========================================================
+-- Combat poller (no combat log needed)
+--  * live [BOSS HP] milestones from boss / target / focus / party targets
+--  * pull end: the whole group out of combat -> boss milestones reset
+--  * [AGGRO] when an enemy's target moves from one party member to another
+-- Plain frame + OnUpdate: never touches protected functions.
+-- =========================================================
+do
+    local POLL_EVERY = 0.4
+    local PULL_END_GRACE = 2.5
+    local AGGRO_MOB_COOLDOWN = 4
+    local AGGRO_GLOBAL_COOLDOWN = 1.5
+
+    local poller = CreateFrame("Frame")
+    local acc = 0
+    local groupInCombat = false
+    local lastCombatSeen = 0
+    local mobTargets = {}   -- mob key -> { name = holder, t = time }
+    local mobSwapAt = {}    -- mob key -> last logged swap time
+    local lastSwapLog = 0
+    local seen = {}
+
+    local function ClearTable(t)
+        for k in pairs(t) do t[k] = nil end
+    end
+
+    local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5", "target", "focus",
+        "party1target", "party2target", "party3target", "party4target" }
+
+    local function IsTrue(v)
+        return v == true and not ns.IsSecret(v)
+    end
+
+    local function AnyGroupInCombat()
+        if UnitAffectingCombat and IsTrue(UnitAffectingCombat("player")) then return true end
+        for i = 1, 4 do
+            local u = "party" .. i
+            if UnitExists(u) and UnitAffectingCombat and IsTrue(UnitAffectingCombat(u)) then return true end
+        end
+        return false
+    end
+
+    -- Name of the party member (or party pet) a unit token points at, else nil
+    local function GroupHolderName(u)
+        if not UnitExists(u) or not UnitIsUnit then return nil end
+        local function Is(other)
+            local ok, r = pcall(UnitIsUnit, u, other)
+            return ok and IsTrue(r)
+        end
+        if Is("player") then return ns.StripRealm(UnitName("player")) end
+        if Is("pet") then return ns.SafeStr(UnitName("pet")) end
+        for i = 1, 4 do
+            if Is("party" .. i) then return ns.StripRealm(UnitName("party" .. i)) end
+            if Is("partypet" .. i) then return ns.SafeStr(UnitName("partypet" .. i)) end
+        end
+        return nil
+    end
+
+    local function DisplayName(short)
+        if not short then return nil end
+        return (ns.ResolveCanonicalPlayerName and ns.ResolveCanonicalPlayerName(short)) or short
+    end
+
+    local function PollBossHP()
+        if not ns.RecordAdventureBossHP then return end
+        ClearTable(seen)
+        local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
+        for _, u in ipairs(BOSS_UNITS) do
+            if activeBoss and UnitExists(u) and UnitIsDead(u) and not UnitIsPlayer(u)
+                and ns.SafeStr(UnitName(u)) == activeBoss then
+                -- The boss died on someone's target or a boss frame (kills are de-duplicated)
+                if ns.RecordAdventureBossKill and ns.RecordAdventureBossKill(activeBoss) and ns.RequestScreenshot then
+                    ns.RequestScreenshot("boss", "Defeated " .. activeBoss)
+                end
+                activeBoss = nil
+            elseif UnitExists(u) and not UnitIsDead(u) and UnitCanAttack("player", u) and not UnitIsPlayer(u) and IsBossUnit(u) then
+                local bName = ns.SafeStr(UnitName(u))
+                if bName and not seen[bName] then
+                    seen[bName] = true
+                    if ns.RecordAdventureBossEngage then ns.RecordAdventureBossEngage(bName) end
+                    local pct = GetUnitHealthPct(u)
+                    if pct then ns.RecordAdventureBossHP(bName, pct) end
+                end
+            end
+        end
+    end
+
+    local function ScanMob(u, now)
+        if not UnitExists(u) or UnitIsPlayer(u) or UnitIsDead(u) then return end
+        if not UnitCanAttack("player", u) then return end
+        if UnitAffectingCombat and not IsTrue(UnitAffectingCombat(u)) then return end
+        local mobName = ns.SafeStr(UnitName(u))
+        if not mobName then return end
+        local key = (UnitGUID and ns.SafeStr(UnitGUID(u))) or (mobName .. ":" .. u)
+        if seen[key] then return end
+        seen[key] = true
+
+        local holder = GroupHolderName(u .. "target")
+        if not holder then return end -- fleeing, stunned or targeting nobody: keep the last holder
+        if ns.RecordAdventureAggroSample then ns.RecordAdventureAggroSample(DisplayName(holder)) end
+
+        local prev = mobTargets[key]
+        mobTargets[key] = { name = holder, t = now }
+        if prev and prev.name ~= holder then
+            if (now - (mobSwapAt[key] or 0)) >= AGGRO_MOB_COOLDOWN and (now - lastSwapLog) >= AGGRO_GLOBAL_COOLDOWN then
+                mobSwapAt[key] = now
+                lastSwapLog = now
+                if ns.RecordAdventureAggroSwap then
+                    ns.RecordAdventureAggroSwap(mobName, DisplayName(prev.name), DisplayName(holder))
+                end
+            end
+        end
+    end
+
+    local function PollAggro(now)
+        ClearTable(seen)
+        ScanMob("target", now)
+        ScanMob("focus", now)
+        ScanMob("mouseover", now)
+        for i = 1, 4 do ScanMob("party" .. i .. "target", now) end
+        for i = 1, 5 do ScanMob("boss" .. i, now) end
+        for i = 1, 40 do
+            local u = "nameplate" .. i
+            if UnitExists(u) then ScanMob(u, now) end
+        end
+    end
+
+    local function Tick()
+        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        if not run or run.paused then
+            groupInCombat = false
+            return
+        end
+        local now = GetTime()
+        if AnyGroupInCombat() then
+            groupInCombat = true
+            lastCombatSeen = now
+            PollBossHP()
+            PollAggro(now)
+        elseif groupInCombat and (now - lastCombatSeen) >= PULL_END_GRACE then
+            groupInCombat = false
+            ClearTable(mobTargets)
+            ClearTable(mobSwapAt)
+            if ns.EndAdventureBossPull then ns.EndAdventureBossPull() end
+        end
+    end
+
+    poller:SetScript("OnUpdate", function(_, elapsed)
+        acc = acc + elapsed
+        if acc < POLL_EVERY then return end
+        acc = 0
+        local ok, err = pcall(Tick)
+        if not ok and not poller.reported then
+            poller.reported = true
+            print("|cffffd100RPCopy|r |cffff6b6bcombat poller error:|r " .. tostring(err))
+        end
+    end)
+
+    -- Threat events just make the next poll happen right away
+    function ns.PollCombatSoon()
+        acc = POLL_EVERY
+    end
+
+    -- /rp diag: what RPCopy can read about your target on this client
+    function ns.DiagnoseTarget()
+        local out = {}
+        local u = "target"
+        if not UnitExists(u) then
+            table.insert(out, "No target. Target an enemy (ideally a boss) and run /rp diag again.")
+        else
+            local name = ns.SafeStr(UnitName(u)) or "(secret)"
+            local cls = ns.SafeStr(UnitClassification(u)) or "(secret)"
+            local lvl = ns.SafeNum(UnitLevel(u))
+            local pct = GetUnitHealthPct(u)
+            table.insert(out, string.format("Target: %s | class: %s | level: %s", name, cls, lvl and tostring(lvl) or "(secret)"))
+            table.insert(out, "Health readable: " .. (pct and (pct .. "%") or "NO (secret or missing)"))
+            table.insert(out, "Counts as boss: " .. (IsBossUnit(u) and "yes" or "no"))
+            local holder = GroupHolderName(u .. "target")
+            table.insert(out, "Its target: " .. (holder or (ns.SafeStr(UnitName(u .. "target")) or "none")))
+        end
+        local role, guessed = "NONE", false
+        if ns.GetUnitRole then role, guessed = ns.GetUnitRole("player") end
+        table.insert(out, "Your role: " .. role .. (guessed and " (guessed)" or " (assigned)"))
+        table.insert(out, "Boss frames: " .. (UnitExists("boss1") and "yes" or "none now")
+            .. " | threat API: " .. (UnitDetailedThreatSituation and "yes" or "no")
+            .. " | UnitHealthPercent: " .. (UnitHealthPercent and "yes" or "no"))
+        return out
+    end
+
+    -- PLAYER_REGEN_* hooks (called from the main handler)
+    function ns.NoteCombatStarted()
+        groupInCombat = true
+        lastCombatSeen = GetTime()
+        acc = POLL_EVERY
     end
 end
 
@@ -383,10 +585,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         ns.EnsureDB()
         -- Version banner, read from the toc's ## Version field (see Core.lua)
         print(string.format("|cffffd100RPCopy|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
-        CheckInstanceAdventureState(true)
     elseif event == "PLAYER_ENTERING_WORLD" then
-        local isInitialLogin = ...
-        CheckInstanceAdventureState(isInitialLogin)
+        -- Zone info is reliable here, so a saved run is restored at the first one
+        RestoreRunOnce()
+        CheckInstanceAdventureState()
+    elseif event == "PLAYER_LOGOUT" then
+        if ns.TouchActiveAdventure then ns.TouchActiveAdventure() end
+    elseif event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
+        if ns.PollCombatSoon then ns.PollCombatSoon() end
     elseif event == "ZONE_CHANGED_NEW_AREA" then
         if ns.RequestScreenshot then
             ns.RequestScreenshot("newzone", ns.GetCurrentWhere())
@@ -416,6 +622,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         if ns.RecordAdventureCombatState then
             ns.RecordAdventureCombatState(true)
         end
+        if ns.NoteCombatStarted then ns.NoteCombatStarted() end
         if UnitExists("target") and IsBossUnit("target") and UnitCanAttack("player", "target") then
             local bName = ns.SafeStr(UnitName("target"))
             if bName and ns.RecordAdventureBossEngage then
@@ -441,6 +648,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if recorded and ns.RequestScreenshot then
                 ns.RequestScreenshot("boss", "Defeated " .. bName)
             end
+        elseif bName and ns.EndAdventureBossPull then
+            -- Wipe or reset: the next attempt logs its milestones again
+            ns.EndAdventureBossPull()
         end
     elseif event == "UNIT_HEALTH" then
         local unit = ...
@@ -459,16 +669,15 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                     end
                 end
             elseif UnitExists(unit) and UnitCanAttack("player", unit) then
-                if unit:match("^boss%d+$") or IsBossUnit(unit) then
+                if IsBossUnit(unit) then
                     local bName = ns.SafeStr(UnitName(unit))
-                    local hp = ns.SafeNum(UnitHealth(unit))
-                    local hpMax = ns.SafeNum(UnitHealthMax(unit))
-                    if bName and hp and hpMax and hpMax > 0 then
+                    local pct = GetUnitHealthPct(unit)
+                    if bName and pct then
                         if ns.RecordAdventureBossEngage and UnitAffectingCombat and UnitAffectingCombat("player") then
                             ns.RecordAdventureBossEngage(bName)
                         end
                         if ns.RecordAdventureBossHP then
-                            ns.RecordAdventureBossHP(bName, math.floor((hp / hpMax) * 100))
+                            ns.RecordAdventureBossHP(bName, pct)
                         end
                     end
                 end
@@ -485,8 +694,6 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                 ns.RecordAdventureUnitVitals(unit)
             end
         end
-    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        pcall(ProcessCombatLog)
     elseif event == "PLAYER_DEAD" then
         local selfName = ns.StripRealm(UnitName("player")) or "Player"
         local now = GetTime()
@@ -552,7 +759,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         HandlePlayerChat("Channel", ns.COLORS.channel, msg, author, channelName)
     elseif event == "CHAT_MSG_MONSTER_SAY" or event == "CHAT_MSG_MONSTER_YELL" or event == "CHAT_MSG_MONSTER_EMOTE" or event == "CHAT_MSG_MONSTER_WHISPER" or event == "CHAT_MSG_RAID_BOSS_EMOTE" or event == "CHAT_MSG_RAID_BOSS_WHISPER" then
         local msg, author = ...
-        HandleNpcChat("NPC", msg, author)
+        local isEmote = (event == "CHAT_MSG_MONSTER_EMOTE" or event == "CHAT_MSG_RAID_BOSS_EMOTE")
+        HandleNpcChat("NPC", msg, author, isEmote)
     elseif event == "CHAT_MSG_LOOT" or event == "CHAT_MSG_MONEY" then
         local msg, author = ...
         HandleLootMessage(msg, author)

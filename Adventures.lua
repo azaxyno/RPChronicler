@@ -12,6 +12,9 @@ local activeBossName = nil
 local activeBossPct = nil
 local bossThresholdsHit = {}
 local vitalsCooldowns = {}
+local bossPullEngaged = {}
+
+local RESUME_WINDOW = 120 -- seconds: a run seen this recently resumes after /reload or disconnect
 
 local ZONE_ICONS = {
     { pattern = "scarlet",     icon = "Interface\\Icons\\INV_Helmet_52" },
@@ -58,8 +61,11 @@ function ns.GetActiveBossName()
     return activeBossName
 end
 
-local function PushTimeline(adv, stamp, entryText)
+local function PushTimeline(adv, stamp, entryText, force)
     if not adv then return end
+    -- A paused run records nothing except its own pause/resume markers
+    if adv.paused and not force then return end
+    adv.lastSeen = time()
     adv.fullTimeline = adv.fullTimeline or {}
     local line = string.format("[%s] %s", stamp or PreciseStamp(), entryText)
     table.insert(adv.fullTimeline, line)
@@ -69,7 +75,7 @@ local function PushTimeline(adv, stamp, entryText)
 end
 
 function ns.SyncAdventureRoster()
-    if not activeRun then return end
+    if not activeRun or activeRun.paused then return end
     activeRun.participants = activeRun.participants or {}
 
     local function AddOrUpdateUnit(unit)
@@ -82,8 +88,10 @@ function ns.SyncAdventureRoster()
         local clsLoc, clsFile = UnitClass(unit)
         clsLoc = ns.SafeStr(clsLoc) or ""
         clsFile = ns.SafeStr(clsFile) or ""
-        local role = UnitGroupRolesAssigned and ns.SafeStr(UnitGroupRolesAssigned(unit)) or "NONE"
-        role = role or "NONE"
+        local role, guessed = "NONE", false
+        if ns.GetUnitRole then
+            role, guessed = ns.GetUnitRole(unit)
+        end
 
         local note = ""
         if RPCopyDB and RPCopyDB.players then
@@ -98,7 +106,11 @@ function ns.SyncAdventureRoster()
                 if lvlStr ~= "" then p.level = lvlStr end
                 if clsLoc ~= "" then p.class = clsLoc end
                 if clsFile ~= "" then p.classFile = clsFile end
-                if role ~= "NONE" then p.role = role end
+                -- An assigned role always wins; a guess only replaces another guess
+                if role ~= "NONE" and (not guessed or p.roleGuessed == true or not p.role or p.role == "NONE") then
+                    p.role = role
+                    p.roleGuessed = guessed
+                end
                 if note ~= "" then p.note = note end
                 return
             end
@@ -110,6 +122,7 @@ function ns.SyncAdventureRoster()
             class = clsLoc,
             classFile = clsFile,
             role = role,
+            roleGuessed = guessed,
             note = note,
         })
     end
@@ -138,6 +151,7 @@ function ns.StartAdventure(customTitle, isAuto)
     activeBossPct = nil
     bossThresholdsHit = {}
     vitalsCooldowns = {}
+    bossPullEngaged = {}
 
     activeRun = {
         id = tostring(time()) .. "_" .. tostring(math.random(100, 999)),
@@ -158,19 +172,28 @@ function ns.StartAdventure(customTitle, isAuto)
         shots = {},
         reloads = 0,
         story = "",
+        instanceName = ns.SafeStr(GetRealZoneText()) or zone,
+        lastSeen = time(),
+        paused = false,
+        aggroHeld = {},
+        aggroSamples = 0,
     }
+    -- Persist the live run in SavedVariables so /reload or a disconnect can't lose it
+    RPCopyDB.activeRun = activeRun
 
     ns.SyncAdventureRoster()
     PushTimeline(activeRun, PreciseStamp(), "Adventure began in " .. zone)
     return activeRun
 end
 
-function ns.EndAdventure(reason)
+function ns.EndAdventure(reason, endTime)
     if not activeRun then return nil end
     ns.EnsureDB()
     ns.SyncAdventureRoster()
+    RPCopyDB.activeRun = nil
+    activeRun.paused = false
 
-    local dur = math.max(0, time() - (activeRun.startTime or time()))
+    local dur = math.max(0, (endTime or time()) - (activeRun.startTime or time()))
     activeRun.duration = dur
     activeRun.endDate = ns.NowStamp()
 
@@ -197,11 +220,101 @@ function ns.EndAdventure(reason)
     activeRun = nil
     activeBossName = nil
     activeBossPct = nil
+    bossThresholdsHit = {}
+    bossPullEngaged = {}
     return saved
 end
 
+-- =========================================================
+-- Pause / Resume and restoring a run after /reload or disconnect
+-- =========================================================
+function ns.IsAdventurePaused()
+    return activeRun and activeRun.paused and true or false
+end
+
+function ns.PauseAdventure()
+    if not activeRun then return false, "No active adventure running." end
+    if activeRun.paused then return false, "Recording is already paused." end
+    PushTimeline(activeRun, PreciseStamp(), "[PAUSED] Recording paused", true)
+    activeRun.paused = true
+    return true, "Recording paused. Type /rp resume to continue."
+end
+
+function ns.ResumeAdventure()
+    if not activeRun then return false, "No active adventure running." end
+    if not activeRun.paused then return false, "Recording is not paused." end
+    activeRun.paused = false
+    PushTimeline(activeRun, PreciseStamp(), "[RESUMED] Recording resumed", true)
+    return true, "Recording resumed: " .. (activeRun.title or "Adventure")
+end
+
+-- Called once per session at the first PLAYER_ENTERING_WORLD.
+-- Returns "resumed", "paused" or nil, plus the run.
+function ns.RestoreSavedAdventure()
+    ns.EnsureDB()
+    local saved = RPCopyDB.activeRun
+    if type(saved) ~= "table" or activeRun then return nil end
+
+    local gap = math.max(0, time() - (saved.lastSeen or saved.startTime or time()))
+    local inInstance = false
+    if IsInInstance then inInstance = IsInInstance() and true or false end
+    local here = ns.SafeStr(GetRealZoneText()) or ""
+    local sameInstance = inInstance and here ~= "" and here == (saved.instanceName or saved.zone)
+
+    activeRun = saved
+    activeRun.reloads = (activeRun.reloads or 0) + 1
+    activeRun.aggroHeld = activeRun.aggroHeld or {}
+    activeRun.aggroSamples = activeRun.aggroSamples or 0
+    activeBossName, activeBossPct = nil, nil
+    bossThresholdsHit, bossPullEngaged, vitalsCooldowns = {}, {}, {}
+
+    if saved.paused then
+        return "paused", saved
+    end
+    if gap <= RESUME_WINDOW or sameInstance then
+        PushTimeline(activeRun, PreciseStamp(), "[RELOAD] Recording continued after a " .. ns.FormatDuration(gap) .. " break", true)
+        return "resumed", saved
+    end
+    -- Away too long and somewhere else: keep the run, but paused, so nothing unrelated is mixed in
+    PushTimeline(activeRun, PreciseStamp(), "[PAUSED] Restored after a disconnect, waiting for /rp resume", true)
+    activeRun.paused = true
+    return "paused", saved
+end
+
+function ns.TouchActiveAdventure()
+    if activeRun and not activeRun.paused then activeRun.lastSeen = time() end
+end
+
+-- =========================================================
+-- Aggro bookkeeping (fed by the combat poller in Events.lua)
+-- =========================================================
+function ns.RecordAdventureAggroSample(holderName)
+    if not activeRun or activeRun.paused or not holderName then return end
+    activeRun.aggroHeld = activeRun.aggroHeld or {}
+    activeRun.aggroHeld[holderName] = (activeRun.aggroHeld[holderName] or 0) + 1
+    activeRun.aggroSamples = (activeRun.aggroSamples or 0) + 1
+end
+
+function ns.GetAggroShare(name)
+    if not activeRun or not name or not activeRun.aggroHeld then return 0, 0 end
+    local total = activeRun.aggroSamples or 0
+    if total <= 0 then return 0, 0 end
+    local low = name:lower()
+    local mine = 0
+    for k, v in pairs(activeRun.aggroHeld) do
+        local kLow = k:lower()
+        if kLow == low or ns.SplitFullName(kLow) == low then mine = mine + v end
+    end
+    return mine / total, total
+end
+
+function ns.RecordAdventureAggroSwap(mobName, fromName, toName)
+    if not activeRun or not mobName or not fromName or not toName then return end
+    PushTimeline(activeRun, PreciseStamp(), string.format("[AGGRO] %s turns from %s to %s", mobName, fromName, toName))
+end
+
 function ns.RecordAdventureCombatState(inCombat)
-    if not activeRun then return end
+    if not activeRun or activeRun.paused then return end
     if inCombat then
         local targetHint = ""
         if UnitExists("target") and UnitCanAttack("player", "target") and not UnitIsDead("target") then
@@ -212,25 +325,52 @@ function ns.RecordAdventureCombatState(inCombat)
         end
         PushTimeline(activeRun, PreciseStamp(), "[COMBAT START]" .. targetHint)
     else
-        activeBossName = nil
-        activeBossPct = nil
         PushTimeline(activeRun, PreciseStamp(), "[COMBAT END]")
     end
 end
 
-function ns.RecordAdventureBossEngage(bossName)
-    if not activeRun or not bossName or bossName == "" then return end
-    if activeBossName ~= bossName then
-        activeBossName = bossName
-        activeBossPct = 100
-        bossThresholdsHit[bossName] = bossThresholdsHit[bossName] or {}
-        PushTimeline(activeRun, PreciseStamp(), "[BOSS ENGAGED] " .. bossName)
+-- The whole group has left combat, so the pull is over. A boss that is still
+-- alive means a wipe, reset or evade: its HP milestones start fresh next pull.
+function ns.EndAdventureBossPull()
+    if activeRun and activeBossName and bossPullEngaged[activeBossName] then
+        PushTimeline(activeRun, PreciseStamp(), "[BOSS RESET] " .. activeBossName .. " survived the pull")
     end
+    activeBossName = nil
+    activeBossPct = nil
+    bossThresholdsHit = {}
+    bossPullEngaged = {}
+end
+
+function ns.ResetAdventureBossMilestones(bossName)
+    if bossName then
+        bossThresholdsHit[bossName] = nil
+        bossPullEngaged[bossName] = nil
+    else
+        bossThresholdsHit = {}
+        bossPullEngaged = {}
+    end
+end
+
+function ns.RecordAdventureBossEngage(bossName)
+    if not activeRun or activeRun.paused or not bossName or bossName == "" then return end
+    if not bossPullEngaged[bossName] then
+        bossPullEngaged[bossName] = true
+        activeBossPct = 100
+        bossThresholdsHit[bossName] = {}
+        PushTimeline(activeRun, PreciseStamp(), "[BOSS ENGAGED] " .. bossName)
+        -- Remember confirmed bosses so later runs recognize them right away
+        if RPCopyDB then
+            RPCopyDB.knownBosses = RPCopyDB.knownBosses or {}
+            RPCopyDB.knownBosses[bossName] = true
+        end
+    end
+    activeBossName = bossName
 end
 
 function ns.RecordAdventureBossHP(bossName, pct)
     local safePct = ns.SafeNum(pct)
-    if not activeRun or not bossName or bossName == "" or not safePct then return end
+    if not activeRun or activeRun.paused or not bossName or bossName == "" or not safePct then return end
+    safePct = math.floor(safePct)
     activeBossName = bossName
     activeBossPct = safePct
     bossThresholdsHit[bossName] = bossThresholdsHit[bossName] or {}
@@ -270,7 +410,7 @@ function ns.GetAdventureCombatTag()
 end
 
 function ns.RecordAdventureUnitVitals(unit)
-    if not activeRun or not UnitExists(unit) or not UnitIsPlayer(unit) or UnitIsDeadOrGhost(unit) then return end
+    if not activeRun or activeRun.paused or not UnitExists(unit) or not UnitIsPlayer(unit) or UnitIsDeadOrGhost(unit) then return end
     if not (UnitAffectingCombat and UnitAffectingCombat("player")) then return end
 
     local who = ns.GetUnitFullName(unit) or ns.StripRealm(UnitName(unit))
@@ -304,7 +444,7 @@ function ns.RecordAdventureUnitVitals(unit)
 end
 
 function ns.RecordAdventureDeath(unitName, isSelf, killerInfo)
-    if not activeRun then return end
+    if not activeRun or activeRun.paused then return end
     local who = ns.ResolveCanonicalPlayerName(ns.StripRealm(unitName)) or "Unknown"
     activeRun.deaths = (activeRun.deaths or 0) + 1
     local cause = (killerInfo and killerInfo ~= "") and (" (" .. killerInfo .. ")") or ""
@@ -331,11 +471,14 @@ function ns.RecordAdventureDeath(unitName, isSelf, killerInfo)
         activeRun.wipes = (activeRun.wipes or 0) + 1
         local wipeBoss = activeBossName and (" on " .. activeBossName) or ""
         PushTimeline(activeRun, PreciseStamp(), string.format("[WIPE #%d] Party wiped%s in %s", activeRun.wipes, wipeBoss, ns.GetCurrentWhere()))
+        if activeBossName then
+            bossThresholdsHit[activeBossName] = {}
+        end
     end
 end
 
 function ns.RecordAdventureRez(casterName, targetName)
-    if not activeRun or not targetName then return end
+    if not activeRun or activeRun.paused or not targetName then return end
     local who = ns.ResolveCanonicalPlayerName(ns.StripRealm(targetName)) or targetName
     local by = casterName and ns.ResolveCanonicalPlayerName(ns.StripRealm(casterName)) or nil
     if by and by ~= "" then
@@ -346,7 +489,7 @@ function ns.RecordAdventureRez(casterName, targetName)
 end
 
 function ns.RecordAdventureBossKill(bossName)
-    if not activeRun or not bossName or bossName == "" then return end
+    if not activeRun or activeRun.paused or not bossName or bossName == "" then return end
     local now = GetTime()
     if bossName:lower() == lastBossKillName:lower() and (now - lastBossKillTime) < 30 then
         return
@@ -357,6 +500,12 @@ function ns.RecordAdventureBossKill(bossName)
         activeBossName = nil
         activeBossPct = nil
     end
+    bossThresholdsHit[bossName] = nil
+    bossPullEngaged[bossName] = nil
+    if RPCopyDB then
+        RPCopyDB.knownBosses = RPCopyDB.knownBosses or {}
+        RPCopyDB.knownBosses[bossName] = true
+    end
 
     activeRun.bossKills = activeRun.bossKills or {}
     table.insert(activeRun.bossKills, bossName)
@@ -365,7 +514,7 @@ function ns.RecordAdventureBossKill(bossName)
 end
 
 function ns.RecordAdventureLoot(coloredLink, plainText, looter)
-    if not activeRun then return end
+    if not activeRun or activeRun.paused then return end
     local cleanItem = plainText or ns.CleanText(coloredLink) or ""
     if cleanItem == "" then return end
     local who = looter and ns.ResolveCanonicalPlayerName(ns.StripRealm(looter)) or nil
@@ -380,8 +529,13 @@ function ns.RecordAdventureLoot(coloredLink, plainText, looter)
     PushTimeline(activeRun, PreciseStamp(), line)
 end
 
-function ns.RecordAdventureChat(channelLabel, speaker, cleanMsg)
-    if not activeRun or not cleanMsg or cleanMsg == "" then return end
+function ns.RecordAdventureChat(channelLabel, speaker, cleanMsg, isEmote)
+    if not activeRun or activeRun.paused or not cleanMsg or cleanMsg == "" then return end
+    if isEmote then
+        -- NPC emotes already name the NPC ("Hungry Bandit attempts to run away in fear!")
+        PushTimeline(activeRun, PreciseStamp(), string.format("[%s] %s", channelLabel or "Emote", cleanMsg))
+        return
+    end
     local who = ns.ResolveCanonicalPlayerName(ns.StripRealm(speaker)) or "Unknown"
     local combatTag = ns.GetAdventureCombatTag()
     local tagStr = combatTag and string.format("%s | %s", channelLabel or "Chat", combatTag) or (channelLabel or "Chat")
@@ -391,7 +545,7 @@ function ns.RecordAdventureChat(channelLabel, speaker, cleanMsg)
 end
 
 function ns.RecordAdventureScreenshot(filename)
-    if not activeRun then return end
+    if not activeRun or activeRun.paused then return end
     activeRun.shots = activeRun.shots or {}
     table.insert(activeRun.shots, filename or ns.NowStamp())
     PushTimeline(activeRun, PreciseStamp(), "[SCREENSHOT] Captured moment")
@@ -400,6 +554,9 @@ end
 function ns.MarkAdventureHighlight(customNote)
     if not activeRun then
         return false, "No active adventure running."
+    end
+    if activeRun.paused then
+        return false, "Recording is paused. Type /rp resume first."
     end
     local text = (customNote and customNote ~= "") and customNote or lastSpokenTimelineLine or ("Memorable moment in " .. ns.GetCurrentWhere())
     activeRun.highlights = activeRun.highlights or {}

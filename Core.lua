@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.1.0"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.2.0"
 
 BINDING_HEADER_RPCOPY = "RPCopy (RP Context & Chronicle)"
 BINDING_NAME_RPCOPY_OPEN = "Toggle RPCopy Window"
@@ -450,6 +450,132 @@ function ns.GetRoleTag(role, useIcon)
         return useIcon and "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:14:14:0:0:64:64:20:39:22:41|t |cffff6b6b[DPS]|r" or "[DPS]"
     end
     return ""
+end
+
+-- =========================================================
+-- Role fallback: when UnitGroupRolesAssigned says NONE, guess
+-- Tank / Healer / DPS from forms and stances, the player's own
+-- talents, who holds aggro in fights, and finally the class.
+-- Every API is guarded; secret values are ignored.
+-- =========================================================
+local ROLE_AURAS = {
+    ["Bear Form"] = "TANK", ["Dire Bear Form"] = "TANK",
+    ["Defensive Stance"] = "TANK", ["Righteous Fury"] = "TANK",
+    ["Shadowform"] = "DAMAGER", ["Cat Form"] = "DAMAGER", ["Moonkin Form"] = "DAMAGER",
+    ["Berserker Stance"] = "DAMAGER",
+    ["Tree of Life"] = "HEALER",
+}
+
+-- Classic talent tab order -> role
+local TALENT_TAB_ROLES = {
+    WARRIOR = { "DAMAGER", "DAMAGER", "TANK" },
+    PALADIN = { "HEALER", "TANK", "DAMAGER" },
+    PRIEST  = { "HEALER", "HEALER", "DAMAGER" },
+    SHAMAN  = { "DAMAGER", "DAMAGER", "HEALER" },
+    DRUID   = { "DAMAGER", "DAMAGER", "HEALER" },
+    DEATHKNIGHT = { "TANK", "DAMAGER", "DAMAGER" },
+}
+
+local CLASS_DEFAULT_ROLE = {
+    WARRIOR = "TANK", PALADIN = "HEALER", PRIEST = "HEALER", SHAMAN = "HEALER",
+    DRUID = "HEALER", HUNTER = "DAMAGER", ROGUE = "DAMAGER", MAGE = "DAMAGER",
+    WARLOCK = "DAMAGER", DEATHKNIGHT = "TANK", MONK = "DAMAGER",
+    DEMONHUNTER = "DAMAGER", EVOKER = "DAMAGER",
+}
+
+local CAN_TANK = { WARRIOR = true, PALADIN = true, DRUID = true, DEATHKNIGHT = true, MONK = true, DEMONHUNTER = true }
+
+local function AuraRole(unit)
+    for i = 1, 40 do
+        local name
+        if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+            local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HELPFUL")
+            if not ok or type(data) ~= "table" then break end
+            name = ns.SafeStr(data.name)
+        elseif UnitBuff then
+            local ok, n = pcall(UnitBuff, unit, i)
+            if not ok or n == nil then break end
+            name = ns.SafeStr(n)
+        else
+            break
+        end
+        if name and ROLE_AURAS[name] then return ROLE_AURAS[name] end
+    end
+    return nil
+end
+
+local function PlayerFormRole()
+    if not (GetNumShapeshiftForms and GetShapeshiftFormInfo) then return nil end
+    local okN, num = pcall(GetNumShapeshiftForms)
+    if not okN or type(num) ~= "number" then return nil end
+    for i = 1, num do
+        local ok, _, active, _, spellID = pcall(GetShapeshiftFormInfo, i)
+        if ok and active == true and type(spellID) == "number" then
+            local sName
+            if C_Spell and C_Spell.GetSpellName then
+                local okS, n = pcall(C_Spell.GetSpellName, spellID)
+                sName = okS and ns.SafeStr(n) or nil
+            elseif GetSpellInfo then
+                local okS, n = pcall(GetSpellInfo, spellID)
+                sName = okS and ns.SafeStr(n) or nil
+            end
+            if sName and ROLE_AURAS[sName] then return ROLE_AURAS[sName] end
+        end
+    end
+    return nil
+end
+
+local function PlayerTalentRole(classFile)
+    -- Modern spec API first
+    if GetSpecialization and GetSpecializationRole then
+        local ok, spec = pcall(GetSpecialization)
+        if ok and type(spec) == "number" and spec > 0 then
+            local okR, r = pcall(GetSpecializationRole, spec)
+            r = okR and ns.SafeStr(r) or nil
+            if r == "TANK" or r == "HEALER" or r == "DAMAGER" then return r end
+        end
+    end
+    -- Classic talent trees: the tab with the most points decides
+    local map = TALENT_TAB_ROLES[classFile or ""]
+    if not map or not GetNumTalentTabs or not GetTalentTabInfo then return nil end
+    local okN, tabs = pcall(GetNumTalentTabs)
+    if not okN or type(tabs) ~= "number" then return nil end
+    local bestTab, bestPts = nil, 0
+    for t = 1, math.min(tabs, 3) do
+        local r = { pcall(GetTalentTabInfo, t) }
+        if r[1] then
+            -- Classic returns (name, icon, points, ...); newer returns (id, name, desc, icon, points, ...)
+            local pts = (type(r[4]) == "number" and r[4]) or (type(r[6]) == "number" and r[6]) or 0
+            if pts > bestPts then bestTab, bestPts = t, pts end
+        end
+    end
+    if bestTab and bestPts >= 5 then return map[bestTab] end
+    return nil
+end
+
+-- Returns role ("TANK"/"HEALER"/"DAMAGER") and whether it was guessed.
+function ns.GetUnitRole(unit)
+    if not unit or not UnitExists(unit) then return "NONE", false end
+    if UnitGroupRolesAssigned then
+        local ok, r = pcall(UnitGroupRolesAssigned, unit)
+        r = ok and ns.SafeStr(r) or nil
+        if r == "TANK" or r == "HEALER" or r == "DAMAGER" then return r, false end
+    end
+    local _, classFile = UnitClass(unit)
+    classFile = ns.SafeStr(classFile) or ""
+
+    local isPlayer = UnitIsUnit and UnitIsUnit(unit, "player") == true
+    local guess = (isPlayer and PlayerFormRole()) or AuraRole(unit)
+    if not guess and isPlayer then guess = PlayerTalentRole(classFile) end
+
+    -- Behavior: a tank-capable class that keeps holding enemies' attention
+    if not guess and CAN_TANK[classFile] and ns.GetAggroShare then
+        local share, samples = ns.GetAggroShare(ns.StripRealm(UnitName(unit)))
+        if samples and samples >= 6 and share >= 0.4 then guess = "TANK" end
+    end
+
+    guess = guess or CLASS_DEFAULT_ROLE[classFile] or "DAMAGER"
+    return guess, true
 end
 
 function ns.PushBounded(tbl, item, maxLen)

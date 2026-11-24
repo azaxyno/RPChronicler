@@ -116,7 +116,8 @@ function ns.GetPartyLine()
         local clsLoc, clsFile = UnitClass(unit)
         clsLoc = ns.SafeStr(clsLoc) or ""
         clsFile = ns.SafeStr(clsFile) or ""
-        local role = UnitGroupRolesAssigned and ns.SafeStr(UnitGroupRolesAssigned(unit)) or "NONE"
+        -- Assigned role, or a guess from forms, talents, aggro and class
+        local role = ns.GetUnitRole and ns.GetUnitRole(unit) or "NONE"
         local roleTag = ns.GetRoleTag(role, false)
 
         local coloredName = (clsFile ~= "") and ns.ColorizeClass(name, clsFile) or ns.ColorText(name, ns.COLORS.speaker)
@@ -155,6 +156,9 @@ function ns.GetStatusLine()
     if lvl and lvl > 0 then
         whoStr = whoStr .. " (Lvl " .. lvl .. (clsLoc ~= "" and (" " .. clsLoc) or "") .. ")"
     end
+    local myRole = ns.GetUnitRole and ns.GetUnitRole("player") or "NONE"
+    local myRoleTag = ns.GetRoleTag(myRole, false)
+    if myRoleTag ~= "" then whoStr = whoStr .. " " .. myRoleTag end
     table.insert(parts, whoStr)
 
     local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false

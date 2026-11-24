@@ -79,15 +79,15 @@ ns.LOG_LIMITS = {
 -- AI picker for the Full Log size meter: a comfortable paste size in
 -- characters (about 4 characters per token). Each leaves room for the
 -- skill's instructions and the story it writes. Checked November 2026:
--- free Gemini has a 32K token context, free ChatGPT about 27K, ChatGPT
--- Go/Plus about 54K, Gemini Pro and Claude up to 1M (README: Requirements).
+-- free Gemini has a 32K token context, free ChatGPT about 27K, paid
+-- ChatGPT about 54K, paid Gemini and Claude up to 1M.
 ns.AI_MODELS = {
     { key = "GEMINI_FREE",  label = "Gemini (free)",       chars = 80000 },
-    { key = "GEMINI_PAID",  label = "Gemini (AI Plus/Pro)", chars = 300000 },
+    { key = "GEMINI_PAID",  label = "Gemini (paid)",       chars = 300000 },
     { key = "CHATGPT_FREE", label = "ChatGPT (free)",      chars = 50000 },
-    { key = "CHATGPT_PAID", label = "ChatGPT (Go/Plus)",   chars = 150000 },
+    { key = "CHATGPT_PAID", label = "ChatGPT (paid)",      chars = 150000 },
     { key = "CLAUDE_FREE",  label = "Claude (free)",       chars = 100000 },
-    { key = "CLAUDE_PAID",  label = "Claude (Pro/Max)",    chars = 400000 },
+    { key = "CLAUDE_PAID",  label = "Claude (paid)",       chars = 400000 },
     { key = "CUSTOM",       label = "Custom limit",        chars = nil },
 }
 

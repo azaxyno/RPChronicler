@@ -14,6 +14,8 @@ local bossThresholdsHit = {}
 local vitalsCooldowns = {}
 local bossPullEngaged = {}
 local brink = {} -- party member -> time they dropped under 10% HP
+local lastHP = {} -- party member -> last health percent seen above 0
+local deadNow = {} -- party member -> true while dead (death lines for party1-4)
 
 local RESUME_WINDOW = 120 -- seconds: a run seen this recently resumes after /reload or disconnect
 
@@ -62,6 +64,31 @@ function ns.GetActiveBossName()
     return activeBossName
 end
 
+-- Seconds a run has lasted: stored for ended runs, live for the active one.
+-- (0.3.x showed "0m 00s" for live runs because duration starts at 0.)
+function ns.GetRunDuration(adv)
+    if not adv then return 0 end
+    if adv.duration and adv.duration > 0 then return adv.duration end
+    if adv.startTime then
+        return math.max(0, (adv.endTime or time()) - adv.startTime)
+    end
+    return 0
+end
+
+local RUN_KIND_LABEL = { dungeon = "Dungeon", raid = "Raid", world = "Open world adventure" }
+function ns.GetRunKindLabel(adv)
+    return RUN_KIND_LABEL[(adv and adv.kind) or "world"] or "Adventure"
+end
+
+-- Where the player is: "dungeon", "raid" or "world"
+local function CurrentRunKind()
+    local inInstance, instanceType = false, nil
+    if IsInInstance then inInstance, instanceType = IsInInstance() end
+    if inInstance and instanceType == "raid" then return "raid" end
+    if inInstance and instanceType == "party" then return "dungeon" end
+    return "world"
+end
+
 local function PushTimeline(adv, stamp, entryText, force)
     if not adv then return end
     -- A paused run records nothing except its own pause/resume markers
@@ -70,7 +97,8 @@ local function PushTimeline(adv, stamp, entryText, force)
     adv.fullTimeline = adv.fullTimeline or {}
     local line = string.format("[%s] %s", stamp or PreciseStamp(), entryText)
     table.insert(adv.fullTimeline, line)
-    while #adv.fullTimeline > 500 do
+    local cap = (ns.Limit and ns.Limit("timelineMax")) or 500
+    while #adv.fullTimeline > cap do
         table.remove(adv.fullTimeline, 1)
     end
 end
@@ -94,6 +122,11 @@ function ns.SyncAdventureRoster()
             role, guessed = ns.GetUnitRole(unit)
         end
 
+        -- Guildmates: party members in your own guild
+        local myGuild = ns.SafeStr(GetGuildInfo("player"))
+        local theirGuild = ns.SafeStr(GetGuildInfo(unit))
+        local isMate = unit ~= "player" and myGuild and theirGuild and myGuild ~= "" and myGuild == theirGuild or false
+
         local note = ""
         if RPCopyDB and RPCopyDB.players then
             local pKey = ns.FindPlayerKey(fullName, true)
@@ -113,6 +146,8 @@ function ns.SyncAdventureRoster()
                     p.roleGuessed = guessed
                 end
                 if note ~= "" then p.note = note end
+                if theirGuild and theirGuild ~= "" then p.guild = theirGuild end
+                if isMate then p.guildmate = true end
                 return
             end
         end
@@ -125,6 +160,8 @@ function ns.SyncAdventureRoster()
             role = role,
             roleGuessed = guessed,
             note = note,
+            guild = theirGuild,
+            guildmate = isMate or nil,
         })
     end
 
@@ -154,6 +191,7 @@ function ns.StartAdventure(customTitle, isAuto)
     vitalsCooldowns = {}
     bossPullEngaged = {}
     brink = {}
+    deadNow = {}
 
     activeRun = {
         id = tostring(time()) .. "_" .. tostring(math.random(100, 999)),
@@ -179,13 +217,22 @@ function ns.StartAdventure(customTitle, isAuto)
         paused = false,
         aggroHeld = {},
         aggroSamples = 0,
+        kind = CurrentRunKind(),
+        kills = {},          -- notable kills (elites, rares, bosses)
+        foesDefeated = 0,    -- every kill, trash included
+        coin = 0,            -- copper you looted during the run
+        skills = {},         -- profession -> { from, to }
+        bossInfo = {},
     }
     -- Persist the live run in SavedVariables so /reload or a disconnect can't lose it
     RPCopyDB.activeRun = activeRun
 
     ns.SyncAdventureRoster()
     if ns.ResetRunTrackers then ns.ResetRunTrackers() end
+    if ns.ResetChronicle then pcall(ns.ResetChronicle) end
     PushTimeline(activeRun, PreciseStamp(), "Adventure began in " .. zone)
+    if ns.RecordAtmosphere then pcall(ns.RecordAtmosphere, true) end
+    if ns.Debug then ns.Debug("run", string.format("start %s (%s, %s)", title, activeRun.kind, isAuto and "auto" or "manual")) end
     return activeRun
 end
 
@@ -196,8 +243,10 @@ function ns.EndAdventure(reason, endTime)
     RPCopyDB.activeRun = nil
     activeRun.paused = false
 
+    if ns.FightFlush then pcall(ns.FightFlush) end
     local dur = math.max(0, (endTime or time()) - (activeRun.startTime or time()))
     activeRun.duration = dur
+    activeRun.endTime = endTime or time()
     activeRun.endDate = ns.NowStamp()
 
     local hasActivity = (#(activeRun.bossKills or {}) > 0)
@@ -207,9 +256,11 @@ function ns.EndAdventure(reason, endTime)
         or (#(activeRun.fullTimeline or {}) > 2)
 
     if activeRun.isAuto and dur < 30 and not hasActivity then
+        if ns.Debug then ns.Debug("run", "discarded a short auto run: " .. tostring(activeRun.title)) end
         activeRun = nil
         return nil
     end
+    if ns.Debug then ns.Debug("run", string.format("end %s (%s, %s)", tostring(activeRun.title), reason or "Completed", ns.FormatDuration(dur))) end
 
     PushTimeline(activeRun, PreciseStamp(), "Adventure ended (" .. (reason or "Completed") .. ")")
     activeRun.exportText = ns.BuildAdventureFullLog(activeRun)
@@ -240,6 +291,8 @@ function ns.PauseAdventure()
     if activeRun.paused then return false, "Recording is already paused." end
     PushTimeline(activeRun, PreciseStamp(), "[PAUSED] Recording paused", true)
     activeRun.paused = true
+    if ns.FightFlush then pcall(ns.FightFlush) end
+    if ns.Debug then ns.Debug("run", "paused") end
     return true, "Recording paused. Type /rp resume to continue."
 end
 
@@ -248,44 +301,86 @@ function ns.ResumeAdventure()
     if not activeRun.paused then return false, "Recording is not paused." end
     activeRun.paused = false
     PushTimeline(activeRun, PreciseStamp(), "[RESUMED] Recording resumed", true)
+    if ns.Debug then ns.Debug("run", "resumed") end
     return true, "Recording resumed: " .. (activeRun.title or "Adventure")
 end
 
 -- Called once per session at the first PLAYER_ENTERING_WORLD.
--- Returns "resumed", "paused" or nil, plus the run.
+-- Returns "resumed", "paused", "interrupted" or nil, plus the run.
+--  * A /reload (back within 2 minutes) continues the run, as it was.
+--  * After a logout or disconnect the run is closed and saved, marked
+--    interrupted, so it is never lost. The UI then offers to resume it.
 function ns.RestoreSavedAdventure()
     ns.EnsureDB()
     local saved = RPCopyDB.activeRun
     if type(saved) ~= "table" or activeRun then return nil end
 
     local gap = math.max(0, time() - (saved.lastSeen or saved.startTime or time()))
-    local inInstance = false
-    if IsInInstance then inInstance = IsInInstance() and true or false end
-    local here = ns.SafeStr(GetRealZoneText()) or ""
-    local sameInstance = inInstance and here ~= "" and here == (saved.instanceName or saved.zone)
-
-    activeRun = saved
-    activeRun.reloads = (activeRun.reloads or 0) + 1
-    activeRun.aggroHeld = activeRun.aggroHeld or {}
-    activeRun.aggroSamples = activeRun.aggroSamples or 0
+    saved.aggroHeld = saved.aggroHeld or {}
+    saved.aggroSamples = saved.aggroSamples or 0
+    saved.kind = saved.kind or "world"
     activeBossName, activeBossPct = nil, nil
-    bossThresholdsHit, bossPullEngaged, vitalsCooldowns = {}, {}, {}
+    bossThresholdsHit, bossPullEngaged, vitalsCooldowns, brink = {}, {}, {}, {}
+    lastHP, deadNow = {}, {}
 
-    if saved.paused then
-        return "paused", saved
+    if gap <= RESUME_WINDOW and RPCopyDB.resumeAfterReload ~= false then
+        activeRun = saved
+        activeRun.reloads = (activeRun.reloads or 0) + 1
+        activeRun.interruptedAt = nil
+        if not saved.paused then
+            PushTimeline(activeRun, PreciseStamp(), "[RELOAD] Recording continued after a " .. ns.FormatDuration(gap) .. " break", true)
+        end
+        if ns.Debug then ns.Debug("run", "continued after /reload: " .. tostring(saved.title)) end
+        return saved.paused and "paused" or "resumed", saved
     end
-    if gap <= RESUME_WINDOW or sameInstance then
-        PushTimeline(activeRun, PreciseStamp(), "[RELOAD] Recording continued after a " .. ns.FormatDuration(gap) .. " break", true)
-        return "resumed", saved
-    end
-    -- Away too long and somewhere else: keep the run, but paused, so nothing unrelated is mixed in
-    PushTimeline(activeRun, PreciseStamp(), "[PAUSED] Restored after a disconnect, waiting for /rp resume", true)
-    activeRun.paused = true
-    return "paused", saved
+
+    -- Close and keep it, marked interrupted
+    RPCopyDB.activeRun = nil
+    saved.paused = false
+    saved.interrupted = true
+    local lastSeen = saved.interruptedAt or saved.lastSeen or time()
+    saved.endTime = lastSeen
+    saved.duration = math.max(0, lastSeen - (saved.startTime or lastSeen))
+    saved.endDate = saved.endDate ~= "" and saved.endDate or ns.NowStamp()
+    PushTimeline(saved, PreciseStamp(), "Adventure ended (interrupted by a logout or disconnect)", true)
+    saved.exportText = ns.BuildAdventureFullLog(saved)
+    table.insert(RPCopyDB.adventures, 1, saved)
+    while #RPCopyDB.adventures > 40 do table.remove(RPCopyDB.adventures) end
+    if ns.Debug then ns.Debug("run", "closed an interrupted run: " .. tostring(saved.title)) end
+    return "interrupted", saved
 end
 
-function ns.TouchActiveAdventure()
+-- "Resume" on the interrupted-run prompt: the saved run becomes live again
+function ns.ResumeInterruptedRun(runId)
+    if activeRun then return false, "Another run is recording." end
+    for i, adv in ipairs(RPCopyDB.adventures or {}) do
+        if adv.id == runId then
+            table.remove(RPCopyDB.adventures, i)
+            activeRun = adv
+            adv.interrupted = nil
+            adv.duration = 0
+            adv.endTime = nil
+            adv.endDate = ""
+            adv.lastSeen = time()
+            adv.reloads = (adv.reloads or 0) + 1
+            RPCopyDB.activeRun = adv
+            if ns.ResetRunTrackers then ns.ResetRunTrackers() end
+            PushTimeline(adv, PreciseStamp(), "[RESUMED] Recording resumed after a logout or disconnect", true)
+            if ns.Debug then ns.Debug("run", "resumed an interrupted run: " .. tostring(adv.title)) end
+            return true, "Recording resumed: " .. (adv.title or "Adventure")
+        end
+    end
+    return false, "That run is gone."
+end
+
+function ns.TouchActiveAdventure(isLogout)
     if activeRun and not activeRun.paused then activeRun.lastSeen = time() end
+    if activeRun and isLogout then
+        -- Saved with the run, in case this is a logout and not a /reload
+        activeRun.interruptedAt = time()
+        activeRun.lastSeen = time()
+        if ns.FightFlush then pcall(ns.FightFlush) end
+    end
 end
 
 -- =========================================================
@@ -320,23 +415,16 @@ end
 
 function ns.RecordAdventureAggroSwap(mobName, fromName, toName)
     if not activeRun or not mobName or not fromName or not toName then return end
+    if ns.FightNoteAggro then ns.FightNoteAggro(mobName, fromName, toName) end
+    if not ns.LogOn("aggro") then return end
     PushTimeline(activeRun, PreciseStamp(), string.format("[AGGRO] %s turns from %s to %s", mobName, fromName, toName))
 end
 
+-- 0.4.0: no more [COMBAT START] / [COMBAT END] pairs. Each fight becomes one
+-- [FIGHT] line (Chronicle.lua) when the whole group has left combat.
 function ns.RecordAdventureCombatState(inCombat)
     if not activeRun or activeRun.paused then return end
-    if inCombat then
-        local targetHint = ""
-        if UnitExists("target") and UnitCanAttack("player", "target") and not UnitIsDead("target") then
-            local tName = ns.SafeStr(UnitName("target"))
-            if tName and tName ~= "" then
-                targetHint = " (Target: " .. tName .. ")"
-            end
-        end
-        PushTimeline(activeRun, PreciseStamp(), "[COMBAT START]" .. targetHint)
-    else
-        PushTimeline(activeRun, PreciseStamp(), "[COMBAT END]")
-    end
+    if inCombat and ns.FightBegin then ns.FightBegin() end
 end
 
 -- The whole group has left combat, so the pull is over. A boss that is still
@@ -444,29 +532,46 @@ function ns.GetAdventureCombatTag()
     return "In Combat"
 end
 
+-- Last health percent seen for a name (used for [DEATH] context)
+function ns.GetLastHP(name)
+    return name and lastHP[name] or nil
+end
+
 function ns.RecordAdventureUnitVitals(unit)
     if not activeRun or activeRun.paused or not UnitExists(unit) or not UnitIsPlayer(unit) then return end
     local who = ns.GetUnitFullName(unit) or ns.StripRealm(UnitName(unit))
     if not who or who == "" then return end
     if UnitIsDeadOrGhost(unit) then
         brink[who] = nil -- not saved
+        -- Party members' deaths (your own come from PLAYER_DEAD)
+        if unit ~= "player" and not deadNow[who] and UnitIsDead(unit) then
+            deadNow[who] = true
+            ns.RecordAdventureDeath(who, false)
+        end
         return
     end
+    deadNow[who] = nil
     -- A recovery after the fight still counts as saved; new danger needs combat
     if not brink[who] and not (UnitAffectingCombat and UnitAffectingCombat("player")) then return end
     local now = GetTime()
 
     local hpPct = ns.GetUnitHealthPct and ns.GetUnitHealthPct(unit)
+    if hpPct and hpPct > 0 then lastHP[who] = hpPct end
     if hpPct then
         local hpKey = who .. "_HP"
         if hpPct > 0 and hpPct <= 10 and not brink[who] and (not vitalsCooldowns[hpKey] or (now - vitalsCooldowns[hpKey]) > 20) then
             vitalsCooldowns[hpKey] = now
             brink[who] = now
-            PushTimeline(activeRun, PreciseStamp(), string.format("[DANGER] %s dropped to %d%% HP!", who, hpPct))
+            if ns.FightNoteLow then ns.FightNoteLow(who) end
+            if ns.LogOn("danger") then
+                PushTimeline(activeRun, PreciseStamp(), string.format("[DANGER] %s dropped to %d%% HP!", who, hpPct))
+            end
         elseif brink[who] and hpPct >= 40 then
             -- Back from the brink: someone healed, shielded or pulled them out
             brink[who] = nil
-            PushTimeline(activeRun, PreciseStamp(), string.format("[SAVED] %s was pulled back from the brink (%d%% HP)", who, hpPct))
+            if ns.LogOn("danger") then
+                PushTimeline(activeRun, PreciseStamp(), string.format("[SAVED] %s was pulled back from the brink (%d%% HP)", who, hpPct))
+            end
         end
     end
 
@@ -479,7 +584,9 @@ function ns.RecordAdventureUnitVitals(unit)
             local mpKey = who .. "_MP"
             if mpPct <= 8 and (not vitalsCooldowns[mpKey] or (now - vitalsCooldowns[mpKey]) > 45) then
                 vitalsCooldowns[mpKey] = now
-                PushTimeline(activeRun, PreciseStamp(), string.format("[LOW MANA] %s at %d%% mana!", who, mpPct))
+                if ns.LogOn("danger") then
+                    PushTimeline(activeRun, PreciseStamp(), string.format("[LOW MANA] %s at %d%% mana!", who, mpPct))
+                end
             end
         end
     end
@@ -489,7 +596,19 @@ function ns.RecordAdventureDeath(unitName, isSelf, killerInfo)
     if not activeRun or activeRun.paused then return end
     local who = ns.ResolveCanonicalPlayerName(ns.StripRealm(unitName)) or "Unknown"
     activeRun.deaths = (activeRun.deaths or 0) + 1
-    local cause = (killerInfo and killerInfo ~= "") and (" (" .. killerInfo .. ")") or ""
+    -- Context without the combat log: what the fight was against and the
+    -- last health seen before the death
+    local foe = killerInfo
+    if (not foe or foe == "") and ns.FightCurrentFoe then foe = ns.FightCurrentFoe() end
+    if (not foe or foe == "") and activeBossName then foe = activeBossName end
+    local parts = {}
+    if foe and foe ~= "" then table.insert(parts, "fighting " .. foe) end
+    local hp = lastHP[who] or lastHP[unitName or ""]
+    if not hp and isSelf and ns.GetUnitFullName then hp = lastHP[ns.GetUnitFullName("player") or ""] end
+    if hp then table.insert(parts, string.format("last seen at %d%% HP", hp)) end
+    local cause = (#parts > 0) and (" (" .. table.concat(parts, ", ") .. ")") or ""
+    lastHP[who] = nil
+    if ns.FightNoteDeath then ns.FightNoteDeath(who, isSelf) end
     PushTimeline(activeRun, PreciseStamp(), "[DEATH] " .. who .. " died" .. cause)
 
     local now = GetTime()
@@ -552,27 +671,57 @@ function ns.RecordAdventureBossKill(bossName)
     activeRun.bossKills = activeRun.bossKills or {}
     table.insert(activeRun.bossKills, bossName)
     PushTimeline(activeRun, PreciseStamp(), "[BOSS KILL] " .. bossName)
+    if ns.NoteBossLootSource then ns.NoteBossLootSource(bossName) end
     return true
 end
 
-function ns.RecordAdventureLoot(coloredLink, plainText, looter)
+-- source: "crafted", "from Arugal", "quest reward", "bought", "traded",
+-- "mail", "gathered (Mining)", "won roll", "looted" ... or nil.
+-- isNotable: green or better (goes into the Notable Loot header too).
+function ns.RecordAdventureLoot(coloredLink, plainText, looter, source, isNotable)
     if not activeRun or activeRun.paused then return end
     local cleanItem = plainText or ns.CleanText(coloredLink) or ""
     if cleanItem == "" then return end
     local who = looter and ns.ResolveCanonicalPlayerName(ns.StripRealm(looter)) or nil
+    if not ns.LogOn("lootSource") then source = nil end
 
-    activeRun.keyLoot = activeRun.keyLoot or {}
-    table.insert(activeRun.keyLoot, {
-        colored = coloredLink or cleanItem,
-        plain = cleanItem,
-        looter = who or "",
-    })
-    local line = who and ("[LOOT] " .. who .. " received " .. cleanItem) or ("[LOOT] " .. cleanItem)
+    if isNotable ~= false then
+        activeRun.keyLoot = activeRun.keyLoot or {}
+        table.insert(activeRun.keyLoot, {
+            colored = coloredLink or cleanItem,
+            plain = cleanItem,
+            looter = who or "",
+            source = source,
+        })
+    end
+    if not ns.LogOn("loot") then return end
+    local src = source and (" (" .. source .. ")") or ""
+    local line = who and ("[LOOT] " .. who .. " received " .. cleanItem .. src) or ("[LOOT] " .. cleanItem .. src)
     PushTimeline(activeRun, PreciseStamp(), line)
+end
+
+-- Coin you looted, summed for the run (and per fight by the fight tracker)
+function ns.RecordAdventureCoin(copper)
+    if not activeRun or activeRun.paused or not copper or copper <= 0 then return end
+    activeRun.coin = (activeRun.coin or 0) + copper
+    if ns.FightNoteCoin then ns.FightNoteCoin(copper) end
+end
+
+-- Out-of-character chatter never goes into the story log
+function ns.IsOocText(text)
+    if not text or text == "" then return false end
+    local low = text:lower()
+    if low:find("((", 1, true) or low:find("))", 1, true) then return true end
+    if low:find("%[ooc") or low:find("^%s*ooc[%s:%-]") or low:find("%f[%a]ooc%f[%A]") then return true end
+    return false
 end
 
 function ns.RecordAdventureChat(channelLabel, speaker, cleanMsg, isEmote)
     if not activeRun or activeRun.paused or not cleanMsg or cleanMsg == "" then return end
+    if ns.IsOocText(cleanMsg) or ns.IsOocText(channelLabel) then return end
+    local isNpc = isEmote or channelLabel == "NPC"
+    if isNpc and not ns.LogOn("npcDialogue") then return end
+    if not isNpc and not ns.LogOn("chat") then return end
     if isEmote then
         -- NPC emotes already name the NPC ("Hungry Bandit attempts to run away in fear!")
         PushTimeline(activeRun, PreciseStamp(), string.format("[%s] %s", channelLabel or "Emote", cleanMsg))
@@ -617,32 +766,77 @@ function RPCopy_MarkMoment()
     end
 end
 
+-- The run with this id: the live one or a saved one
+function ns.FindAdventure(advId)
+    if activeRun and activeRun.id == advId then return activeRun end
+    for _, adv in ipairs((RPCopyDB and RPCopyDB.adventures) or {}) do
+        if adv.id == advId then return adv end
+    end
+    return nil
+end
+
+local BOOK_FIELDS = { "title", "instance", "duration", "zone", "date", "party", "kills", "wipes", "deaths", "chapters" }
+
 function ns.SetAdventureStory(advId, rawStoryText)
     ns.EnsureDB()
     -- Normalizes || -> |, strips code fences and Markdown, maps non-ASCII
     -- glyphs to ASCII, and auto-closes dangling color escapes (see Core.lua)
     local cleaned = ns.NormalizeStoryText(rawStoryText)
+    local adv = ns.FindAdventure(advId)
+    if not adv then return false end
+    adv.story = cleaned
 
-    if activeRun and activeRun.id == advId then
-        activeRun.story = cleaned
-        return true
+    -- Story Book details from the story's header and footer. Fields you
+    -- edited by hand survive a re-import.
+    local okMeta, meta = pcall(ns.ParseStoryMeta, cleaned)
+    if not okMeta or type(meta) ~= "table" then meta = {} end
+    local old = type(adv.book) == "table" and adv.book or {}
+    local edited = type(old.edited) == "table" and old.edited or {}
+    local book = { edited = edited, importedAt = time() }
+    for _, k in ipairs(BOOK_FIELDS) do
+        if edited[k] then book[k] = old[k] else book[k] = meta[k] end
     end
-    for _, adv in ipairs(RPCopyDB.adventures or {}) do
-        if adv.id == advId then
-            adv.story = cleaned
-            return true
-        end
+    adv.book = book
+    if ns.Debug then
+        ns.Debug("run", string.format("story imported for %s (%d chars, %d chapters)", tostring(adv.title), #cleaned, #(meta.chapters or {})))
     end
-    return false
+    return true
+end
+
+-- Edit one Story Book field by hand ("" clears it back to the run's data)
+function ns.SetBookField(advId, field, value)
+    local adv = ns.FindAdventure(advId)
+    if not adv then return false end
+    adv.book = type(adv.book) == "table" and adv.book or {}
+    adv.book.edited = adv.book.edited or {}
+    if value == nil or value == "" then
+        adv.book[field] = nil
+        adv.book.edited[field] = nil
+    else
+        if field == "kills" or field == "wipes" or field == "deaths" then value = tonumber(value) or value end
+        adv.book[field] = value
+        adv.book.edited[field] = true
+    end
+    return true
+end
+
+-- Removes the story (and its book details) but keeps the recording
+function ns.DeleteAdventureStory(advId)
+    local adv = ns.FindAdventure(advId)
+    if not adv then return false end
+    adv.story = ""
+    adv.book = nil
+    if ns.Debug then ns.Debug("run", "story deleted for " .. tostring(adv.title)) end
+    return true
 end
 
 function ns.BuildAdventureSummary(adv)
     if not adv then
-        return "|cff9e9e9eNo adventure selected. Enter a dungeon/raid or click 'Start New Run' below.|r"
+        return "|cff9e9e9eNo adventure selected. Enter a dungeon/raid or click 'Start Recording' above.|r"
     end
 
     local lines = {}
-    local durSec = adv.duration or (adv.startTime and (time() - adv.startTime) or 0)
+    local durSec = ns.GetRunDuration(adv)
     table.insert(lines, ns.ColorText("=== " .. (adv.title or "Adventure") .. " ===", ns.COLORS.gold))
     table.insert(lines, string.format("%s %s   |   %s %s   |   %s %s",
         ns.ColorText("Zone:", ns.COLORS.header), ns.ColorText(adv.zone or "Unknown", ns.COLORS.location),
@@ -734,29 +928,58 @@ function ns.GetKnownCompanionNotes(adv)
     return list
 end
 
+local function FormatCopper(c)
+    c = math.floor(c or 0)
+    local g, sv, cp = math.floor(c / 10000), math.floor((c % 10000) / 100), c % 100
+    local parts = {}
+    if g > 0 then table.insert(parts, g .. "g") end
+    if sv > 0 then table.insert(parts, sv .. "s") end
+    if cp > 0 or #parts == 0 then table.insert(parts, cp .. "c") end
+    return table.concat(parts, " ")
+end
+ns.FormatCopper = FormatCopper
+
+-- First line of the Full Log: the trigger of the matching story skill
+function ns.GetStoryTrigger(adv)
+    if adv and adv.kind == "world" then return "use adventure story" end
+    return "use story"
+end
+
 function ns.BuildAdventureFullLog(adv)
     if not adv then
         return "No adventure selected."
     end
 
     local out = {}
-    local durSec = adv.duration or (adv.startTime and (time() - adv.startTime) or 0)
-    table.insert(out, "use story")
+    local durSec = ns.GetRunDuration(adv)
+    table.insert(out, ns.GetStoryTrigger(adv))
     table.insert(out, "[ADVENTURE: " .. (adv.title or "Dungeon Run") .. "]")
-    table.insert(out, string.format("Zone: %s | Date: %s | Duration: %s | Wipes: %d | Deaths: %d",
-        adv.zone or "Unknown", adv.startDate or "-", ns.FormatDuration(durSec), adv.wipes or 0, adv.deaths or 0))
+    table.insert(out, string.format("Run type: %s | Zone: %s | Date: %s | Duration: %s | Wipes: %d | Deaths: %d",
+        ns.GetRunKindLabel(adv), adv.zone or "Unknown", adv.startDate or "-", ns.FormatDuration(durSec), adv.wipes or 0, adv.deaths or 0))
+    if adv.interrupted then
+        table.insert(out, "Note: the recording was cut short by a logout or disconnect.")
+    end
     table.insert(out, "")
 
+    local mates = {}
     table.insert(out, "Roster:")
     if adv.participants and #adv.participants > 0 then
         for _, p in ipairs(adv.participants) do
             local rTag = ns.GetRoleTag(p.role, false)
             local rolePart = (rTag ~= "") and (", " .. rTag) or ""
-            table.insert(out, string.format("- %s (Lvl %s %s%s)",
-                p.name, p.level ~= "" and p.level or "?", p.class ~= "" and p.class or "Adventurer", rolePart))
+            local guildPart = ""
+            if ns.LogOn("guildmates") and p.guildmate and p.guild then
+                guildPart = " <" .. p.guild .. "> (guildmate)"
+                table.insert(mates, p.name)
+            end
+            table.insert(out, string.format("- %s (Lvl %s %s%s)%s",
+                p.name, (p.level and p.level ~= "") and p.level or "?", (p.class and p.class ~= "") and p.class or "Adventurer", rolePart, guildPart))
         end
     else
         table.insert(out, "- Solo Adventurer")
+    end
+    if #mates > 0 then
+        table.insert(out, "Guildmates in the party: " .. table.concat(mates, ", "))
     end
     table.insert(out, "")
 
@@ -774,36 +997,176 @@ function ns.BuildAdventureFullLog(adv)
     if adv.bossKills and #adv.bossKills > 0 then
         table.insert(out, "Bosses & Elites Defeated: " .. table.concat(adv.bossKills, ", "))
     end
+    if (adv.foesDefeated or 0) > 0 and ns.LogOn("kills") then
+        local notable = adv.kills or {}
+        local extra = (#notable > 0) and (" (notable: " .. table.concat(notable, ", ") .. ")") or ""
+        table.insert(out, string.format("Foes defeated: %d%s", adv.foesDefeated, extra))
+    end
     if adv.keyLoot and #adv.keyLoot > 0 then
         local lootNames = {}
         for _, item in ipairs(adv.keyLoot) do
             local p = type(item) == "table" and item.plain or ns.StripColors(tostring(item))
-            local w = (type(item) == "table" and item.looter and item.looter ~= "") and (" (" .. item.looter .. ")") or ""
+            local w = ""
+            if type(item) == "table" and item.looter and item.looter ~= "" then
+                w = " -> " .. item.looter
+            end
+            if type(item) == "table" and item.source and ns.LogOn("lootSource") then
+                w = w .. " (" .. item.source .. ")"
+            end
             table.insert(lootNames, p .. w)
         end
         table.insert(out, "Notable Loot: " .. table.concat(lootNames, ", "))
+    end
+    if (adv.coin or 0) > 0 and ns.LogOn("loot") then
+        table.insert(out, "Coin looted: " .. FormatCopper(adv.coin))
+    end
+    if ns.LogOn("skills") and type(adv.skills) == "table" then
+        local sk = {}
+        for name, v in pairs(adv.skills) do
+            if type(v) == "table" and v.from and v.to and v.to > v.from then
+                table.insert(sk, string.format("%s %d -> %d", name, v.from, v.to))
+            end
+        end
+        table.sort(sk)
+        if #sk > 0 then table.insert(out, "Skill-ups: " .. table.concat(sk, ", ")) end
     end
     if adv.highlights and #adv.highlights > 0 then
         table.insert(out, "")
         table.insert(out, "Starred Highlights:")
         for _, h in ipairs(adv.highlights) do
             local cleanH = ns.StripColors(h)
-            table.insert(out, "- " .. cleanH)
+            if not ns.IsOocText(cleanH) then table.insert(out, "- " .. cleanH) end
         end
     end
 
     table.insert(out, "")
     table.insert(out, "Full Adventure Timeline:")
     local tl = adv.fullTimeline or {}
-    local startIdx = math.max(1, #tl - 449)
+    local keep = (ns.Limit and ns.Limit("timelineMax")) or 450
+    local startIdx = math.max(1, #tl - keep + 1)
     for i = startIdx, #tl do
         local cleanLine = ns.StripColors(tl[i])
-        if cleanLine and cleanLine ~= "" then
+        -- No out-of-character lines (OOC channel, (( )), [OOC], [OOC Note]),
+        -- and old [COMBAT START] / [COMBAT END] pairs are left out
+        if cleanLine and cleanLine ~= "" and not ns.IsOocText(cleanLine)
+            and not cleanLine:find("[COMBAT START]", 1, true) and not cleanLine:find("[COMBAT END]", 1, true) then
             table.insert(out, cleanLine)
         end
     end
 
     return table.concat(out, "\n")
+end
+
+-- Size of the Full Log, for the size meter: characters and rough tokens
+function ns.GetFullLogSize(adv)
+    local text = ns.BuildAdventureFullLog(adv) or ""
+    local chars = #text
+    return chars, math.floor(chars / 4 + 0.5)
+end
+
+-- The comfortable paste size of the AI picked in Options, in characters
+function ns.GetAiLimit()
+    local key = RPCopyDB and RPCopyDB.aiModel or "GEMINI_FREE"
+    for _, m in ipairs(ns.AI_MODELS or {}) do
+        if m.key == key then
+            if m.chars then return m.chars, m.label end
+            return (RPCopyDB and RPCopyDB.aiCustomLimit) or 40000, m.label
+        end
+    end
+    return 60000, "Gemini (free)"
+end
+
+-- =========================================================
+-- Story Book: metadata parsed from an imported story
+-- The templates ask the AI for:
+--   line 1: the story title
+--   line 2: <dungeon or region> | <duration> | <zone>
+--   line 3 (optional): Date: ... | Party: ...
+--   chapter headers "Chapter N: ..." and a footer line
+--   "Bosses: N | Wipes: N | Deaths: N"
+-- Anything missing falls back to the run's own data.
+-- =========================================================
+local function Trim(s) return (s or ""):match("^%s*(.-)%s*$") end
+
+function ns.ParseStoryMeta(text)
+    local meta = { chapters = {} }
+    local plain = ns.StripColors(ns.NormalizeStoryText and ns.NormalizeStoryText(text or "") or (text or ""))
+    plain = plain:gsub("|T.-|t", ""):gsub("|A.-|a", "")
+    local lines = {}
+    for line in (plain .. "\n"):gmatch("([^\n]*)\n") do
+        line = Trim(line)
+        if line ~= "" then table.insert(lines, line) end
+    end
+    if #lines == 0 then return meta end
+    local first = lines[1]:gsub("^[Tt]itle:%s*", ""):gsub("^#+%s*", "")
+    -- A long first line is prose, not a title
+    if #first <= 90 and not first:lower():find("^use %a* ?story") then meta.title = first end
+    local second = lines[2] or ""
+    if second:find("|", 1, true) then
+        local parts = {}
+        for piece in (second .. "|"):gmatch("([^|]*)|") do table.insert(parts, Trim(piece)) end
+        meta.instance = parts[1] ~= "" and parts[1] or nil
+        meta.duration = parts[2] ~= "" and parts[2] or nil
+        meta.zone = parts[3] ~= "" and parts[3] or nil
+    end
+    for i = 2, math.min(#lines, 6) do
+        local d = lines[i]:match("[Dd]ate:%s*([^|]+)")
+        if d then meta.date = Trim(d) end
+        local party = lines[i]:match("[Pp]arty:%s*([^|]+)")
+        if party then meta.party = Trim(party) end
+    end
+    for _, line in ipairs(lines) do
+        if line:match("^[Cc]hapter%s+[%w]+") then
+            table.insert(meta.chapters, line)
+        end
+    end
+    for i = #lines, math.max(1, #lines - 4), -1 do
+        local line = lines[i]:lower()
+        local b = line:match("boss[%w%s]-:%s*(%d+)") or line:match("bosses[%w%s]-:%s*(%d+)")
+        local w = line:match("wipes?:%s*(%d+)")
+        local de = line:match("deaths?:%s*(%d+)")
+        if b or w or de then
+            meta.kills = meta.kills or tonumber(b)
+            meta.wipes = meta.wipes or tonumber(w)
+            meta.deaths = meta.deaths or tonumber(de)
+        end
+    end
+    return meta
+end
+
+-- Book fields with fallbacks to the run's data. Edited fields win.
+function ns.GetBookInfo(adv)
+    local b = (adv and type(adv.book) == "table") and adv.book or {}
+    local partyNames = {}
+    for _, p in ipairs((adv and adv.participants) or {}) do table.insert(partyNames, p.name) end
+    local info = {
+        title = b.title or (adv and adv.title) or "Untitled Story",
+        instance = b.instance or (adv and (adv.instanceName or adv.zone)) or "",
+        zone = b.zone or (adv and adv.zone) or "",
+        duration = b.duration or ns.FormatDuration(ns.GetRunDuration(adv)),
+        date = b.date or (adv and adv.startDate) or "",
+        party = b.party or table.concat(partyNames, ", "),
+        kills = b.kills or #((adv and adv.bossKills) or {}),
+        wipes = b.wipes or (adv and adv.wipes) or 0,
+        deaths = b.deaths or (adv and adv.deaths) or 0,
+        chapters = b.chapters or {},
+    }
+    if info.instance ~= "" and info.title ~= info.instance and not info.title:find(info.instance, 1, true) then
+        info.name = info.title .. " - " .. info.instance
+    else
+        info.name = info.title
+    end
+    return info
+end
+
+-- Story as clean plain text (no color codes or icons), for Discord or forums
+function ns.GetStoryPlainText(adv)
+    if not adv or not adv.story or adv.story == "" then return "" end
+    local text = ns.NormalizeStoryText(adv.story)
+    text = text:gsub("|T.-|t", ""):gsub("|A.-|a", ""):gsub("|H.-|h(.-)|h", "%1")
+    text = ns.StripColors(text):gsub("|n", "\n"):gsub("||", "|")
+    text = text:gsub("\n\n\n+", "\n\n")
+    return Trim(text) .. "\n\n(Chronicle recorded with RPCopy)"
 end
 
 -- =========================================================

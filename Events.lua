@@ -62,7 +62,8 @@ local function CheckInstanceAdventureState(isInitialLogin)
     if isDungeonOrRaid then
         local zoneName = ns.SafeStr(GetRealZoneText()) or ns.GetCurrentWhere()
         if not active then
-            if ns.StartAdventure then
+            -- Options > Recording: "Auto-record dungeons and raids" (on by default)
+            if ns.StartAdventure and RPCopyDB.autoRecord ~= false then
                 ns.StartAdventure(zoneName, true)
             end
         else
@@ -94,6 +95,15 @@ local function RestoreRunOnce()
         print("|cffffd100RPCopy|r |cff5cb85cStill recording|r |cffeceff1" .. title .. "|r |cff9aa5b4(restored after reload)|r")
     elseif result == "paused" then
         print("|cffffd100RPCopy|r |cffffb74dRecording paused|r |cffeceff1" .. title .. "|r |cff9aa5b4- type /rp resume to continue or /rp end to save it|r")
+    elseif result == "interrupted" then
+        print("|cffffd100RPCopy|r |cffffb74dSaved your last run|r |cffeceff1" .. title .. "|r |cff9aa5b4(cut short by a logout or disconnect)|r")
+        if ns.OfferInterruptedRun then
+            if C_Timer and C_Timer.After then
+                C_Timer.After(3, function() ns.OfferInterruptedRun(run) end)
+            else
+                ns.OfferInterruptedRun(run)
+            end
+        end
     end
 end
 
@@ -121,7 +131,9 @@ local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawCh
     local entry
     if channelLabel == "Party" or channelLabel == "Raid" or channelLabel == "Instance" then
         entry = ns.PushLog(ns.logs.party, line, author, channelLabel)
-    elseif channelLabel == "Guild" or channelLabel == "Channel" then
+    elseif channelLabel == "Guild" or channelLabel == "Officer" then
+        entry = ns.PushLog(ns.logs.guild, line, author, channelLabel)
+    elseif channelLabel == "Channel" then
         entry = ns.PushLog(ns.logs.world, line, author, channelLabel)
     else
         entry = ns.PushLog(ns.logs.social, line, author, channelLabel)
@@ -139,12 +151,14 @@ local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawCh
     if ns.HandleConversationCapture then
         ns.HandleConversationCapture(channelLabel, author, cleanMsg, false, nil)
     end
-    if ns.RecordAdventureChat then
+    -- Only scene chat goes into a run: say, yell, emote, whisper and group
+    -- chat. Guild and world channels (General, Trade, LFG, OOC) stay out.
+    if ns.RecordAdventureChat and channelLabel ~= "Channel" and channelLabel ~= "Guild" and channelLabel ~= "Officer" then
         ns.RecordAdventureChat(chanPrefix, author, cleanMsg)
     end
 end
 
-local function HandleNpcChat(kindLabel, rawMsg, rawAuthor, isEmote)
+local function HandleNpcChat(kindLabel, rawMsg, rawAuthor, isEmote, event)
     local cleanMsg = ns.CleanText(rawMsg)
     if not cleanMsg or cleanMsg == "" then return end
     local npcName = ns.SafeStr(rawAuthor) or "NPC"
@@ -168,6 +182,9 @@ local function HandleNpcChat(kindLabel, rawMsg, rawAuthor, isEmote)
     end
 
     ns.PushLog(ns.logs.npc, line, npcName, "NPC")
+    -- Runs keep boss and named NPC lines only (throttled, de-duplicated);
+    -- flee emotes become part of the [FIGHT] line
+    if ns.ChronicleNpc and not ns.ChronicleNpc(npcName, cleanMsg, event) then return end
     if ns.RecordAdventureChat then
         if isEmote then
             ns.RecordAdventureChat("NPC Emote", npcName, cleanMsg, true)
@@ -258,7 +275,7 @@ local function BuildLootLine(safeMsg)
         local colored = ns.ColorText("[" .. name .. "]", hex)
         table.insert(links, colored)
         if (linkData or ""):match("^item:") then
-            table.insert(items, { colored = colored, plain = "[" .. name .. "]", quality = q })
+            table.insert(items, { colored = colored, plain = "[" .. name .. "]", quality = q, link = full })
         end
         return "\001" .. #links .. "\002"
     end
@@ -365,15 +382,23 @@ local function HandleLootMessage(rawMsg, rawAuthor, isMoney)
     end
     if isMoney then
         AddCoinPickup(safeMsg)
+        if ns.RecordAdventureCoin then ns.RecordAdventureCoin(ParseCopper(safeMsg)) end
     elseif keep and not IsRollSpam(cleanPlain) then
         local line = ns.ColorText("[Loot]", ns.COLORS.lootTag) .. " " .. coloredLine
         ns.PushLog(ns.logs.loot, line, looter, "Loot")
     end
 
-    -- Uncommon (green) and better go into the adventure's key loot list
+    -- Runs: green and better (also in the Notable Loot header) and quest
+    -- items, each with where it came from
+    if isMoney or not ns.RecordAdventureLoot or IsRollSpam(cleanPlain) then return end
+    local selfName = ns.StripRealm(UnitName("player"))
+    local isSelf = (ns.StripRealm(looter) == selfName) or cleanPlain:find("^You ") ~= nil
+    local source = ns.ClassifyLootSource and ns.ClassifyLootSource(cleanPlain, isSelf) or nil
     for _, item in ipairs(items or {}) do
-        if item.quality and item.quality >= 2 and ns.RecordAdventureLoot then
-            ns.RecordAdventureLoot(item.colored, item.plain, looter)
+        if item.quality and item.quality >= 2 then
+            ns.RecordAdventureLoot(item.colored, item.plain, looter, source, true)
+        elseif ns.IsQuestItem and ns.IsQuestItem(item.link) then
+            ns.RecordAdventureLoot(item.colored, item.plain, looter, source and ("quest item, " .. source) or "quest item", false)
         end
     end
 end
@@ -429,6 +454,7 @@ local EVENTS = {
     "CHAT_MSG_INSTANCE_CHAT",
     "CHAT_MSG_INSTANCE_CHAT_LEADER",
     "CHAT_MSG_GUILD",
+    "CHAT_MSG_OFFICER",
     "CHAT_MSG_CHANNEL",
     "CHAT_MSG_MONSTER_SAY",
     "CHAT_MSG_MONSTER_YELL",
@@ -545,6 +571,7 @@ do
     end
 
     local function ScanMob(u, now)
+        if ns.FightSeeUnit then ns.FightSeeUnit(u) end
         if not UnitExists(u) or UnitIsPlayer(u) or UnitIsDead(u) then return end
         if not UnitCanAttack("player", u) then return end
         if UnitAffectingCombat and not IsTrue(UnitAffectingCombat(u)) then return end
@@ -592,6 +619,7 @@ do
         end
         local now = GetTime()
         if AnyGroupInCombat() then
+            if ns.FightBegin then ns.FightBegin() end
             groupInCombat = true
             lastCombatSeen = now
             PollBossHP()
@@ -601,6 +629,7 @@ do
             ClearTable(mobTargets)
             ClearTable(mobSwapAt)
             if ns.EndAdventureBossPull then ns.EndAdventureBossPull() end
+            if ns.FightFlush then ns.FightFlush() end
         end
     end
 
@@ -611,7 +640,8 @@ do
         local ok, err = pcall(Tick)
         if not ok and not poller.reported then
             poller.reported = true
-            print("|cffffd100RPCopy|r |cffff6b6bcombat poller error:|r " .. tostring(err))
+            if ns.Debug then ns.Debug("error", "combat poller: " .. tostring(err)) end
+            print("|cffffd100RPCopy|r |cffff6b6bcombat poller error:|r " .. tostring(err) .. " |cff9aa5b4(/rp debug for a report)|r")
         end
     end)
 
@@ -657,6 +687,8 @@ end
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_LOGIN" then
         ns.EnsureDB()
+        if ns.DebugReady then ns.DebugReady() end
+        if ns.Debug then ns.Debug("info", "login, version " .. tostring(ns.VERSION or "?")) end
         -- Version banner, read from the toc's ## Version field (see Core.lua)
         print(string.format("|cffffd100RPCopy|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -664,7 +696,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RestoreRunOnce()
         CheckInstanceAdventureState()
     elseif event == "PLAYER_LOGOUT" then
-        if ns.TouchActiveAdventure then ns.TouchActiveAdventure() end
+        if ns.TouchActiveAdventure then ns.TouchActiveAdventure(true) end
     elseif event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
         if ns.PollCombatSoon then ns.PollCombatSoon() end
     elseif event == "ZONE_CHANGED_NEW_AREA" then
@@ -830,13 +862,16 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "CHAT_MSG_GUILD" then
         local msg, author = ...
         HandlePlayerChat("Guild", ns.COLORS.guild, msg, author)
+    elseif event == "CHAT_MSG_OFFICER" then
+        local msg, author = ...
+        HandlePlayerChat("Officer", ns.COLORS.guild, msg, author)
     elseif event == "CHAT_MSG_CHANNEL" then
         local msg, author, _, channelName = ...
         HandlePlayerChat("Channel", ns.COLORS.channel, msg, author, channelName)
     elseif event == "CHAT_MSG_MONSTER_SAY" or event == "CHAT_MSG_MONSTER_YELL" or event == "CHAT_MSG_MONSTER_EMOTE" or event == "CHAT_MSG_MONSTER_WHISPER" or event == "CHAT_MSG_RAID_BOSS_EMOTE" or event == "CHAT_MSG_RAID_BOSS_WHISPER" then
         local msg, author = ...
         local isEmote = (event == "CHAT_MSG_MONSTER_EMOTE" or event == "CHAT_MSG_RAID_BOSS_EMOTE")
-        HandleNpcChat("NPC", msg, author, isEmote)
+        HandleNpcChat("NPC", msg, author, isEmote, event)
     elseif event == "CHAT_MSG_LOOT" or event == "CHAT_MSG_MONEY" then
         local msg, author = ...
         HandleLootMessage(msg, author, event == "CHAT_MSG_MONEY")
@@ -875,7 +910,7 @@ do
         GROUP = { player = true, party1 = true, party2 = true, party3 = true, party4 = true },
         PETS = { pet = "player", partypet1 = "party1", partypet2 = "party2", partypet3 = "party3", partypet4 = "party4" },
         SKIP_SPELLS = { ["Auto Shot"] = true, ["Shoot"] = true, ["Attack"] = true, ["Auto Attack"] = true },
-        SPELL_UNIT_CD = 30, SPELL_GAP = 1.0, SPELL_CAP = 200,
+        SPELL_UNIT_CD = 30, SPELL_GAP = 1.0, WORLD_SPELL_CD = 60, WORLD_SPELL_GAP = 3.0,
         BOSS_CAST_CD = 12,
         spellAt = {}, lastSpell = 0, bossCastAt = {}, bossStartAt = {},
         cc = {}, charmed = {}, auraScanAt = {}, pets = {},
@@ -887,12 +922,14 @@ do
             "paralyz", "frozen", "freeze", "web", "net", "trance", "sheep" },
     }
 
+    -- 0.4.0: open-world runs are tracked too, with stricter throttles.
+    -- Returns the run and whether it is inside a dungeon or raid.
     local function Recording()
         local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
         if not run or run.paused then return nil end
         local inInstance = false
         if IsInInstance then inInstance = IsInInstance() and true or false end
-        return inInstance and run or nil
+        return run, inInstance
     end
 
     local function ShortName(unit)
@@ -931,17 +968,25 @@ do
         return n and (" " .. word .. " " .. ns.StripRealm(n)) or ""
     end
 
-    -- [SPELL] party casts
-    local function OnPartySpell(run, unit, spellID)
-        if not GroupInCombat() then return end
-        local who = ShortName(unit)
+    -- [SPELL] party casts, pets included
+    local function OnPartySpell(run, unit, spellID, inInstance)
+        if not GroupInCombat() or not ns.LogOn("spells") then return end
+        local who
+        if T.PETS[unit] then
+            local petName, owner = ns.SafeStr(UnitName(unit)), ShortName(T.PETS[unit])
+            who = petName and owner and string.format("%s (%s's pet)", petName, owner)
+        else
+            who = ShortName(unit)
+        end
         local spell = SpellName(spellID)
         if not who or not spell or T.SKIP_SPELLS[spell] then return end
         local now = GetTime()
         local key = who .. ":" .. spell
-        if (now - (T.spellAt[key] or 0)) < T.SPELL_UNIT_CD or (now - T.lastSpell) < T.SPELL_GAP then return end
+        local cd = inInstance and T.SPELL_UNIT_CD or T.WORLD_SPELL_CD
+        local gap = inInstance and T.SPELL_GAP or T.WORLD_SPELL_GAP
+        if (now - (T.spellAt[key] or 0)) < cd or (now - T.lastSpell) < gap then return end
         run.spellLines = run.spellLines or 0
-        if run.spellLines >= T.SPELL_CAP then return end
+        if run.spellLines >= ns.Limit("spellCap") then return end
         run.spellLines = run.spellLines + 1
         T.spellAt[key] = now
         T.lastSpell = now
@@ -950,6 +995,7 @@ do
 
     -- [BOSS CAST]
     local function OnBossCast(unit, spellID, started)
+        if not ns.LogOn("bossCasts") then return end
         if UnitIsPlayer(unit) or not UnitCanAttack("player", unit) then return end
         local bName = ns.SafeStr(UnitName(unit))
         if not bName then return end
@@ -990,6 +1036,7 @@ do
 
     -- [CC] on a party member: new crowd control auras and mind control
     local function OnGroupAura(unit)
+        if not ns.LogOn("cc") then return end
         local who = ShortName(unit)
         if not who then return end
         local now = GetTime()
@@ -1021,6 +1068,7 @@ do
 
     -- [PET] badly hurt, died, back again
     local function OnPet(unit)
+        if not ns.LogOn("pets") then return end
         local ownerUnit = T.PETS[unit]
         local owner = ownerUnit and ShortName(ownerUnit)
         if not owner then return end
@@ -1048,11 +1096,11 @@ do
 
     local function Handle(event, unit, a2, a3)
         if type(unit) ~= "string" then return end
-        local run = Recording()
+        local run, inInstance = Recording()
         if not run then return end
         if event == "UNIT_SPELLCAST_SUCCEEDED" then
-            if T.GROUP[unit] then
-                OnPartySpell(run, unit, a3)
+            if T.GROUP[unit] or T.PETS[unit] then
+                OnPartySpell(run, unit, a3, inInstance)
             else
                 OnBossCast(unit, a3, false)
             end
@@ -1072,6 +1120,7 @@ do
         local ok, err = pcall(Handle, event, unit, a2, a3)
         if not ok and not tracker.reported then
             tracker.reported = true
+            if ns.Debug then ns.Debug("error", "run tracker: " .. tostring(err)) end
             print("|cffffd100RPCopy|r |cffff6b6brun tracker error:|r " .. tostring(err))
         end
     end)

@@ -30,7 +30,7 @@ Every file starts with `local ADDON_NAME, ns = ...` and shares `ns`. The UI file
 | 10 | `UI_Options.lua` | Skill templates, template modal, key capture modal, OPTIONS section pages |
 | 11 | `UI_Commands.lua` | Hidden keybind buttons, `UI.UpdateOverrideBindings`, floating `[RP]` button, `/rp` slash commands |
 | | `Bindings.xml` | Key Bindings entries |
-| | `Export_Stories.bat` | Batch + PowerShell exporter (section 10) |
+| | `Export_Stories.bat` | Batch + PowerShell exporter (section 12) |
 | | `tools/check_locals.py` | Counts active locals per function (Lua 5.1 limit of 200) |
 
 Other folders: `docs/` (screenshots and this file), `tools/`, and `.pkgmeta` (CurseForge packager). None of them ship in the release zip.

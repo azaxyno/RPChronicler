@@ -662,6 +662,34 @@ function ns.BuildAdventureSummary(adv)
     return table.concat(lines, "\n")
 end
 
+-- Party members of a run who are saved companions with a non-empty note.
+-- The live Companion book wins (notes can be edited after the run); the
+-- note captured during the run is the fallback. You are never listed.
+function ns.GetKnownCompanionNotes(adv)
+    local list = {}
+    if not adv or type(adv.participants) ~= "table" then return list end
+    local selfFull = ns.GetUnitFullName and ns.GetUnitFullName("player") or nil
+    local selfShort = ns.StripRealm(UnitName("player"))
+    for _, p in ipairs(adv.participants) do
+        local name = p.name or ""
+        local low = name:lower()
+        local isSelf = (selfFull and low == selfFull:lower()) or (selfShort and low == selfShort:lower())
+        if name ~= "" and not isSelf then
+            local note = ""
+            local key = RPCopyDB and RPCopyDB.players and ns.FindPlayerKey(name, false)
+            local entry = key and RPCopyDB.players[key]
+            if type(entry) == "table" then
+                note = (entry.note or ""):match("^%s*(.-)%s*$")
+                if note == "" then note = (p.note or ""):match("^%s*(.-)%s*$") end
+            end
+            if note ~= "" then
+                table.insert(list, { name = key or name, note = (ns.StripColors(note):gsub("[\r\n]+", " ")) })
+            end
+        end
+    end
+    return list
+end
+
 function ns.BuildAdventureFullLog(adv)
     if not adv then
         return "No adventure selected."
@@ -680,14 +708,24 @@ function ns.BuildAdventureFullLog(adv)
         for _, p in ipairs(adv.participants) do
             local rTag = ns.GetRoleTag(p.role, false)
             local rolePart = (rTag ~= "") and (", " .. rTag) or ""
-            local notePart = (p.note and p.note ~= "") and (" | RP Note: " .. p.note) or ""
-            table.insert(out, string.format("- %s (Lvl %s %s%s)%s",
-                p.name, p.level ~= "" and p.level or "?", p.class ~= "" and p.class or "Adventurer", rolePart, notePart))
+            table.insert(out, string.format("- %s (Lvl %s %s%s)",
+                p.name, p.level ~= "" and p.level or "?", p.class ~= "" and p.class or "Adventurer", rolePart))
         end
     else
         table.insert(out, "- Solo Adventurer")
     end
     table.insert(out, "")
+
+    -- Party members saved in the Companion book with an RP note, so the
+    -- storyteller knows who they are. Nobody without a note is listed.
+    local known = ns.GetKnownCompanionNotes(adv)
+    if #known > 0 then
+        table.insert(out, "Known companions:")
+        for _, k in ipairs(known) do
+            table.insert(out, "- " .. k.name .. ": " .. k.note)
+        end
+        table.insert(out, "")
+    end
 
     if adv.bossKills and #adv.bossKills > 0 then
         table.insert(out, "Bosses & Elites Defeated: " .. table.concat(adv.bossKills, ", "))

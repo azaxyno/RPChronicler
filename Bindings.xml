@@ -11,4 +11,13 @@
     <Binding name="RPCOPY_MARK" category="ADDONS">
         RPCopy_MarkMoment()
     </Binding>
+    <Binding name="RPCOPY_RUN_START" category="ADDONS">
+        RPCopy_StartRun()
+    </Binding>
+    <Binding name="RPCOPY_RUN_PAUSE" category="ADDONS">
+        RPCopy_ToggleRunPause()
+    </Binding>
+    <Binding name="RPCOPY_RUN_END" category="ADDONS">
+        RPCopy_EndRun()
+    </Binding>
 </Bindings>

@@ -618,7 +618,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             end
         end
     elseif event == "PLAYER_REGEN_DISABLED" then
-        ns.PushLog(ns.logs.combat, ns.ColorText("[Combat]", ns.COLORS.combat) .. " Entered combat")
+        -- No "[Combat] Entered combat" line: the [Status] line already says
+        -- In Combat / Out of Combat, and the extra lines crowded the slices.
         if ns.RecordAdventureCombatState then
             ns.RecordAdventureCombatState(true)
         end
@@ -630,7 +631,6 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             end
         end
     elseif event == "PLAYER_REGEN_ENABLED" then
-        ns.PushLog(ns.logs.combat, ns.ColorText("[Combat]", ns.COLORS.friendly) .. " Left combat")
         if ns.RecordAdventureCombatState then
             ns.RecordAdventureCombatState(false)
         end

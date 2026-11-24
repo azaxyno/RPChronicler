@@ -2,13 +2,16 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.2.0"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.3.0"
 
 BINDING_HEADER_RPCOPY = "RPCopy (RP Context & Chronicle)"
 BINDING_NAME_RPCOPY_OPEN = "Toggle RPCopy Window"
 BINDING_NAME_RPCOPY_QUICK = "Quick Copy (Last Used Slice)"
 BINDING_NAME_RPCOPY_CAPTURE = "Capture / Update Target Companion"
 BINDING_NAME_RPCOPY_MARK = "Bookmark Adventure Moment"
+BINDING_NAME_RPCOPY_RUN_START = "Start Recording an Adventure"
+BINDING_NAME_RPCOPY_RUN_PAUSE = "Pause / Resume Recording"
+BINDING_NAME_RPCOPY_RUN_END = "End & Save Recording"
 
 ns.MAX_LINES = 25
 ns.MAX_PLAYER_CHAT = 5

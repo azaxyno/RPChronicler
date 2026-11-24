@@ -1,0 +1,10 @@
+package-as: RPCopy
+
+ignore:
+  - docs
+  - tools
+  - .claude
+  - backup
+  - CLAUDE.md
+  - "*.pdf"
+  - .pkgmeta

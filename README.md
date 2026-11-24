@@ -16,7 +16,7 @@ You build a **character skill** in your AI once. The skill knows who your charac
 
 Along the way, RPCopy remembers the **companions** you meet, so your AI knows who they are next time. It also records your **dungeon and raid runs**, so the AI can turn them into colored story chronicles you read inside the game.
 
-- **Version:** 0.2.0 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.3.0 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide)
 - **License:** MIT
 
@@ -35,10 +35,11 @@ Along the way, RPCopy remembers the **companions** you meet, so your AI knows wh
 ## Quick start
 
 1. **Install** the addon (see [Installation](#installation)) and type `/rp` in game.
+   The rail on the left of the window switches between **Copy**, **Companions** and **Adventures**. The **gear** at the top right opens **Options**.
 2. **Create your character skill** (one time):
-   - Open **Options** and click the **RP Template** button. Copy the template with `Ctrl+C`.
+   - Click the **gear** at the top right of the window, open **AI Setup**, and click **RP Template**. Copy the template with `Ctrl+C`.
    - Paste it into Gemini (or any AI that supports custom skills, Gems, GPTs or projects). Fill in your character: name, faction, race, class, personality, quirks and inspiration. Let the AI build the skill.
-   - Pick a short **trigger**, such as `use aloria`, and set the same trigger in **Options > Skill Call**. Every snapshot starts with `[Skill Call] use aloria`, so the AI knows to use your character's skill.
+   - Pick a short **trigger**, such as `use aloria`, and enter it as the **Skill Call** of your slice in **Options > Slice Tabs**. Every snapshot starts with `[Skill Call] use aloria`, so the AI knows to use your character's skill.
 3. **Play.** When someone talks to you, press `Ctrl+C` once, in or out of combat, or use `/rp quick`. A toast confirms the copy. To steer the AI, use `/rp <instruction>`, for example `/rp make it flirty`.
 4. **Paste into your AI.** It replies with up to 5 short options, written for the channel (say, party, whisper and so on). Copy one into WoW chat.
 
@@ -163,13 +164,13 @@ Each tab is a "slice", meaning a preset of what goes into the snapshot. The buil
 
 | Tab | Best for |
 |---|---|
-| **Smart** | Everyday RP: direct message, target, party, status, recent combat |
+| **Smart** | Everyday RP: direct message, target, party, status |
 | **Chat** | Conversations: say, yell and whisper history |
 | **Party** | Group banter: party and raid chat plus the roster |
 | **Quest** | Questing flavor: your active quest |
 | **Loot** | Reacting to drops |
 
-You can add **custom tabs** with their own trigger and any mix of these sections: direct message, target info, party roster, status and pet, active quest, combat and deaths, social chat, OOC channel, party and raid chat, NPC dialogue, and loot log. `Ctrl+C` always copies the slice you used last.
+You can add **custom tabs** with their own trigger and any mix of these sections: direct message, target info, party roster, status and pet, active quest, deaths and level ups, social chat, OOC channel, party and raid chat, NPC dialogue, and loot log. `Ctrl+C` always copies the slice you used last.
 
 Loot lines are colored the way the game colors them: item names by quality (gray, white, green, blue, purple, orange), money in gold, silver and copper colors, and the rest of the line in a soft teal.
 
@@ -184,10 +185,10 @@ RPCopy also works as a quiet chronicler. The point of recording a run is to capt
 The flow is:
 
 1. **Play the run.** RPCopy logs it automatically.
-2. **Copy the Full Log** from the run in the Adventures view.
-3. **Paste it into your AI** with the `wow-adventure-story` skill. The skill's template is in the Story view. The AI returns a story written with WoW color codes.
+2. **Copy the Full Log** from the run in the Adventures view. If any party member is a saved companion with a note, the log starts with a **Known companions** block, so the story can use what you know about them.
+3. **Paste it into your AI** with the `wow-adventure-story` skill. The skill's template is in the Story view and in **Options > Adventures**. The AI returns a story written with WoW color codes.
 4. **Import Story** on the same run. The story is saved with that run.
-5. **Read it in game** in the Story reader, with gold chapter titles, class-colored party names and orange bosses. Drag the grip in the window's bottom-right corner to make it bigger and see more of the story at once. Right-click the grip to reset the size.
+5. **Read it in game** in the Story reader, with gold chapter titles, class-colored party names and orange bosses. Drag the grip in the window's bottom-right corner to make it bigger and see more of the story at once. Right-click the grip to reset the size and place.
 
 ![The in-game Story reader showing a colored Shadowfang Keep chapter](docs/story-viewer.png)
 
@@ -195,7 +196,8 @@ How it works:
 
 - **Automatic logging** starts when you enter a dungeon or raid and stops when you leave. You can also start a run manually anywhere.
 - **Recording light.** While a run records, the floating `[RP]` button shows a pulsing red dot and a red border. While it's paused, the dot and border turn amber. Hover the button to see which run it is.
-- **Pause and Resume.** Use the **Pause** button in the Adventures view, or `/rp pause` and `/rp resume`. A paused run records nothing until you resume it, and it isn't ended when you leave the instance.
+- **Record bar.** The top of the Adventures view has **Start run** / **End run**, **Pause** and **Mark** buttons. You can also give each one a key in **Options > Keybinds**, or use `/rp start`, `/rp pause`, `/rp resume` and `/rp end`.
+- **Pause and Resume.** A paused run records nothing until you resume it, and it isn't ended when you leave the instance.
 - **Survives /reload and disconnects.** The live run is saved as you play. After a `/reload` or a disconnect it picks up where it left off, with a note in chat, if you're back within 2 minutes or in the same dungeon. If you come back later and somewhere else, the run comes back **paused**, so nothing unrelated gets mixed in: type `/rp resume` to continue it or `/rp end` to save it.
 - **Timestamped `[HH:MM:SS]` timeline** with these tags:
   - `[BOSS ENGAGED]` when a boss is pulled
@@ -210,7 +212,7 @@ How it works:
   - `[NPC Emote]` lines such as `Hungry Bandit attempts to run away in fear!`
 - **Roles always shown.** When nobody has picked a role, RPCopy guesses Tank, Healer or DPS from forms and stances, your own talents, who keeps holding aggro, and finally the class, so the roster and snapshots always show one.
 - **Fight context on chat.** Chat is tagged with the fight it happened in, for example `[Party | vs Boss 5% HP] Healer: OOM!!`, so the story knows exactly when someone panicked.
-- **Mark Moment.** Set a key in **Options > Mark Moment** (or use the WoW keybinding or `/rp mark [note]`) to star a moment as a highlight. With Auto-Shots on, it also takes a screenshot.
+- **Mark Moment.** Set a key in **Options > Keybinds** (or use the WoW keybinding or `/rp mark [note]`) to star a moment as a highlight. With Auto-Shots on, it also takes a screenshot.
 - **Full Log** export, then **Import Story**. Copy the log into an AI that has the `wow-adventure-story` skill (its template is in the Story view). Paste the colored chronicle back, and read it in the in-game **Story** reader. The story skill is told to use only what's in the log: no invented bosses, loot or quotes. Timestamps and HP or mana percentages help the AI order the story, but the story itself never mentions them; it describes them in-world instead.
 - **Export stories to files.** Double-click `Export_Stories.bat` in the RPCopy folder. It writes every saved run to `World of Warcraft\_forever_\RPCopy Stories\`: the story as a colored web page and as plain text, the Full Log, and an `index.html`. It needs only Windows PowerShell, which every Windows has. The game saves your data on `/reload` or logout, so do one of those first to include your newest story.
 - **Auto screenshots** (turn on **Auto-Shots**) at key moments during a run: every boss kill, marked moments, level-ups, quests and new zones. Boss kills and marks always get a shot; the others are spaced at least 20 seconds apart. Boss kills are detected from the encounter end, or from the boss dying on your target or boss frame. Shots are combat-safe and capped per run.
@@ -224,6 +226,9 @@ How it works:
 |---|---|
 | `/rp` or `/rpcopy` | Open the RPCopy window |
 | `/rp <instruction>` | Open the window with a one-time instruction for the AI added to the snapshot |
+| `/rp start` | Start recording an adventure |
+| `/rp options` | Open Options (also `/rp config`) |
+| `/rp companions` / `/rp adventures` | Open the window on that view |
 | `/rp quick` | Quick-copy the last used slice |
 | `/rp capture` | Save or update your target (or mouseover, or last whisperer) as a companion |
 | `/rp mark [note]` | Bookmark the latest moment, or your note, in the active run |
@@ -231,12 +236,22 @@ How it works:
 | `/rp end` | End and save the active run |
 | `/rp diag` | Print what RPCopy can read about your target (boss detection, health, its target) and your guessed role. Handy when boss HP lines don't show up |
 | `/rp clear` | Clear the session chat, combat, NPC and loot buffers |
-| (window) | Drag the bottom-right grip to resize the RPCopy window, right-click it to reset. The size is saved. Press `Esc` to close it. |
+| (window) | Drag the title bar to move the window and the bottom-right grip to resize it. Right-click the grip to reset size and place. Both are saved. Press `Esc` to close it. |
 | `/rp btn` | Show or hide the draggable floating `[RP]` button (right-click it to clear logs) |
 
 ## Keybindings
 
-The **Options** keybinding bar sets RPCopy's own shortcuts: **Quick Copy** (`Ctrl+C`), **Target** capture (`Shift+C`) and **Mark Moment** (no key until you set one; right-click to clear). Click a key button and press the combo you want. Avoid Ctrl combos for Target and Mark, since instant `Ctrl+C` takes the keyboard while Ctrl is held.
+Click the **gear** and open **Keybinds** to set RPCopy's own shortcuts. Click a key button and press the combo you want. Right-click a key button to clear it (or reset it to its default).
+
+| Keybind | Default |
+|---|---|
+| Quick Copy | `Ctrl+C` |
+| Capture Target | `Shift+C` |
+| Mark Moment | none |
+| Open / Close Window | none |
+| Start Recording | none |
+| Pause / Resume Recording | none |
+| End Recording | none |
 
 You can also set these in **Esc > Key Bindings > AddOns > RPCopy (RP Context & Chronicle)**:
 
@@ -246,8 +261,18 @@ You can also set these in **Esc > Key Bindings > AddOns > RPCopy (RP Context & C
 | Quick Copy (Last Used Slice) | Same as `/rp quick` |
 | Capture / Update Target Companion | Same as `/rp capture` |
 | Bookmark Adventure Moment | Same as `/rp mark` |
+| Start Recording an Adventure | Same as `/rp start` |
+| Pause / Resume Recording | Same as `/rp pause` and `/rp resume` |
+| End & Save Recording | Same as `/rp end` |
 
-Silent quick copy (`Ctrl+C` by default) copies on the first press, in or out of combat, without stopping your character. WoW addons can't write to the clipboard directly, so when you press Ctrl down RPCopy briefly focuses a hidden box with the snapshot selected, and your own Ctrl+C copies it. The box lets go as soon as you press C, press any other key or release Ctrl. While Ctrl is held, other Ctrl+key shortcuts won't fire. If you set a custom key in Options, it uses two presses: your key arms the copy, then Ctrl+C copies. You can also turn it off in Options.
+### How Ctrl+C copying works
+
+WoW addons can't write to the clipboard directly. RPCopy puts the snapshot, selected, in a hidden box, and your own `Ctrl+C` copies it. There are two copy styles in **Options > Keybinds**:
+
+- **Instant** (default). Hold Ctrl for a moment and RPCopy gets the box ready, so `Ctrl+C` copies on the first press. Your other Ctrl shortcuts (`Ctrl+1`, `Ctrl+Q` and so on) still work: RPCopy only takes `Ctrl+C`, and lets every other key pass through to the game. If you press `Ctrl+C` very fast, it gets the box ready and a second `Ctrl+C` copies.
+- **Two-press.** The first `Ctrl+C` gets the box ready, the second copies. Ctrl is never watched.
+
+In combat, Instant switches to two-press so nothing interferes with your keys, unless you turn on **Instant in combat**. A custom Quick Copy key always works as two-press: your key gets the box ready, then `Ctrl+C` copies. You can also turn Quick Copy off.
 
 ---
 
@@ -276,7 +301,12 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 3 | `Adventures.lua` | Run lifecycle, timeline telemetry, Full Log export, story storage | `StartAdventure`, `EndAdventure`, `RecordAdventureBossHP`, `RecordAdventureChat`, `BuildAdventureFullLog`, `SetAdventureStory`, `MarkAdventureHighlight` |
 | 4 | `Screenshots.lua` | Debounced, combat-safe automatic screenshots | `RequestScreenshot` |
 | 5 | `Events.lua` | Central event dispatcher (chat, unit health and power, threat, loot, instance changes) that routes to `ns.*`, plus the combat poller for boss HP, pull ends and aggro | internal `RPCopyEventFrame` |
-| 6 | `UI.lua` | Main window, slice tabs, Companions / Adventures / Options views, Story reader, skill template and import modals, `Ctrl+C` override, slash commands | `RPCopy_Open`, `RPCopy_Toggle`, `RPCopy_QuickCopy`, `RPCopy_CaptureTarget` |
+| 6 | `UI_Shell.lua` | Shared `ns.UI` table, option defaults, theme and button helpers, the main window with its left rail, gear, sections, status line, resize and saved position | `UI.NewSection`, `UI.ShowSection`, `RPCopy_Open`, `RPCopy_Toggle` |
+| 7 | `UI_Copy.lua` | Copy view (slice strip, snapshot box, AI instruction), quick-copy engine | `RPCopy_QuickCopy`, `RPCopy_CaptureTarget`, `UI.ArmCtrlCopy` |
+| 8 | `UI_Companions.lua` | Companions view: list and note editor | `UI.RefreshPlayersTab`, `UI.OpenCompanion` |
+| 9 | `UI_Adventures.lua` | Adventures view: record bar, run list, Story reader, story import | `RPCopy_StartRun`, `RPCopy_ToggleRunPause`, `RPCopy_EndRun` |
+| 10 | `UI_Options.lua` | Options pages (General, Keybinds, Slice Tabs, Adventures, AI Setup), skill templates, key capture | `UI.OpenOptionsPage`, `UI.OpenSkillTemplateModal` |
+| 11 | `UI_Commands.lua` | Keybind override buttons, floating `[RP]` button, slash commands | `UI.UpdateOverrideBindings` |
 | | `Bindings.xml` | Keybinding definitions | |
 
 ### Saved data (`RPCopyDB`)
@@ -288,7 +318,9 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | `adventures` | Up to 40 runs: zone, dates, duration, party, wipes, deaths, boss kills, loot, highlights, timeline, screenshots, export text, story |
 | `activeRun` | The run being recorded right now (with its paused state), so it survives `/reload` and disconnects |
 | `knownBosses` | Names of bosses you've fought, so classic bosses without a skull are recognized next time |
-| `quickCtrlC`, `autoScreenshots` | Feature toggles |
+| `quickCtrlC`, `autoScreenshots`, `copyMode`, `instantInCombat` | Feature toggles and the copy style |
+| `quickCopyKey`, `captureTargetKey`, `markMomentKey`, `openWindowKey`, `runStartKey`, `runPauseKey`, `runEndKey` | Your RPCopy keybinds |
+| `frameW`, `frameH`, `frameX`, `frameY`, `optionsPage` | Window size, place and the last Options page |
 
 Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or `/rp clear`.
 

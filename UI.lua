@@ -331,7 +331,7 @@ titleText:SetText("|cffffd100RPCopy|r |cffd8dee9- Pick a Slice & Press Ctrl+C (E
 
 local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 verBadge:SetPoint("RIGHT", -34, 0)
-verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "3.9.1") .. "|r")
+verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.1.0") .. "|r")
 
 local closeBtn = CreateSleekButton(headerBar, 22, 20, "x", "danger")
 closeBtn:SetPoint("RIGHT", -5, 0)

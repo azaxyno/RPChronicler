@@ -16,7 +16,7 @@ You build a **character skill** in your AI once. The skill knows who your charac
 
 Along the way, RPCopy remembers the **companions** you meet, so your AI knows who they are next time. It also records your **dungeon and raid runs**, so the AI can turn them into colored story chronicles you read inside the game.
 
-- **Version:** 3.9.1 (interface `16001`, WoW: Forever)
+- **Version:** 0.1.0 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide)
 - **License:** MIT
 
@@ -242,7 +242,7 @@ Silent quick copy (`Ctrl+C` by default) copies on the first press, in or out of 
 
 ## Installation
 
-1. Download this repository: **Code > Download ZIP**, or `git clone https://github.com/azaxyno/RPCopy.git`.
+1. Download `RPCopy-vX.Y.Z.zip` from the latest [Release](https://github.com/azaxyno/RPCopy/releases) and unzip it into your AddOns folder. Or clone the repository: `git clone https://github.com/azaxyno/RPCopy.git`.
 2. Put the folder in your AddOns directory and make sure it's named exactly `RPCopy`:
    ```
    World of Warcraft\_forever_\Interface\AddOns\RPCopy\RPCopy.toc
@@ -287,7 +287,7 @@ Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or 
 - Text pasted into WoW edit boxes turns `|` into `||`. `ns.NormalizeStoryText` converts it back, strips code fences, and closes any open color tags before the story is rendered.
 - Screenshots fade `UIParent` with `SetAlpha` instead of hiding it, which avoids `ADDON_ACTION_BLOCKED` in combat.
 - The Forever client runs on the modern engine, where `COMBAT_LOG_EVENT_UNFILTERED` is Blizzard-only. Registering it shows the "blocked from an action only available to the Blizzard UI" popup on every load, so RPCopy skips it when `issecretvalue` exists. Boss kills come from `ENCOUNTER_END` and your own deaths from `PLAYER_DEAD`. If that popup ever shows up, `Logs/taint.log` in the game folder names the file and line.
-- **Versioning.** Bump `## Version` in `RPCopy.toc` with every change: a patch bump (3.7.1 to 3.7.2) for small fixes, a minor bump (3.7 to 3.8) for big updates. The chat banner on load reads it, so you can tell at a glance which build is running.
+- **Versioning.** Bump `## Version` in `RPCopy.toc` with every change: a patch bump (0.1.0 to 0.1.1) for small fixes, a minor bump (0.1 to 0.2) for big updates. RPCopy is in alpha, so versions stay below 1.0. The chat banner on load reads it, so you can tell at a glance which build is running. Each version is tagged and published as a GitHub Release with a downloadable zip.
 
 ---
 

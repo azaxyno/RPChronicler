@@ -1744,7 +1744,42 @@ end
 -- plain prose is touched; text the AI already colored is left alone.
 -- Options > Stories & Export can turn it off.
 -- =========================================================
-local PROSE_HEX = { eceff1 = true, e0e0e0 = true, f5e6c8 = true, d7c4a3 = true, ffffff = false }
+local PROSE_HEX = { eceff1 = true, e0e0e0 = true, f5e6c8 = true, d7c4a3 = true }
+
+-- 0.5.2: any light, nearly gray color counts as prose (the AI often wraps
+-- whole paragraphs in white or cream), so names inside it get colored too.
+-- Priest gray C0C0C0 and darker grays stay names.
+local function IsProseHex(hex)
+    if not hex then return true end
+    if PROSE_HEX[hex] then return true end
+    local r, g, b = tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16)
+    if not (r and g and b) then return false end
+    local lo, hi = math.min(r, g, b), math.max(r, g, b)
+    return lo >= 0xD0 and (hi - lo) <= 0x30
+end
+
+-- NPC names from a run's timeline: speakers, quest givers and quest text.
+-- Cached on the story, so they survive deleting the recording.
+local function StoryNpcNames(st)
+    local run = ns.StoryRun(st)
+    if run and type(run.fullTimeline) == "table" then
+        local seen, list = {}, {}
+        for _, line in ipairs(run.fullTimeline) do
+            local plain = ns.StripColors(type(line) == "table" and (line.line or "") or tostring(line or ""))
+            local npc = plain:match("%[NPC[^%]]*%]%s*([^:]+):") or plain:match("%[QUEST TEXT%]%s*([^:]+):")
+                or plain:match("%[QUEST%] Accepted: .- from (.+)$") or plain:match("%[QUEST%] Completed: .- for (.+)$")
+            if npc then
+                npc = npc:match("^%s*(.-)%s*$")
+                if npc ~= "" and npc ~= "Quest giver" and not seen[npc] then
+                    seen[npc] = true
+                    table.insert(list, npc)
+                end
+            end
+        end
+        st.npcNames = list
+    end
+    return type(st.npcNames) == "table" and st.npcNames or {}
+end
 local PET_HEX, PLACE_HEX, FOE_HEX, NPC_HEX = "80cbc4", "40e0d0", "dc143c", "fff0a0"
 
 local function StoryNameColors(st)
@@ -1771,13 +1806,7 @@ local function StoryNameColors(st)
     for name, m in pairs(st.metCompanions or {}) do
         if type(m) == "table" and m.kind == "npc" then Put(name, NPC_HEX, true) end
     end
-    local run = ns.StoryRun(st)
-    for _, line in ipairs((run and run.fullTimeline) or {}) do
-        local plain = ns.StripColors(line)
-        local npc = plain:match("%[NPC[^%]]*%]%s*([^:]+):") or plain:match("%[QUEST%] [AC]%a+: .- from (.+)$")
-            or plain:match("%[QUEST%] Completed: .- for (.+)$")
-        if npc then Put(npc, NPC_HEX) end
-    end
+    for _, npc in ipairs(StoryNpcNames(st)) do Put(npc, NPC_HEX) end
     for _, item in ipairs(st.keyLoot or {}) do
         if type(item) == "table" and item.colored then
             local hex = item.colored:match("|c%x%x(%x%x%x%x%x%x)")
@@ -1801,6 +1830,9 @@ local function StoryNameColors(st)
         if p.pet then
             local petName = p.pet:match("^(.-)%s*%(") or p.pet
             Put(petName, PET_HEX, true)
+            -- the species too ("her Crab"); capitalized only, so "crab meat" stays plain
+            local species = p.pet:match("%(([^,%)]+)")
+            if species and species:match("^%u") then Put(species, PET_HEX) end
         end
     end
     return map
@@ -1809,13 +1841,32 @@ end
 function ns.AutoColorStory(text, st)
     if type(text) ~= "string" or text == "" or type(st) ~= "table" then return text end
     local map = StoryNameColors(st)
+    -- 0.5.2: a name the AI colored once is colored everywhere, in that color
+    for hex, inner in text:gmatch("|c%x%x(%x%x%x%x%x%x)([^|]-)|r") do
+        hex = hex:lower()
+        inner = inner:match("^%s*(.-)%s*$")
+        if not IsProseHex(hex) and hex ~= "ffd100" and #inner >= 3 and #inner <= 40 and not inner:find("[%d:%.,!?\"]")
+            and inner:match("^%u") and select(2, inner:gsub("%S+", "")) <= 4 and not map[inner] then
+            map[inner] = hex
+        end
+    end
+    -- A party member's first name followed by a surname ("Aloria Sunwhisper")
+    for _, p in ipairs(st.participants or {}) do
+        local first = ns.SplitFullName(p.name or "")
+        local hex = first ~= "" and map[first]
+        if hex then
+            for full in text:gmatch("%f[%w](" .. EscapePattern(first) .. " %u%l+)%f[^%w]") do
+                if not map[full] then map[full] = hex end
+            end
+        end
+    end
     local names = {}
     for name in pairs(map) do table.insert(names, name) end
     if #names == 0 then return text end
     table.sort(names, function(a, b) return #a > #b end)
 
     local function ColorPlain(seg, cur)
-        if cur and not PROSE_HEX[cur] then return seg end
+        if not IsProseHex(cur) then return seg end
         local held = {}
         for idx, name in ipairs(names) do
             seg = seg:gsub("%f[%w]" .. EscapePattern(name) .. "%f[^%w]", function()

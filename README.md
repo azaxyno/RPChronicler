@@ -14,7 +14,7 @@ RPCopy also remembers the **companions** you meet, records your **dungeons, raid
                              5 short in-character options
 ```
 
-- **Version:** 0.5.2 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.5.3 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide, on your PC only)
 - **License:** MIT
 
@@ -296,7 +296,7 @@ The header has the run type, zone, date and duration, levels gained, quests comp
 The Story Book has its own place on the rail. Every story your AI wrote is there, named from the story, for example *Shadows Over Pyrewood - Shadowfang Keep*, with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
 
 - **Read** it in game, with gold chapter titles, class-colored party names, crimson bosses and foes, sea-green pets and turquoise places. Bosses get an icon: a skull, a gold dragon for an elite, a silver dragon for a rare.
-- **Auto-color.** Names the AI left plain are colored on import from the run itself: party, pets, places, foes, NPCs and items. Turn it off in **Options > Stories & Export**.
+- **Auto-color.** Names the AI left plain are colored from the run itself: party (with surnames), pets and their species, places, foes, NPCs and quest givers, and items. A name the AI colored once is colored everywhere. It works on stories you already imported too. Turn it off in **Options > Stories & Export**.
 - **Share** copies the story as clean plain text for Discord or a forum. **Details** edits any field. **Re-Import** replaces the text and keeps your details. **Recording** jumps to the run. **Delete** removes the story.
 - **Stories stand on their own.** Deleting a recording keeps its story and its details.
 - Drag the grip in the bottom-right corner to make the reader bigger.

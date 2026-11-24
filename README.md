@@ -16,7 +16,7 @@ You build a **character skill** in your AI once. The skill knows who your charac
 
 Along the way, RPCopy remembers the **companions** you meet, so your AI knows who they are next time. It also records your **dungeon and raid runs**, so the AI can turn them into colored story chronicles you read inside the game.
 
-- **Version:** 0.3.0 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.3.1 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide)
 - **License:** MIT
 
@@ -164,13 +164,22 @@ Each tab is a "slice", meaning a preset of what goes into the snapshot. The buil
 
 | Tab | Best for |
 |---|---|
-| **Smart** | Everyday RP: direct message, target, party, status |
+| **Smart** | Everything nearby: direct message, target, party, status, say and emotes, party chat, NPC dialogue |
 | **Chat** | Conversations: say, yell and whisper history |
-| **Party** | Group banter: party and raid chat plus the roster |
+| **Party** | Your group only: party and raid chat, say and emotes from party members, the roster and status |
 | **Quest** | Questing flavor: your active quest |
-| **Loot** | Reacting to drops |
+| **Loot** | Reacting to drops: green and better items and your coin, summed |
 
-You can add **custom tabs** with their own trigger and any mix of these sections: direct message, target info, party roster, status and pet, active quest, deaths and level ups, social chat, OOC channel, party and raid chat, NPC dialogue, and loot log. `Ctrl+C` always copies the slice you used last.
+You can change what every tab copies, built-in ones included, in **Options > Slice Tabs**, and add **custom tabs** with their own Skill Call. The sections are: last whisper or say to you, target info, party roster, status (with your pet, and deaths or level ups from the last 15 minutes), active quest, say / yell / whispers, say and emotes from party members only, party and raid chat, NPC dialogue, loot, the OOC channel, and world channels and guild. `Ctrl+C` always copies the slice you used last.
+
+How the copy reads:
+
+- **One timeline.** All the chat sections a tab includes are merged into one list in the order things happened, so the AI sees who said what, and when.
+- **No repeats.** When the message to you is already in the timeline, it is marked `[Direct]` there instead of being copied twice. A companion's "Latest Chat" leaves out lines the copy already shows. There is one quest line only.
+- **World chat stays out of the way.** Trade, General, LFG and guild chat have their own buffer and are off by default, so busy channels never push nearby RP out. Turn on **World channels, guild** for a tab that should include them.
+- **Clean loot.** Green and better items, and who won them, are kept. Gray items and roll messages ("has selected Greed", "passed on") are left out, and the coin you pick up is summed into one line, such as `You picked up 2 Gold 2 Silver 8 Copper (3 pickups)`.
+
+When you update to 0.3.1, the five built-in tabs get their new contents once. Their names and Skill Calls stay as you set them, and your custom tabs aren't touched.
 
 Loot lines are colored the way the game colors them: item names by quality (gray, white, green, blue, purple, orange), money in gold, silver and copper colors, and the rest of the line in a soft teal.
 
@@ -188,7 +197,7 @@ The flow is:
 2. **Copy the Full Log** from the run in the Adventures view. If any party member is a saved companion with a note, the log starts with a **Known companions** block, so the story can use what you know about them.
 3. **Paste it into your AI** with the `wow-adventure-story` skill. The skill's template is in the Story view and in **Options > Adventures**. The AI returns a story written with WoW color codes.
 4. **Import Story** on the same run. The story is saved with that run.
-5. **Read it in game** in the Story reader, with gold chapter titles, class-colored party names and orange bosses. Drag the grip in the window's bottom-right corner to make it bigger and see more of the story at once. Right-click the grip to reset the size and place.
+5. **Read it in game** in the Story reader, with gold chapter titles, class-colored party names and crimson bosses. Each boss name gets an icon, the way the game marks it: a skull for a boss, a gold dragon for an elite and a silver dragon for a rare. Drag the grip in the window's bottom-right corner to make it bigger and see more of the story at once. Right-click the grip to reset the size and place.
 
 ![The in-game Story reader showing a colored Shadowfang Keep chapter](docs/story-viewer.png)
 
@@ -204,7 +213,12 @@ How it works:
   - `[BOSS HP]` at 50%, 20% and 5%, read live from the boss, your target, your focus and your party's targets (no combat log needed). Classic dungeon bosses without a skull are recognized too, and bosses you've fought once are remembered.
   - `[BOSS RESET]` when a boss survives the pull (wipe, reset or evade). Its HP milestones start fresh on the next attempt.
   - `[AGGRO]` when an enemy switches from one party member to another, for example `[AGGRO] Hungry Bandit turns from Aloria to Grakk`
-  - `[DANGER]` at low HP, and `[LOW MANA]` at low mana
+  - `[DANGER]` when anyone in the party drops under 10% HP, and `[SAVED]` when they're pulled back from the brink
+  - `[LOW MANA]` at low mana
+  - `[SPELL]` for spells the party casts in combat, for example `[SPELL] Mira casts Flash Heal on Grakk` (throttled, so one spell shows at most every 30 seconds per person)
+  - `[BOSS CAST]` for what a boss casts, and at whom
+  - `[CC]` when a party member is mind controlled, feared, stunned, polymorphed and so on
+  - `[PET]` and `[PET DEATH]` when a pet is badly hurt, dies, or comes back
   - `[DEATH]` for your own deaths
   - `[WIPE #N]`
   - `[REZ]` for resurrections
@@ -214,7 +228,7 @@ How it works:
 - **Fight context on chat.** Chat is tagged with the fight it happened in, for example `[Party | vs Boss 5% HP] Healer: OOM!!`, so the story knows exactly when someone panicked.
 - **Mark Moment.** Set a key in **Options > Keybinds** (or use the WoW keybinding or `/rp mark [note]`) to star a moment as a highlight. With Auto-Shots on, it also takes a screenshot.
 - **Full Log** export, then **Import Story**. Copy the log into an AI that has the `wow-adventure-story` skill (its template is in the Story view). Paste the colored chronicle back, and read it in the in-game **Story** reader. The story skill is told to use only what's in the log: no invented bosses, loot or quotes. Timestamps and HP or mana percentages help the AI order the story, but the story itself never mentions them; it describes them in-world instead.
-- **Export stories to files.** Double-click `Export_Stories.bat` in the RPCopy folder. It writes every saved run to `World of Warcraft\_forever_\RPCopy Stories\`: the story as a colored web page and as plain text, the Full Log, and an `index.html`. It needs only Windows PowerShell, which every Windows has. The game saves your data on `/reload` or logout, so do one of those first to include your newest story.
+- **Export stories to files.** Double-click `Export_Stories.bat` in the RPCopy folder. It writes every saved run to `World of Warcraft\_forever_\RPCopy Stories\`: the story as a colored web page (with the same boss icons) and as plain text, the Full Log, and an `index.html`. It needs only Windows PowerShell, which every Windows has. The game saves your data on `/reload` or logout, so do one of those first to include your newest story.
 - **Auto screenshots** (turn on **Auto-Shots**) at key moments during a run: every boss kill, marked moments, level-ups, quests and new zones. Boss kills and marks always get a shot; the others are spaced at least 20 seconds apart. Boss kills are detected from the encounter end, or from the boss dying on your target or boss frame. Shots are combat-safe and capped per run.
 - Up to 40 runs are archived.
 
@@ -315,7 +329,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 |---|---|
 | `tabs` | Your slice tabs (label, trigger, section toggles) |
 | `players[name]` | Companions: your note, level, race, class, guild, last seen, last 5 chat lines |
-| `adventures` | Up to 40 runs: zone, dates, duration, party, wipes, deaths, boss kills, loot, highlights, timeline, screenshots, export text, story |
+| `adventures` | Up to 40 runs: zone, dates, duration, party, wipes, deaths, boss kills and boss types (for the icons), loot, highlights, timeline, screenshots, export text, story |
 | `activeRun` | The run being recorded right now (with its paused state), so it survives `/reload` and disconnects |
 | `knownBosses` | Names of bosses you've fought, so classic bosses without a skull are recognized next time |
 | `quickCtrlC`, `autoScreenshots`, `copyMode`, `instantInCombat` | Feature toggles and the copy style |
@@ -331,7 +345,7 @@ Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or 
 - WoW fonts can't draw Unicode symbols such as stars, arrows or smart quotes, so all in-game text is plain ASCII. Colors use `|cffRRGGBB...|r` escape codes only, never Markdown.
 - Text pasted into WoW edit boxes turns `|` into `||`. `ns.NormalizeStoryText` converts it back, strips code fences, and closes any open color tags before the story is rendered.
 - Screenshots fade `UIParent` with `SetAlpha` instead of hiding it, which avoids `ADDON_ACTION_BLOCKED` in combat.
-- The Forever client runs on the modern engine, where `COMBAT_LOG_EVENT_UNFILTERED` is Blizzard-only. Registering it shows the "blocked from an action only available to the Blizzard UI" popup on every load, so RPCopy never registers it. A light poller (a plain frame, no protected calls) reads boss HP from `boss1-5`, `target`, `focus` and `partyNtarget`, ends pulls when the whole group leaves combat, and tracks aggro from each enemy's target (target, party targets and nameplates). Boss kills come from `ENCOUNTER_END` or a dead boss unit, and your own deaths from `PLAYER_DEAD`. Values the client hides as "secret" are skipped instead of erroring; `/rp diag` shows what is readable. If that popup ever shows up, `Logs/taint.log` in the game folder names the file and line.
+- The Forever client runs on the modern engine, where `COMBAT_LOG_EVENT_UNFILTERED` is Blizzard-only. Registering it shows the "blocked from an action only available to the Blizzard UI" popup on every load, so RPCopy never registers it. A light poller (a plain frame, no protected calls) reads boss HP from `boss1-5`, `target`, `focus` and `partyNtarget`, ends pulls when the whole group leaves combat, and tracks aggro from each enemy's target (target, party targets and nameplates). Boss kills come from `ENCOUNTER_END` or a dead boss unit, and your own deaths from `PLAYER_DEAD`. Party spells, boss casts, crowd control and pets come from `UNIT_SPELLCAST_*`, `UNIT_AURA`, `UNIT_PET` and `UNIT_HEALTH`, only while a run records inside a dungeon or raid, and each one is throttled. Values the client hides as "secret" are skipped instead of erroring; `/rp diag` shows what is readable. If that popup ever shows up, `Logs/taint.log` in the game folder names the file and line.
 - **Versioning.** Bump `## Version` in `RPCopy.toc` with every change: a patch bump (0.1.0 to 0.1.1) for small fixes, a minor bump (0.1 to 0.2) for big updates. RPCopy is in alpha, so versions stay below 1.0. The chat banner on load reads it, so you can tell at a glance which build is running. Each version is tagged and published as a GitHub Release with a downloadable zip.
 
 ---

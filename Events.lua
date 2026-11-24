@@ -116,10 +116,15 @@ local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawCh
         speakerTag,
         ns.ColorText(cleanMsg, ns.COLORS.text))
 
+    -- World channels and guild get their own buffer, so busy trade or
+    -- guild chat never pushes nearby RP out of the say/emote buffer.
+    local entry
     if channelLabel == "Party" or channelLabel == "Raid" or channelLabel == "Instance" then
-        ns.PushLog(ns.logs.party, line)
+        entry = ns.PushLog(ns.logs.party, line, author, channelLabel)
+    elseif channelLabel == "Guild" or channelLabel == "Channel" then
+        entry = ns.PushLog(ns.logs.world, line, author, channelLabel)
     else
-        ns.PushLog(ns.logs.social, line)
+        entry = ns.PushLog(ns.logs.social, line, author, channelLabel)
     end
 
     local selfFirst = ns.StripRealm(UnitName("player")) or ""
@@ -127,6 +132,7 @@ local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawCh
         if channelLabel == "Whisper" or channelLabel == "Say" then
             ns.state.lastDirectAuthor = ns.ResolveCanonicalPlayerName(author)
             ns.state.lastDirectMsg = line
+            ns.state.lastDirectEntry = entry
         end
     end
 
@@ -161,7 +167,7 @@ local function HandleNpcChat(kindLabel, rawMsg, rawAuthor, isEmote)
             ns.ColorText(cleanMsg, ns.COLORS.npcText))
     end
 
-    ns.PushLog(ns.logs.npc, line)
+    ns.PushLog(ns.logs.npc, line, npcName, "NPC")
     if ns.RecordAdventureChat then
         if isEmote then
             ns.RecordAdventureChat("NPC Emote", npcName, cleanMsg, true)
@@ -274,7 +280,65 @@ local function BuildLootLine(safeMsg)
     return table.concat(out), items
 end
 
-local function HandleLootMessage(rawMsg, rawAuthor)
+-- Roll chatter ("X has selected Greed for", "Need Roll - 54 for", "passed on")
+-- says nothing the AI needs. Who WON an item is kept.
+local ROLL_SPAM = {
+    "has selected", "have selected", "passed on", "automatically passed",
+    "roll %- %d+", "rolls? %d+", "is not eligible", "you have selected",
+}
+local function IsRollSpam(plain)
+    local low = (plain or ""):lower()
+    if low:find(" won:", 1, true) or low:find(" won ", 1, true) then return false end
+    for _, pat in ipairs(ROLL_SPAM) do
+        if low:find(pat) then return true end
+    end
+    return false
+end
+
+-- Coin you pick up is summed into one [Loot] line instead of a line per corpse.
+-- A pickup more than 2 minutes after the last one starts a new line.
+local coinSum = { copper = 0, count = 0, at = 0, entry = nil }
+local function ParseCopper(msg)
+    local s = (msg or ""):gsub("|T[^|]-UI%-GoldIcon[^|]-|t", " Gold"):gsub("|T[^|]-UI%-SilverIcon[^|]-|t", " Silver")
+        :gsub("|T[^|]-UI%-CopperIcon[^|]-|t", " Copper")
+    s = ns.StripColors(s)
+    local g = tonumber(s:match("(%d+)%s*[Gg]old")) or 0
+    local sv = tonumber(s:match("(%d+)%s*[Ss]ilver")) or 0
+    local c = tonumber(s:match("(%d+)%s*[Cc]opper")) or 0
+    return g * 10000 + sv * 100 + c
+end
+local function FormatCoin(copper)
+    local g = math.floor(copper / 10000)
+    local sv = math.floor((copper % 10000) / 100)
+    local c = copper % 100
+    local parts = {}
+    if g > 0 then table.insert(parts, ns.ColorText(g .. " Gold", ns.COLORS.coinGold)) end
+    if sv > 0 then table.insert(parts, ns.ColorText(sv .. " Silver", ns.COLORS.coinSilver)) end
+    if c > 0 or #parts == 0 then table.insert(parts, ns.ColorText(c .. " Copper", ns.COLORS.coinCopper)) end
+    return table.concat(parts, " ")
+end
+local function AddCoinPickup(msg)
+    local copper = ParseCopper(msg)
+    if copper <= 0 then return end
+    local now = GetTime()
+    local last = ns.logs.loot[#ns.logs.loot]
+    if coinSum.entry and last == coinSum.entry and (now - coinSum.at) <= 120 then
+        coinSum.copper = coinSum.copper + copper
+        coinSum.count = coinSum.count + 1
+    else
+        coinSum.copper, coinSum.count = copper, 1
+        coinSum.entry = ns.PushLog(ns.logs.loot, "-", nil, "Loot")
+    end
+    coinSum.at = now
+    local pickups = coinSum.count > 1 and (" " .. ns.ColorText("(" .. coinSum.count .. " pickups)", ns.COLORS.lootType)) or ""
+    coinSum.entry.line = ns.ColorText("[Loot]", ns.COLORS.lootTag) .. " " .. ns.ColorText("You picked up ", ns.COLORS.lootType)
+        .. FormatCoin(coinSum.copper) .. pickups
+    -- Keep it at the end of the timeline order
+    ns.logSeq = ns.logSeq + 1
+    coinSum.entry.seq = ns.logSeq
+end
+
+local function HandleLootMessage(rawMsg, rawAuthor, isMoney)
     local safeMsg = ns.SafeStr(rawMsg)
     if not safeMsg or safeMsg == "" then return end
 
@@ -294,8 +358,17 @@ local function HandleLootMessage(rawMsg, rawAuthor)
         items = {}
     end
 
-    local line = ns.ColorText("[Loot]", ns.COLORS.lootTag) .. " " .. coloredLine
-    ns.PushLog(ns.logs.loot, line)
+    -- Copy log: green and better items, your own coin (summed), and no roll spam
+    local keep = #(items or {}) == 0 -- currency and other non-item lines stay
+    for _, item in ipairs(items or {}) do
+        if item.quality == nil or item.quality >= 2 then keep = true end
+    end
+    if isMoney then
+        AddCoinPickup(safeMsg)
+    elseif keep and not IsRollSpam(cleanPlain) then
+        local line = ns.ColorText("[Loot]", ns.COLORS.lootTag) .. " " .. coloredLine
+        ns.PushLog(ns.logs.loot, line, looter, "Loot")
+    end
 
     -- Uncommon (green) and better go into the adventure's key loot list
     for _, item in ipairs(items or {}) do
@@ -318,8 +391,9 @@ local function CaptureQuestContext(prefixLabel, questID)
     if not title or title == "" then return end
 
     lastCapturedQuestTitle = title
+    -- One quest line only: the snapshot's [Quest] line reads this. Quest
+    -- lines are no longer copied into the NPC buffer as well.
     ns.state.lastQuestInfo = string.format("%s: %s", prefixLabel, title)
-    ns.PushLog(ns.logs.npc, ns.ColorText("[Quest]", ns.COLORS.quest) .. " " .. ns.ColorText(ns.state.lastQuestInfo, ns.COLORS.npcText))
 end
 
 local eventFrame = CreateFrame("Frame", "RPCopyEventFrame")
@@ -462,7 +536,7 @@ do
                 local bName = ns.SafeStr(UnitName(u))
                 if bName and not seen[bName] then
                     seen[bName] = true
-                    if ns.RecordAdventureBossEngage then ns.RecordAdventureBossEngage(bName) end
+                    if ns.RecordAdventureBossEngage then ns.RecordAdventureBossEngage(bName, u) end
                     local pct = GetUnitHealthPct(u)
                     if pct then ns.RecordAdventureBossHP(bName, pct) end
                 end
@@ -613,7 +687,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if IsBossUnit("target") and UnitAffectingCombat and UnitAffectingCombat("player") then
                 local bName = ns.SafeStr(UnitName("target"))
                 if bName and ns.RecordAdventureBossEngage then
-                    ns.RecordAdventureBossEngage(bName)
+                    ns.RecordAdventureBossEngage(bName, "target")
                 end
             end
         end
@@ -627,7 +701,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         if UnitExists("target") and IsBossUnit("target") and UnitCanAttack("player", "target") then
             local bName = ns.SafeStr(UnitName("target"))
             if bName and ns.RecordAdventureBossEngage then
-                ns.RecordAdventureBossEngage(bName)
+                ns.RecordAdventureBossEngage(bName, "target")
             end
         end
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -674,7 +748,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                     local pct = GetUnitHealthPct(unit)
                     if bName and pct then
                         if ns.RecordAdventureBossEngage and UnitAffectingCombat and UnitAffectingCombat("player") then
-                            ns.RecordAdventureBossEngage(bName)
+                            ns.RecordAdventureBossEngage(bName, unit)
                         end
                         if ns.RecordAdventureBossHP then
                             ns.RecordAdventureBossHP(bName, pct)
@@ -702,12 +776,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if ns.RecordAdventureDeath then
                 ns.RecordAdventureDeath(selfName, true, lastKillerByVictim[selfName])
             end
-            ns.PushLog(ns.logs.combat, ns.ColorText("[Death]", ns.COLORS.death) .. " You died")
+            local e = ns.PushLog(ns.logs.combat, ns.ColorText("died", ns.COLORS.death))
+            if e then e.at = time() end
         end
     elseif event == "PLAYER_LEVEL_UP" then
         local newLevel = ns.SafeNum((...))
         if newLevel then
-            ns.PushLog(ns.logs.combat, ns.ColorText("[Level Up]", ns.COLORS.gold) .. " Reached level " .. newLevel)
+            local e = ns.PushLog(ns.logs.combat, ns.ColorText("reached level " .. newLevel, ns.COLORS.gold))
+            if e then e.at = time() end
             if ns.RequestScreenshot then
                 ns.RequestScreenshot("levelup", "Reached Level " .. newLevel)
             end
@@ -734,7 +810,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                 ns.ColorText("[Whisper]", ns.COLORS.whisper),
                 ns.ColorText(recipClean, ns.COLORS.speaker),
                 ns.ColorText(cleanMsg, ns.COLORS.text))
-            ns.PushLog(ns.logs.social, line)
+            ns.PushLog(ns.logs.social, line, selfName, "Whisper")
             if ns.HandleConversationCapture then
                 ns.HandleConversationCapture("Whisper", selfName, cleanMsg, true, recipClean)
             end
@@ -763,7 +839,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         HandleNpcChat("NPC", msg, author, isEmote)
     elseif event == "CHAT_MSG_LOOT" or event == "CHAT_MSG_MONEY" then
         local msg, author = ...
-        HandleLootMessage(msg, author)
+        HandleLootMessage(msg, author, event == "CHAT_MSG_MONEY")
     elseif event == "QUEST_DETAIL" or event == "QUEST_PROGRESS" or event == "QUEST_COMPLETE" then
         CaptureQuestContext("Active Quest")
     elseif event == "QUEST_ACCEPTED" then
@@ -778,3 +854,232 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
     end
 end)
+
+-- =========================================================
+-- Extra run telemetry, still without the combat log (0.3.1):
+--  * [SPELL]      spells your party casts in combat (UNIT_SPELLCAST_SUCCEEDED)
+--  * [BOSS CAST]  what a boss casts (boss1-5, target, focus, nameplates)
+--  * [CC]         party members charmed, feared, stunned, polymorphed ...
+--  * [PET]        pets badly hurt, dying and coming back
+-- Only while a run records inside a dungeon or raid. Every tracker is
+-- throttled, wrapped in pcall, and skips values the client hides as secret.
+-- =========================================================
+do
+    local tracker = CreateFrame("Frame")
+    for _, ev in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START",
+        "UNIT_AURA", "UNIT_PET", "UNIT_HEALTH" }) do
+        pcall(tracker.RegisterEvent, tracker, ev)
+    end
+
+    local T = {
+        GROUP = { player = true, party1 = true, party2 = true, party3 = true, party4 = true },
+        PETS = { pet = "player", partypet1 = "party1", partypet2 = "party2", partypet3 = "party3", partypet4 = "party4" },
+        SKIP_SPELLS = { ["Auto Shot"] = true, ["Shoot"] = true, ["Attack"] = true, ["Auto Attack"] = true },
+        SPELL_UNIT_CD = 30, SPELL_GAP = 1.0, SPELL_CAP = 200,
+        BOSS_CAST_CD = 12,
+        spellAt = {}, lastSpell = 0, bossCastAt = {}, bossStartAt = {},
+        cc = {}, charmed = {}, auraScanAt = {}, pets = {},
+        CC_WORDS = { "polymorph", "fear", "psychic scream", "intimidating shout", "howl of terror", "death coil",
+            "sap", "gouge", "blind", "kidney shot", "cheap shot", "hammer of justice", "repentance", "hibernate",
+            "entangling roots", "frost nova", "freezing trap", "scatter shot", "wyvern sting", "seduction",
+            "banish", "mind control", "hex", "cyclone", "bash", "war stomp", "concussion blow", "stun",
+            "sleep", "knockdown", "terrify", "horror", "petrify", "silence", "shackle", "charm", "dominat",
+            "paralyz", "frozen", "freeze", "web", "net", "trance", "sheep" },
+    }
+
+    local function Recording()
+        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        if not run or run.paused then return nil end
+        local inInstance = false
+        if IsInInstance then inInstance = IsInInstance() and true or false end
+        return inInstance and run or nil
+    end
+
+    local function ShortName(unit)
+        local n = ns.StripRealm(UnitName(unit))
+        if not n or n == "" then return nil end
+        return (ns.ResolveCanonicalPlayerName and ns.ResolveCanonicalPlayerName(n)) or n
+    end
+
+    local function SpellName(spellID)
+        local id = ns.SafeNum(spellID)
+        if not id then return nil end
+        if C_Spell and C_Spell.GetSpellName then
+            local ok, n = pcall(C_Spell.GetSpellName, id)
+            if ok then return ns.SafeStr(n) end
+        end
+        if GetSpellInfo then
+            local ok, n = pcall(GetSpellInfo, id)
+            if ok then return ns.SafeStr(n) end
+        end
+        return nil
+    end
+
+    local function GroupInCombat()
+        if UnitAffectingCombat and UnitAffectingCombat("player") == true then return true end
+        for i = 1, 4 do
+            local u = "party" .. i
+            if UnitExists(u) and UnitAffectingCombat and UnitAffectingCombat(u) == true then return true end
+        end
+        return false
+    end
+
+    local function TargetSuffix(unit, word)
+        local tu = unit .. "target"
+        if not UnitExists(tu) or (UnitIsUnit and UnitIsUnit(tu, unit) == true) then return "" end
+        local n = ns.SafeStr(UnitName(tu))
+        return n and (" " .. word .. " " .. ns.StripRealm(n)) or ""
+    end
+
+    -- [SPELL] party casts
+    local function OnPartySpell(run, unit, spellID)
+        if not GroupInCombat() then return end
+        local who = ShortName(unit)
+        local spell = SpellName(spellID)
+        if not who or not spell or T.SKIP_SPELLS[spell] then return end
+        local now = GetTime()
+        local key = who .. ":" .. spell
+        if (now - (T.spellAt[key] or 0)) < T.SPELL_UNIT_CD or (now - T.lastSpell) < T.SPELL_GAP then return end
+        run.spellLines = run.spellLines or 0
+        if run.spellLines >= T.SPELL_CAP then return end
+        run.spellLines = run.spellLines + 1
+        T.spellAt[key] = now
+        T.lastSpell = now
+        ns.RecordAdventureLine(string.format("[SPELL] %s casts %s%s", who, spell, TargetSuffix(unit, "on")))
+    end
+
+    -- [BOSS CAST]
+    local function OnBossCast(unit, spellID, started)
+        if UnitIsPlayer(unit) or not UnitCanAttack("player", unit) then return end
+        local bName = ns.SafeStr(UnitName(unit))
+        if not bName then return end
+        local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
+        if bName ~= activeBoss and not (ns.IsBossUnit and ns.IsBossUnit(unit)) then return end
+        local spell = SpellName(spellID)
+        if not spell or T.SKIP_SPELLS[spell] then return end
+        local now = GetTime()
+        local key = bName .. ":" .. spell
+        if not started and (now - (T.bossStartAt[key] or 0)) < 6 then return end -- its START was logged
+        if (now - (T.bossCastAt[key] or 0)) < T.BOSS_CAST_CD then return end
+        T.bossCastAt[key] = now
+        if started then T.bossStartAt[key] = now end
+        local verb = started and "begins casting" or "casts"
+        ns.RecordAdventureLine(string.format("[BOSS CAST] %s %s %s%s", bName, verb, spell, TargetSuffix(unit, "at")))
+    end
+
+    local function IsCC(name)
+        local low = name:lower()
+        for _, w in ipairs(T.CC_WORDS) do
+            if low:find("%f[%a]" .. w) then return true end
+        end
+        return false
+    end
+
+    local function HarmfulAuraName(unit, i)
+        if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+            local ok, d = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
+            if not ok or not d then return nil end
+            return ns.SafeStr(d.name) or false
+        elseif UnitDebuff then
+            local ok, n = pcall(UnitDebuff, unit, i)
+            if not ok or n == nil then return nil end
+            return ns.SafeStr(n) or false
+        end
+        return nil
+    end
+
+    -- [CC] on a party member: new crowd control auras and mind control
+    local function OnGroupAura(unit)
+        local who = ShortName(unit)
+        if not who then return end
+        local now = GetTime()
+        if (now - (T.auraScanAt[unit] or 0)) < 0.3 then return end
+        T.auraScanAt[unit] = now
+
+        local charmed = UnitIsCharmed and UnitIsCharmed(unit) == true
+        if charmed and not T.charmed[who] then
+            ns.RecordAdventureLine(string.format("[CC] %s is mind controlled!", who))
+        elseif not charmed and T.charmed[who] then
+            ns.RecordAdventureLine(string.format("[CC] %s breaks free", who))
+        end
+        T.charmed[who] = charmed or nil
+
+        local now_cc = {}
+        for i = 1, 40 do
+            local n = HarmfulAuraName(unit, i)
+            if n == nil then break end
+            if n and IsCC(n) then now_cc[n] = true end
+        end
+        local had = T.cc[who] or {}
+        for n in pairs(now_cc) do
+            if not had[n] then
+                ns.RecordAdventureLine(string.format("[CC] %s is hit by %s", who, n))
+            end
+        end
+        T.cc[who] = now_cc
+    end
+
+    -- [PET] badly hurt, died, back again
+    local function OnPet(unit)
+        local ownerUnit = T.PETS[unit]
+        local owner = ownerUnit and ShortName(ownerUnit)
+        if not owner then return end
+        local st = T.pets[owner] or {}
+        T.pets[owner] = st
+        if not UnitExists(unit) then return end
+        local petName = ns.SafeStr(UnitName(unit))
+        if not petName then return end
+        local label = string.format("%s (%s's pet)", petName, owner)
+        local dead = UnitIsDead(unit) == true
+        if dead and not st.dead then
+            ns.RecordAdventureLine(string.format("[PET DEATH] %s died", label))
+        elseif not dead and st.dead and st.name == petName then
+            ns.RecordAdventureLine(string.format("[PET] %s is back on its feet", label))
+        elseif not dead and GroupInCombat() then
+            local pct = ns.GetUnitHealthPct and ns.GetUnitHealthPct(unit)
+            local now = GetTime()
+            if pct and pct > 0 and pct <= 25 and (now - (st.lowAt or 0)) > 30 then
+                st.lowAt = now
+                ns.RecordAdventureLine(string.format("[PET] %s is badly hurt (%d%% HP)", label, pct))
+            end
+        end
+        st.dead, st.name = dead, petName
+    end
+
+    local function Handle(event, unit, a2, a3)
+        if type(unit) ~= "string" then return end
+        local run = Recording()
+        if not run then return end
+        if event == "UNIT_SPELLCAST_SUCCEEDED" then
+            if T.GROUP[unit] then
+                OnPartySpell(run, unit, a3)
+            else
+                OnBossCast(unit, a3, false)
+            end
+        elseif event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" then
+            if not T.GROUP[unit] and not T.PETS[unit] then OnBossCast(unit, a3, true) end
+        elseif event == "UNIT_AURA" then
+            if T.GROUP[unit] then OnGroupAura(unit) end
+        elseif event == "UNIT_HEALTH" then
+            if T.PETS[unit] then OnPet(unit) end
+        elseif event == "UNIT_PET" then
+            local petUnit = (unit == "player") and "pet" or (unit:match("^party(%d)$") and ("partypet" .. unit:match("^party(%d)$")))
+            if petUnit then OnPet(petUnit) end
+        end
+    end
+
+    tracker:SetScript("OnEvent", function(_, event, unit, a2, a3)
+        local ok, err = pcall(Handle, event, unit, a2, a3)
+        if not ok and not tracker.reported then
+            tracker.reported = true
+            print("|cffffd100RPCopy|r |cffff6b6brun tracker error:|r " .. tostring(err))
+        end
+    end)
+
+    -- A new run starts with clean tracker state
+    function ns.ResetRunTrackers()
+        T.spellAt, T.bossCastAt, T.bossStartAt = {}, {}, {}
+        T.cc, T.charmed, T.pets = {}, {}, {}
+        T.lastSpell = 0
+    end
+end

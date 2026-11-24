@@ -567,7 +567,7 @@ function UI.RefreshAdventuresTab()
             A.emptyPane:Hide()
             A.readPane:Show()
             -- Re-normalize on render so stories saved by older versions display cleanly
-            A.storyText:SetText(ns.NormalizeStoryText(selected.story))
+            A.storyText:SetText(ns.DecorateStoryBosses(ns.NormalizeStoryText(selected.story), selected))
             UpdateStoryScrollHeight()
             A.storyScroll:SetVerticalScroll(0)
             if C_Timer and C_Timer.After then C_Timer.After(0, UpdateStoryScrollHeight) end

@@ -131,6 +131,35 @@ function ConvertTo-StoryHtml([string]$s) {
     return $sb.ToString().Replace("`n", "<br>`n")
 }
 
+# Boss icons like the in-game Story reader: a skull (boss), gold dragon
+# (elite) or silver dragon (rare) before every recorded boss name, and the
+# old orange boss color turned crimson.
+function Add-BossIcons([string]$html, $run) {
+    $html = [regex]::Replace($html, '(?i)color:#ff8000', 'color:#dc143c')
+    $kinds = @{}
+    if ($run['bossKills']) { foreach ($v in $run['bossKills'].Values) { $kinds[[string]$v] = 'skull' } }
+    if ($run['bossInfo']) {
+        foreach ($k in $run['bossInfo'].Keys) {
+            $info = $run['bossInfo'][$k]
+            $kind = 'skull'
+            if ($info -and $info['kind']) { $kind = [string]$info['kind'] }
+            $kinds[[string]$k] = $kind
+        }
+    }
+    $names = @($kinds.Keys | Where-Object { $_.Length -ge 3 } | Sort-Object Length -Descending)
+    if ($names.Count -eq 0) { return $html }
+    $script:bossEnc = @{}
+    foreach ($n in $names) { $script:bossEnc[[Net.WebUtility]::HtmlEncode($n)] = $kinds[$n] }
+    $alts = ($names | ForEach-Object { [regex]::Escape([Net.WebUtility]::HtmlEncode($_)) }) -join '|'
+    $re = New-Object Text.RegularExpressions.Regex ('(?<!\w)(' + $alts + ')(?!\w)')
+    return $re.Replace($html, [Text.RegularExpressions.MatchEvaluator]{
+        param($m)
+        $kind = $script:bossEnc[$m.Groups[1].Value]
+        $glyph = if ($kind -eq 'skull') { '&#x1F480;' } else { '&#x1F409;' }
+        return '<span class="bi bi-' + $kind + '">' + $glyph + '</span>' + $m.Value
+    })
+}
+
 function Get-SafeFileName([string]$s) {
     $s = [regex]::Replace($s, '[<>:"/\\|?*\x00-\x1f]', '')
     $s = $s.Trim().TrimEnd('.')
@@ -141,7 +170,8 @@ function Get-SafeFileName([string]$s) {
 
 $pageStyle = 'body{background:#17120c;color:#eceff1;font-family:Georgia,serif;max-width:860px;margin:32px auto;padding:0 16px;line-height:1.65}' +
     'h1{color:#ffd100;font-size:22px}a{color:#69ccf0}.meta{color:#9e9e9e;font-size:13px}' +
-    '.story{background:#1f1810;border:1px solid #8a6d33;border-radius:6px;padding:20px 24px}'
+    '.story{background:#1f1810;border:1px solid #8a6d33;border-radius:6px;padding:20px 24px}' +
+    '.bi{font-size:0.9em;margin-right:3px}.bi-elite{filter:sepia(1) saturate(5) hue-rotate(-12deg) brightness(1.1)}.bi-rare{filter:grayscale(1) brightness(1.4)}'
 
 # ---------- export ----------
 $svFiles = @(Get-ChildItem -Path (Join-Path $wowDir 'WTF\Account\*\SavedVariables\RPCopy.lua') -ErrorAction SilentlyContinue)
@@ -188,7 +218,7 @@ foreach ($sv in $svFiles) {
 
         $links = @()
         if ($story) {
-            $storyHtml = ConvertTo-StoryHtml $story
+            $storyHtml = Add-BossIcons (ConvertTo-StoryHtml $story) $run
             $page = "<!doctype html><html><head><meta charset=""utf-8""><title>$([Net.WebUtility]::HtmlEncode($title))</title><style>$pageStyle</style></head><body>" +
                 "<h1>$([Net.WebUtility]::HtmlEncode($title))</h1><p class=""meta"">$([Net.WebUtility]::HtmlEncode([string]$run['zone'])) - $([Net.WebUtility]::HtmlEncode([string]$run['startDate']))</p>" +
                 "<div class=""story"">$storyHtml</div></body></html>"

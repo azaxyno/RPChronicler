@@ -68,6 +68,8 @@ STORYTELLING & ACCURACY PRINCIPLES
 3. Do Not Limit What Happened: Never compress the run into a dry summary or skip messy moments. Include everything that made the session memorable - wipes, ninja pulls, someone begging for conjured water, OOM panic, clutch heals, dramatic boss kills, and loot drops.
 4. Weave Real Quotes and Roles Naturally: Use the roster's classes and roles ([Tank], [Healer], [DPS]) to give each party member a distinct presence, and embed their actual quotes from the timeline verbatim.
 5. Use the Known Companions Block: If the log has a "Known companions:" block, each line is the user's own RP note about a party member (who they are, their personality, their history with the user's character). Let those notes shape how that character acts, talks and is described, and reflect any relationship the note mentions. The notes are background, not events: never invent a scene from a note, and never quote a note as dialogue. Party members without a note get no invented backstory.
+6. Read the Fight Tags: [SPELL] lines are spells the party cast in combat (a clutch heal, a taunt, a big cooldown). [BOSS CAST] lines are what a boss cast and at whom. [CC] lines mean a party member was mind controlled, feared, stunned or polymorphed. [DANGER] means someone dropped near death, and a [SAVED] line after it means they were pulled back from the brink: give those moments a beat in the story. [PET], [PET DEATH] lines follow the party's pets. Turn these into scenes, but only for what the tags actually say, and never name a spell the log doesn't show.
+7. No Icons: Never write |T or |A texture codes. RPCopy adds the boss icons itself.
 
 RPCOPY COLOR PALETTE (|cffRRGGBB...|r)
 
@@ -76,8 +78,8 @@ Color the output using WoW's native hex escape format (|cffRRGGBBtext|r) so the 
 - Story Title & Chapter Headers: |cffffd100 (Gold)
 - Zone, Instance & Scene Subheaders: |cff40e0d0 (Teal) or |cffb39ddb (Lavender)
 - Main Narrative Prose: |cffeceff1 (Bright Off-White)
-- Player Names (Match WoW Class Color): Warrior |cffC79C6E, Paladin |cffF58CBA, Hunter |cffABD473, Rogue |cffFFF569, Priest |cffFFFFFF, Death Knight |cffC41F3B, Shaman |cff0070DE, Mage |cff69CCF0, Warlock |cff9482C9, Monk |cff00FF96, Druid |cffFF7D0A, Demon Hunter |cffA330C9, Evoker |cff33937F
-- Bosses & Elite Threats: |cffff8000 (Orange)
+- Player Names (Match WoW Class Color): Warrior |cffC79C6E, Paladin |cffF58CBA, Hunter |cffABD473, Rogue |cffFFF569, Priest |cffC0C0C0 (gray, not white), Death Knight |cffC41F3B, Shaman |cff0070DE, Mage |cff69CCF0, Warlock |cff9482C9, Monk |cff00FF96, Druid |cffFF7D0A, Demon Hunter |cffA330C9, Evoker |cff33937F
+- Bosses & Elite Threats: |cffdc143c (Crimson). Never use the Druid orange for a boss.
 - Wipes, Deaths & Danger: |cffff5252 (Red)
 - Victories, Clutch Saves & Healing: |cff66bb6a (Green)
 - Notable Loot Drops: |cffffd700 (Loot Gold) or |cffe066ff (Epic Purple)
@@ -550,14 +552,22 @@ do
         { key = "incDirect",    label = "Last whisper / say to you" },
         { key = "incTarget",    label = "Target info" },
         { key = "incParty",     label = "Party roster" },
-        { key = "incStatus",    label = "My status & pet" },
+        { key = "incStatus",    label = "Status, pet, deaths" },
         { key = "incQuest",     label = "Active quest" },
-        { key = "incCombat",    label = "Deaths & level ups" },
         { key = "incSocial",    label = "Say / yell / whispers" },
-        { key = "incOoc",       label = "OOC channel" },
+        { key = "incPartySay",  label = "Party members' say" },
         { key = "incPartyChat", label = "Party / raid chat" },
         { key = "incNpc",       label = "NPC dialogue" },
-        { key = "incLoot",      label = "Loot log" },
+        { key = "incLoot",      label = "Loot (green and up)" },
+        { key = "incOoc",       label = "OOC channel" },
+        { key = "incWorld",     label = "World channels, guild" },
+    }
+    local SOURCE_TIPS = {
+        incStatus = "Your level, HP, mana, combat state, pet, and deaths or level ups from the last 15 minutes.",
+        incSocial = "Say, yell, emotes and whispers from everyone nearby.",
+        incPartySay = "Say, yell and emotes, but only from you and your party members.",
+        incLoot = "Green and better items, your own coin summed into one line. No gray items or roll spam.",
+        incWorld = "Trade, General, LFG and guild chat. Off by default so it doesn't crowd out RP.",
     }
     for idx, sDef in ipairs(SOURCE_DEFS) do
         local cb = CreateFrame("CheckButton", "RPCopyOptCB_" .. sDef.key, ed, "UICheckButtonTemplate")
@@ -568,6 +578,17 @@ do
         local lbl = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         lbl:SetPoint("LEFT", cb, "RIGHT", 2, 0)
         lbl:SetText(sDef.label)
+        if SOURCE_TIPS[sDef.key] then
+            cb.tipTitle, cb.tipText = sDef.label, SOURCE_TIPS[sDef.key]
+            cb:SetScript("OnEnter", function(self)
+                if not GameTooltip then return end
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(self.tipTitle, 1, 0.82, 0)
+                GameTooltip:AddLine(self.tipText, 0.85, 0.85, 0.85, true)
+                GameTooltip:Show()
+            end)
+            cb:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        end
         S.checks[sDef.key] = cb
     end
 
@@ -638,7 +659,8 @@ do
         table.insert(RPCopyDB.tabs, {
             id = newId, label = "Custom " .. tostring(#RPCopyDB.tabs + 1), prefix = ns.DEFAULT_TRIGGER,
             incDirect = true, incTarget = true, incParty = false, incStatus = false, incQuest = false,
-            incCombat = false, incSocial = true, incOoc = false, incPartyChat = false, incNpc = false, incLoot = false,
+            incSocial = true, incPartySay = false, incOoc = false, incPartyChat = false, incNpc = false,
+            incLoot = false, incWorld = false,
         })
         ns.state.selectedOptionTabId = newId
         Changed()

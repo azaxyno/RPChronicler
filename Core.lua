@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.3.0"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.3.1"
 
 BINDING_HEADER_RPCOPY = "RPCopy (RP Context & Chronicle)"
 BINDING_NAME_RPCOPY_OPEN = "Toggle RPCopy Window"
@@ -18,87 +18,30 @@ ns.MAX_PLAYER_CHAT = 5
 
 ns.DEFAULT_TRIGGER = "use aloria"
 
+-- Section flags of a slice tab. Every tab can turn each one on or off in
+-- Options > Slice Tabs. Chat sources are merged into one time-ordered timeline.
+ns.TAB_FLAGS = {
+    "incDirect", "incTarget", "incParty", "incStatus", "incQuest",
+    "incSocial", "incPartySay", "incPartyChat", "incNpc", "incLoot", "incOoc", "incWorld",
+}
+
+local function Tab(id, label, on)
+    local t = { id = id, label = label, prefix = ns.DEFAULT_TRIGGER }
+    for _, k in ipairs(ns.TAB_FLAGS) do t[k] = on[k] and true or false end
+    return t
+end
+
 ns.DEFAULT_TABS = {
-    {
-        id = "SMART",
-        label = "Smart",
-        prefix = ns.DEFAULT_TRIGGER,
-        incDirect = true,
-        incTarget = true,
-        incParty = true,
-        incStatus = true,
-        incQuest = false,
-        incCombat = true,
-        incSocial = false,
-        incOoc = false,
-        incPartyChat = false,
-        incNpc = false,
-        incLoot = false,
-    },
-    {
-        id = "CHAT",
-        label = "Chat",
-        prefix = ns.DEFAULT_TRIGGER,
-        incDirect = true,
-        incTarget = true,
-        incParty = false,
-        incStatus = false,
-        incQuest = false,
-        incCombat = false,
-        incSocial = true,
-        incOoc = false,
-        incPartyChat = false,
-        incNpc = false,
-        incLoot = false,
-    },
-    {
-        id = "PARTY",
-        label = "Party",
-        prefix = ns.DEFAULT_TRIGGER,
-        incDirect = false,
-        incTarget = true,
-        incParty = true,
-        incStatus = true,
-        incQuest = false,
-        incCombat = true,
-        incSocial = false,
-        incOoc = false,
-        incPartyChat = true,
-        incNpc = false,
-        incLoot = false,
-    },
-    {
-        id = "QUEST",
-        label = "Quest",
-        prefix = ns.DEFAULT_TRIGGER,
-        incDirect = false,
-        incTarget = true,
-        incParty = false,
-        incStatus = true,
-        incQuest = true,
-        incCombat = false,
-        incSocial = false,
-        incOoc = false,
-        incPartyChat = false,
-        incNpc = true,
-        incLoot = false,
-    },
-    {
-        id = "LOOT",
-        label = "Loot",
-        prefix = ns.DEFAULT_TRIGGER,
-        incDirect = false,
-        incTarget = false,
-        incParty = true,
-        incStatus = true,
-        incQuest = false,
-        incCombat = false,
-        incSocial = false,
-        incOoc = false,
-        incPartyChat = false,
-        incNpc = false,
-        incLoot = true,
-    },
+    -- Smart: everything happening around you
+    Tab("SMART", "Smart", { incDirect = true, incTarget = true, incParty = true, incStatus = true,
+        incSocial = true, incPartyChat = true, incNpc = true }),
+    -- Chat: conversations (the direct line is marked inside the timeline)
+    Tab("CHAT", "Chat", { incDirect = true, incTarget = true, incSocial = true }),
+    -- Party: your group only (party chat plus say/emotes from party members)
+    Tab("PARTY", "Party", { incTarget = true, incParty = true, incStatus = true,
+        incPartySay = true, incPartyChat = true }),
+    Tab("QUEST", "Quest", { incTarget = true, incStatus = true, incQuest = true, incNpc = true }),
+    Tab("LOOT", "Loot", { incParty = true, incStatus = true, incLoot = true }),
 }
 
 local function CloneDefaultTabs()
@@ -134,6 +77,7 @@ ns.logs = {
     loot = {},
     combat = {},
     npc = {},
+    world = {},
     playerRecentChat = {},
 }
 
@@ -161,7 +105,7 @@ ns.COLORS = {
     hostile      = "ff4d4d",
     neutral      = "ffd54f",
     friendly     = "66bb6a",
-    boss         = "ff8000",
+    boss         = "dc143c", -- crimson, not the Druid orange
     rareelite    = "e066ff",
     elite        = "ffa726",
     rare         = "4fc3f7",
@@ -200,7 +144,7 @@ ns.CLASS_COLORS = {
     PALADIN     = "F58CBA",
     HUNTER      = "ABD473",
     ROGUE       = "FFF569",
-    PRIEST      = "FFFFFF",
+    PRIEST      = "C0C0C0", -- gray, so it reads on the light story parchment
     DEATHKNIGHT = "C41F3B",
     SHAMAN      = "0070DE",
     MAGE        = "69CCF0",
@@ -593,14 +537,27 @@ local function IsOocLine(line)
     return plain:match("^%[%d*%.?%s*OOC") ~= nil
 end
 
-function ns.PushLog(tbl, line)
+-- Log entries are tables: { line = colored text, seq = global order,
+-- author = short name or nil, chan = channel label or nil }. The sequence
+-- number lets the snapshot merge several buffers into one timeline.
+ns.logSeq = 0
+function ns.PushLog(tbl, line, author, chan)
     if not line or line == "" then return end
-    if tbl == ns.logs.social and IsOocLine(line) then
+    ns.logSeq = ns.logSeq + 1
+    local entry = { line = line, seq = ns.logSeq, author = author, chan = chan }
+    if (tbl == ns.logs.social or tbl == ns.logs.world) and IsOocLine(line) then
         ns.logs.ooc = ns.logs.ooc or {}
-        ns.PushBounded(ns.logs.ooc, line, ns.MAX_LINES)
-        return
+        ns.PushBounded(ns.logs.ooc, entry, ns.MAX_LINES)
+        return entry
     end
-    ns.PushBounded(tbl, line, ns.MAX_LINES)
+    ns.PushBounded(tbl, entry, ns.MAX_LINES)
+    return entry
+end
+
+-- Text of a log entry (entries pushed before 0.3.1 were plain strings)
+function ns.LogLine(entry)
+    if type(entry) == "table" then return entry.line end
+    return entry
 end
 
 function ns.ClearSessionLogs()
@@ -610,7 +567,10 @@ function ns.ClearSessionLogs()
     ns.logs.loot = {}
     ns.logs.combat = {}
     ns.logs.npc = {}
+    ns.logs.world = {}
     ns.state.lastDirectMsg = nil
+    ns.state.lastDirectEntry = nil
+    ns.state.lastLife = nil
     ns.state.lastDirectAuthor = nil
     ns.state.lastQuestInfo = nil
     ns.state.activeNote = ""
@@ -693,6 +653,10 @@ function ns.EnsureDB()
             if t.incOoc == nil then
                 t.incOoc = false
             end
+            if t.incPartySay == nil then t.incPartySay = false end
+            if t.incWorld == nil then t.incWorld = false end
+            -- 0.3.1: deaths and level ups moved into the Status line
+            t.incCombat = nil
             if not RPCopyDB.migratedV32 and (t.prefix == nil or t.prefix == "") then
                 t.prefix = ns.DEFAULT_TRIGGER
             else
@@ -700,7 +664,19 @@ function ns.EnsureDB()
             end
         end
         RPCopyDB.migratedV32 = true
+        -- 0.3.1 gave the built-in tabs new contents (Smart = everything nearby,
+        -- Party = group focus). Update them once; names and Skill Calls stay.
+        if not RPCopyDB.migratedV031 then
+            for _, def in ipairs(ns.DEFAULT_TABS) do
+                for _, t in ipairs(RPCopyDB.tabs) do
+                    if t.id == def.id then
+                        for _, k in ipairs(ns.TAB_FLAGS) do t[k] = def[k] end
+                    end
+                end
+            end
+        end
     end
+    RPCopyDB.migratedV031 = true
 
     for k, v in pairs(RPCopyDB.players) do
         if type(v) == "string" then
@@ -961,12 +937,24 @@ function ns.GetKnownPlayerBlocks(searchBlob)
             ns.ColorText("Note:", ns.COLORS.lootType) .. " " .. noteVal,
         }
 
-        if type(data.chatHistory) == "table" and #data.chatHistory > 0 then
-            table.insert(blockLines, ns.ColorText("Latest Chat:", ns.COLORS.lootType))
+        -- Skip chat lines the copy already shows, so nothing is pasted twice
+        local fresh = {}
+        if type(data.chatHistory) == "table" then
             for _, line in ipairs(data.chatHistory) do
+                local plainLine = ns.StripColors(line or "")
+                local msg = plainLine:match("^%[[^%]]*%]%s*[^:]+:%s*(.+)$") or plainLine
+                msg = msg:match("^%s*(.-)%s*$"):lower()
+                if msg ~= "" and not haystack:find(msg, 1, true) then
+                    table.insert(fresh, line)
+                end
+            end
+        end
+        if #fresh > 0 then
+            table.insert(blockLines, ns.ColorText("Latest Chat:", ns.COLORS.lootType))
+            for _, line in ipairs(fresh) do
                 table.insert(blockLines, ns.ColorText(line, ns.COLORS.text))
             end
-        else
+        elseif type(data.chatHistory) ~= "table" or #data.chatHistory == 0 then
             table.insert(blockLines, ns.ColorText("Latest Chat:", ns.COLORS.lootType) .. " " .. ns.ColorText("None", ns.COLORS.muted))
         end
 

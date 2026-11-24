@@ -198,15 +198,84 @@ function ns.GetStatusLine()
         table.insert(parts, ns.ColorText("Pet:", ns.COLORS.lootType) .. " " .. petInfo)
     end
 
+    -- Deaths and level ups from the last 15 minutes (the old Combat section)
+    local life = {}
+    local logs = ns.logs.combat or {}
+    for i = #logs, 1, -1 do
+        local e = logs[i]
+        if type(e) == "table" and e.at and (time() - e.at) <= 900 and #life < 2 then
+            local mins = math.floor((time() - e.at) / 60)
+            table.insert(life, e.line .. ns.ColorText(mins < 1 and " just now" or (" " .. mins .. "m ago"), ns.COLORS.muted))
+        end
+    end
+    if #life > 0 then
+        table.insert(parts, ns.ColorText("Recent:", ns.COLORS.lootType) .. " " .. table.concat(life, ", "))
+    end
+
     return ns.ColorText("[Status]", ns.COLORS.header) .. " " .. table.concat(parts, " | ")
 end
 
-local function AppendRecentSlice(outLines, sourceTbl, limit)
-    if type(sourceTbl) ~= "table" or #sourceTbl == 0 then return end
-    local startIdx = math.max(1, #sourceTbl - limit + 1)
-    for i = startIdx, #sourceTbl do
-        table.insert(outLines, sourceTbl[i])
+local SAY_LIKE = { Say = true, Yell = true, Emote = true }
+
+-- Short names of you and your party members
+local function GroupNames()
+    local names = {}
+    local me = ns.StripRealm(UnitName("player"))
+    if me then names[me] = true end
+    for i = 1, 4 do
+        local u = "party" .. i
+        if UnitExists(u) then
+            local n = ns.StripRealm(UnitName(u))
+            if n then names[n] = true end
+        end
     end
+    return names
+end
+
+-- The last `limit` entries of a buffer that pass `keep` (nil keeps all)
+local function TakeRecent(out, buf, limit, keep)
+    if type(buf) ~= "table" then return end
+    local taken = 0
+    for i = #buf, 1, -1 do
+        if taken >= limit then break end
+        local e = buf[i]
+        if not keep or (type(e) == "table" and keep(e)) then
+            table.insert(out, e)
+            taken = taken + 1
+        end
+    end
+end
+
+-- All chat sources the tab includes, merged into one time-ordered list
+local function BuildTimeline(tabCfg, limit)
+    local picked = {}
+    if tabCfg.incSocial then
+        TakeRecent(picked, ns.logs.social, limit)
+    elseif tabCfg.incPartySay then
+        local group = GroupNames()
+        TakeRecent(picked, ns.logs.social, limit, function(e)
+            return e.author and group[e.author] and SAY_LIKE[e.chan] or false
+        end)
+    end
+    if tabCfg.incPartyChat then TakeRecent(picked, ns.logs.party, limit) end
+    if tabCfg.incNpc then TakeRecent(picked, ns.logs.npc, limit) end
+    if tabCfg.incLoot then TakeRecent(picked, ns.logs.loot, limit) end
+    if tabCfg.incOoc then TakeRecent(picked, ns.logs.ooc, limit) end
+    if tabCfg.incWorld then TakeRecent(picked, ns.logs.world, limit) end
+
+    local seen, list = {}, {}
+    for _, e in ipairs(picked) do
+        if not seen[e] then
+            seen[e] = true
+            table.insert(list, e)
+        end
+    end
+    table.sort(list, function(x, y)
+        local sx = type(x) == "table" and x.seq or 0
+        local sy = type(y) == "table" and y.seq or 0
+        return sx < sy
+    end)
+    return list, seen
 end
 
 function ns.BuildSnapshot(filterId, note, isExpanded)
@@ -231,7 +300,12 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
     table.insert(lines, ns.ColorText("[Location]", ns.COLORS.header) .. " " .. ns.ColorText(where, ns.COLORS.location))
 
     if tabCfg then
-        if tabCfg.incDirect and ns.state.lastDirectMsg and ns.state.lastDirectMsg ~= "" then
+        local timeline, inTimeline = BuildTimeline(tabCfg, limit)
+        local direct = ns.state.lastDirectEntry
+        -- The direct message is marked inside the timeline when it is there,
+        -- so it is never copied twice.
+        local directInline = tabCfg.incDirect and direct and inTimeline[direct]
+        if tabCfg.incDirect and not directInline and ns.state.lastDirectMsg and ns.state.lastDirectMsg ~= "" then
             table.insert(lines, ns.ColorText("[Direct]", ns.COLORS.direct) .. " " .. ns.state.lastDirectMsg)
         end
 
@@ -254,24 +328,12 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
             table.insert(lines, ns.ColorText("[Quest]", ns.COLORS.quest) .. " " .. ns.state.lastQuestInfo)
         end
 
-        if tabCfg.incCombat then
-            AppendRecentSlice(lines, ns.logs.combat, limit)
-        end
-
-        if tabCfg.incSocial then
-            AppendRecentSlice(lines, ns.logs.social, limit)
-        end
-
-        if tabCfg.incPartyChat then
-            AppendRecentSlice(lines, ns.logs.party, limit)
-        end
-
-        if tabCfg.incNpc then
-            AppendRecentSlice(lines, ns.logs.npc, limit)
-        end
-
-        if tabCfg.incLoot then
-            AppendRecentSlice(lines, ns.logs.loot, limit)
+        for _, e in ipairs(timeline) do
+            local text = ns.LogLine(e)
+            if directInline and e == direct then
+                text = ns.ColorText("[Direct]", ns.COLORS.direct) .. " " .. text
+            end
+            table.insert(lines, text)
         end
     end
 

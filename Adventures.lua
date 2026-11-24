@@ -13,6 +13,7 @@ local activeBossPct = nil
 local bossThresholdsHit = {}
 local vitalsCooldowns = {}
 local bossPullEngaged = {}
+local brink = {} -- party member -> time they dropped under 10% HP
 
 local RESUME_WINDOW = 120 -- seconds: a run seen this recently resumes after /reload or disconnect
 
@@ -69,7 +70,7 @@ local function PushTimeline(adv, stamp, entryText, force)
     adv.fullTimeline = adv.fullTimeline or {}
     local line = string.format("[%s] %s", stamp or PreciseStamp(), entryText)
     table.insert(adv.fullTimeline, line)
-    while #adv.fullTimeline > 300 do
+    while #adv.fullTimeline > 500 do
         table.remove(adv.fullTimeline, 1)
     end
 end
@@ -152,6 +153,7 @@ function ns.StartAdventure(customTitle, isAuto)
     bossThresholdsHit = {}
     vitalsCooldowns = {}
     bossPullEngaged = {}
+    brink = {}
 
     activeRun = {
         id = tostring(time()) .. "_" .. tostring(math.random(100, 999)),
@@ -182,6 +184,7 @@ function ns.StartAdventure(customTitle, isAuto)
     RPCopyDB.activeRun = activeRun
 
     ns.SyncAdventureRoster()
+    if ns.ResetRunTrackers then ns.ResetRunTrackers() end
     PushTimeline(activeRun, PreciseStamp(), "Adventure began in " .. zone)
     return activeRun
 end
@@ -308,6 +311,13 @@ function ns.GetAggroShare(name)
     return mine / total, total
 end
 
+-- Generic timeline line from the Events.lua trackers ([SPELL], [BOSS CAST],
+-- [CC], [PET] ...). They do their own throttling.
+function ns.RecordAdventureLine(text)
+    if not activeRun or activeRun.paused or not text or text == "" then return end
+    PushTimeline(activeRun, PreciseStamp(), text)
+end
+
 function ns.RecordAdventureAggroSwap(mobName, fromName, toName)
     if not activeRun or not mobName or not fromName or not toName then return end
     PushTimeline(activeRun, PreciseStamp(), string.format("[AGGRO] %s turns from %s to %s", mobName, fromName, toName))
@@ -351,8 +361,33 @@ function ns.ResetAdventureBossMilestones(bossName)
     end
 end
 
-function ns.RecordAdventureBossEngage(bossName)
+-- Boss look for the Story reader icons: skull (worldboss or level ??),
+-- gold dragon (elite), silver dragon (rare). Read once per boss per run.
+local function BossKind(cls, lvl)
+    if cls == "worldboss" or (lvl and lvl < 0) then return "skull" end
+    if cls == "rare" or cls == "rareelite" then return "rare" end
+    if cls == "elite" then return "elite" end
+    return "skull"
+end
+
+local function RecordBossInfo(bossName, unit)
+    if not activeRun or not bossName then return end
+    activeRun.bossInfo = activeRun.bossInfo or {}
+    if activeRun.bossInfo[bossName] then return end
+    local units = unit and { unit } or { "boss1", "boss2", "boss3", "boss4", "boss5", "target", "focus" }
+    for _, u in ipairs(units) do
+        if UnitExists(u) and ns.SafeStr(UnitName(u)) == bossName then
+            local cls = ns.SafeStr(UnitClassification(u)) or "normal"
+            local lvl = ns.SafeNum(UnitLevel(u))
+            activeRun.bossInfo[bossName] = { cls = cls, level = lvl or 0, kind = BossKind(cls, lvl) }
+            return
+        end
+    end
+end
+
+function ns.RecordAdventureBossEngage(bossName, unit)
     if not activeRun or activeRun.paused or not bossName or bossName == "" then return end
+    RecordBossInfo(bossName, unit)
     if not bossPullEngaged[bossName] then
         bossPullEngaged[bossName] = true
         activeBossPct = 100
@@ -410,21 +445,28 @@ function ns.GetAdventureCombatTag()
 end
 
 function ns.RecordAdventureUnitVitals(unit)
-    if not activeRun or activeRun.paused or not UnitExists(unit) or not UnitIsPlayer(unit) or UnitIsDeadOrGhost(unit) then return end
-    if not (UnitAffectingCombat and UnitAffectingCombat("player")) then return end
-
+    if not activeRun or activeRun.paused or not UnitExists(unit) or not UnitIsPlayer(unit) then return end
     local who = ns.GetUnitFullName(unit) or ns.StripRealm(UnitName(unit))
     if not who or who == "" then return end
+    if UnitIsDeadOrGhost(unit) then
+        brink[who] = nil -- not saved
+        return
+    end
+    -- A recovery after the fight still counts as saved; new danger needs combat
+    if not brink[who] and not (UnitAffectingCombat and UnitAffectingCombat("player")) then return end
     local now = GetTime()
 
-    local hp = ns.SafeNum(UnitHealth(unit))
-    local hpMax = ns.SafeNum(UnitHealthMax(unit))
-    if hp and hpMax and hpMax > 0 then
-        local hpPct = math.floor((hp / hpMax) * 100)
+    local hpPct = ns.GetUnitHealthPct and ns.GetUnitHealthPct(unit)
+    if hpPct then
         local hpKey = who .. "_HP"
-        if hpPct > 0 and hpPct <= 14 and (not vitalsCooldowns[hpKey] or (now - vitalsCooldowns[hpKey]) > 25) then
+        if hpPct > 0 and hpPct <= 10 and not brink[who] and (not vitalsCooldowns[hpKey] or (now - vitalsCooldowns[hpKey]) > 20) then
             vitalsCooldowns[hpKey] = now
+            brink[who] = now
             PushTimeline(activeRun, PreciseStamp(), string.format("[DANGER] %s dropped to %d%% HP!", who, hpPct))
+        elseif brink[who] and hpPct >= 40 then
+            -- Back from the brink: someone healed, shielded or pulled them out
+            brink[who] = nil
+            PushTimeline(activeRun, PreciseStamp(), string.format("[SAVED] %s was pulled back from the brink (%d%% HP)", who, hpPct))
         end
     end
 
@@ -633,7 +675,9 @@ function ns.BuildAdventureSummary(adv)
 
     if adv.bossKills and #adv.bossKills > 0 then
         for _, b in ipairs(adv.bossKills) do
-            table.insert(lines, "  - " .. ns.ColorText(b, ns.COLORS.boss))
+            local kind = (adv.bossInfo and type(adv.bossInfo[b]) == "table" and adv.bossInfo[b].kind) or "skull"
+            local icon = ns.BossIcon and (ns.BossIcon(kind) .. " ") or ""
+            table.insert(lines, "  - " .. icon .. ns.ColorText(b, ns.COLORS.boss))
         end
     end
     table.insert(lines, "")
@@ -751,7 +795,7 @@ function ns.BuildAdventureFullLog(adv)
     table.insert(out, "")
     table.insert(out, "Full Adventure Timeline:")
     local tl = adv.fullTimeline or {}
-    local startIdx = math.max(1, #tl - 249)
+    local startIdx = math.max(1, #tl - 449)
     for i = startIdx, #tl do
         local cleanLine = ns.StripColors(tl[i])
         if cleanLine and cleanLine ~= "" then
@@ -760,4 +804,94 @@ function ns.BuildAdventureFullLog(adv)
     end
 
     return table.concat(out, "\n")
+end
+
+-- =========================================================
+-- Boss icons in the Story reader: a skull, gold dragon or silver dragon
+-- before every recorded boss name (from the classification read at engage).
+-- Old stories also get the old orange boss color turned crimson.
+-- =========================================================
+local BOSS_ICON_TEX = {
+    skull = "|TInterface\\TargetingFrame\\UI-TargetingFrame-Skull:14:14:0:-1|t",
+    elite = "|TInterface\\Tooltips\\EliteNameplateIcon:14:14:0:-1|t",
+    rare = "|TInterface\\Tooltips\\EliteNameplateIcon:14:14:0:-1:64:64:0:64:0:64:200:200:215|t",
+}
+local BOSS_ICON_ATLAS = { elite = "nameplates-icon-elite-gold", rare = "nameplates-icon-elite-silver" }
+
+local function BossIcon(kind)
+    local atlas = BOSS_ICON_ATLAS[kind]
+    if atlas and C_Texture and C_Texture.GetAtlasInfo then
+        local ok, info = pcall(C_Texture.GetAtlasInfo, atlas)
+        if ok and info then return "|A:" .. atlas .. ":14:14:0:-1|a" end
+    end
+    return BOSS_ICON_TEX[kind] or BOSS_ICON_TEX.skull
+end
+ns.BossIcon = BossIcon
+
+-- Boss name -> "skull" / "elite" / "rare" for a run
+function ns.GetRunBossKinds(adv)
+    local kinds = {}
+    if not adv then return kinds end
+    for _, b in ipairs(adv.bossKills or {}) do kinds[b] = "skull" end
+    for name, info in pairs(adv.bossInfo or {}) do
+        if type(info) == "table" then kinds[name] = info.kind or "skull" end
+    end
+    return kinds
+end
+
+local function EscapePattern(s)
+    return (s:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0"))
+end
+
+function ns.DecorateStoryBosses(text, adv)
+    if not text or text == "" then return text end
+    text = text:gsub("|c[fF][fF][fF][fF]8000", "|cffdc143c")
+    local kinds = ns.GetRunBossKinds(adv)
+    local names = {}
+    for name in pairs(kinds) do
+        if #name >= 3 then table.insert(names, name) end
+    end
+    if #names == 0 then return text end
+    table.sort(names, function(a, b) return #a > #b end)
+
+    local icons = {}
+    local function DecoratePlain(seg)
+        -- Longest names first, through placeholders, so "Arugal" never
+        -- re-matches inside "Arugal's Voidwalker"
+        for idx, name in ipairs(names) do
+            seg = seg:gsub("%f[%w]" .. EscapePattern(name) .. "%f[^%w]", function()
+                icons[idx] = icons[idx] or (BossIcon(kinds[name]) .. " " .. name)
+                return "\001" .. idx .. "\002"
+            end)
+        end
+        return (seg:gsub("\001(%d+)\002", function(i) return icons[tonumber(i)] end))
+    end
+
+    -- Walk the text, decorating only the plain parts between escape codes
+    local out, i, n, segStart = {}, 1, #text, 1
+    while i <= n do
+        local j
+        if text:byte(i) == 124 then -- "|"
+            local nx = text:sub(i + 1, i + 1)
+            if nx == "c" and text:sub(i + 2, i + 9):match("^%x%x%x%x%x%x%x%x$") then
+                j = i + 9
+            elseif nx == "r" then
+                j = i + 1
+            elseif nx == "T" or nx == "A" or nx == "H" then
+                local term = (nx == "T") and "|t" or ((nx == "A") and "|a" or "|h")
+                local e = text:find(term, i + 2, true)
+                j = e and (e + 1) or n
+            end
+        end
+        if j then
+            table.insert(out, DecoratePlain(text:sub(segStart, i - 1)))
+            table.insert(out, text:sub(i, j))
+            i = j + 1
+            segStart = i
+        else
+            i = i + 1
+        end
+    end
+    table.insert(out, DecoratePlain(text:sub(segStart)))
+    return table.concat(out)
 end

@@ -18,7 +18,9 @@ local UI = ns.UI
 -- Both modes bind Ctrl+C itself (an override binding set out of combat), so
 -- a Ctrl+C that arrives before the box is armed arms it for a second press.
 -- =========================================================
-local ARM_DELAY = 0.25
+-- 0.5.1: 0.1s (was 0.25s). Most people press Ctrl and C almost together,
+-- and a slower arm made Instant ask for a second press.
+local ARM_DELAY = 0.1
 -- 0.5.0: a longer grace before focus is dropped, so the client has finished
 -- its native copy of the highlighted text (0.05s was too short on some PCs).
 local DISARM_DELAY = 0.25
@@ -289,7 +291,16 @@ do
             UI.ShowQuickCopyBox("style")
         elseif not Q.isArmed then
             if UI.ArmCtrlCopy("timed") then
-                UI.ShowToast(string.format("|cffffd100Ready|r |cff69ccf0[%s]|r - press |cffffd100CTRL-C|r again to copy", Q.label), 2.5, 0.85, 0.68, 0.30)
+                if UI.IsInstantCopyActive() then
+                    -- Instant mode, but C came before the hold armed the box
+                    CopyLog("copy", "instant: Ctrl+C came before the hold armed; asking for a second press")
+                    UI.ShowToast(string.format("|cffffd100Ready|r |cff69ccf0[%s]|r - Ctrl+C again. |cff9aa5b4Tip: hold Ctrl a blink before C for one press.|r", Q.label), 3.0, 0.85, 0.68, 0.30)
+                else
+                    if RPCopyDB.copyMode == "INSTANT" then
+                        CopyLog("copy", "instant is off right now (" .. (InCombat() and "in combat" or "custom key") .. "); two-press")
+                    end
+                    UI.ShowToast(string.format("|cffffd100Ready|r |cff69ccf0[%s]|r - press |cffffd100CTRL-C|r again to copy", Q.label), 2.5, 0.85, 0.68, 0.30)
+                end
             elseif not (GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() and GetCurrentKeyBoardFocus() ~= armEditBox) then
                 -- The hidden box could not take the text: use the visible one
                 UI.ShowQuickCopyBox("fallback")

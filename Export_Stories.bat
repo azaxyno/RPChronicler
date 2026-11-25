@@ -19,8 +19,8 @@ exit /b
 # plus index.html listing them all. Nothing in the game files is changed.
 # Screenshot folder: Options > Stories & Export, or the RPCHRONICLER_SHOTS
 # environment variable, or the Screenshots folder next to WTF.
-# Tip: the game writes SavedVariables on /reload or logout, so do one of
-# those first to export your newest story.
+# Tip: the game writes SavedVariables when you log out, so stories imported
+# this session show up after your next logout.
 # ---------------------------------------------------------------------
 $ErrorActionPreference = 'Stop'
 $addonDir = Split-Path -Parent $env:RPCHRONICLER_SELF
@@ -377,7 +377,7 @@ function Add-StoryShots([string]$html, $shots, $st) {
 $svFiles = @(Get-ChildItem -Path (Join-Path $wowDir 'WTF\Account\*\SavedVariables\RPChronicler.lua') -ErrorAction SilentlyContinue)
 if ($svFiles.Count -eq 0) {
     Write-Host "No RP Chronicler SavedVariables found under $wowDir\WTF."
-    Write-Host 'Log in with RP Chronicler enabled, then /reload or log out once, and run this again.'
+    Write-Host 'Log in with RP Chronicler enabled, then log out once, and run this again.'
     exit
 }
 

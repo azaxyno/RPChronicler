@@ -351,6 +351,42 @@ function ns.StripShotMarkers(text)
     return text
 end
 
+-- 0.6.2: "Copy for viewer". The game writes SavedVariables only at logout,
+-- so a story imported this session isn't on disk yet. This text carries it
+-- to StoryViewer.html by copy and paste: "@key value" lines, then "@story"
+-- and the story itself (colors and [Shot N] markers kept).
+local function OneLine(v)
+    return (tostring(v or ""):gsub("[\r\n]+", " "))
+end
+
+function ns.BuildViewerText(st)
+    if type(st) ~= "table" or not st.story then return "" end
+    local info = ns.GetBookInfo(st)
+    local out = { "RP Chronicler story for StoryViewer.html (paste it there)" }
+    local function Put(key, v)
+        if v ~= nil and v ~= "" then table.insert(out, "@" .. key .. " " .. OneLine(v)) end
+    end
+    Put("title", info.name)
+    Put("zone", info.instance ~= "" and info.instance or info.zone)
+    Put("date", info.date)
+    Put("start", st.startTime and math.floor(st.startTime))
+    local endT = st.endTime
+    if not endT and st.startTime and (tonumber(st.duration) or 0) > 0 then endT = st.startTime + st.duration end
+    Put("end", endT and math.floor(endT))
+    Put("duration", tonumber(st.duration) and math.floor(st.duration))
+    for i, sh in ipairs(st.shots or {}) do
+        if type(sh) == "table" and sh.at then
+            Put("shot", (sh.n or i) .. " " .. math.floor(sh.at) .. " " .. OneLine(sh.description))
+        end
+    end
+    for name, kind in pairs(ns.GetRunBossKinds(st)) do Put("boss", kind .. " " .. name) end
+    table.insert(out, "@story")
+    table.insert(out, (tostring(st.story):gsub("||", "|")))
+    -- Pipes doubled, so the copy box shows the color codes as text and the
+    -- clipboard keeps them (the viewer turns || back into |)
+    return (table.concat(out, "\n"):gsub("|", "||"))
+end
+
 -- The stats line of a story, by run type, with zeros hidden
 function ns.GetBookStats(info)
     local bits = {}

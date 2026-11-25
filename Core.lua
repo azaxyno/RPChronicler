@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.1"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.2"
 
 BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
 BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
@@ -250,6 +250,7 @@ ns.PRIVACY_TEXT =
     "No account, email or real-world personal data is collected.\n" ..
     "RP Copy (one switch) keeps recent chat in memory for the live copy. Recording (only while a run is on) keeps a Full Log with in-character chat, never OOC. " ..
     "Screenshots go to your normal WoW Screenshots folder. Each of these can be turned off in Options.\n" ..
+    "StoryViewer.html (in the addon folder) runs only in your browser, offline, and reads only the folder you choose.\n" ..
     "Chat and log text only leave your PC if YOU paste them into your own AI tool, and that tool's own privacy terms apply then.\n" ..
     "You can delete everything at any time with |cff69ccf0/rp wipe|cffd8dee9 (or by deleting RPChronicler.lua in your SavedVariables folder).|r"
 

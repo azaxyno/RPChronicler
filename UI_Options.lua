@@ -600,7 +600,7 @@ do
     TemplateButtons(stories, -86)
     local tipRows = SettingRows(stories, -120, {
         { key = "exportTip", label = "Export tip in the Story Book",
-          tip = "Shows how to make HTML pages with screenshots using Export_Stories.bat." },
+          tip = "Shows how to read your stories with screenshots in StoryViewer.html, with Copy for viewer." },
     })
     Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -150)
     O.refresh.AI = function()

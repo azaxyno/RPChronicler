@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: RP Chronicler
 ## Notes: AI roleplay snapshots, companion notes and colored adventure stories
-## Version: 0.6.1
+## Version: 0.6.2
 ## SavedVariables: RPChroniclerDB
 # CurseForge: once the project exists, change the next line to
 # "## X-Curse-Project-ID: <project id>" (two #, no space before X)

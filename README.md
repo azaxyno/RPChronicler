@@ -11,13 +11,13 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 - **One-key RP replies.** Press `Ctrl+C` and RP Chronicler copies the scene: who spoke to you, your target, your party, your pet, your quest, recent chat and your notes on the people there. Paste it into your AI with your character skill and get five short in-character lines, one per mood. Paste your favorite into chat.
 - **Companions that remember.** Save players, NPCs and pets with their relationship, tone and one note on who they are and what you went through together. Your notes go into every copy where that person is in the scene.
 - **Runs become stories.** Dungeons and raids record by themselves, and open-world adventures record when you start them. RP Chronicler packs fights, bosses, quests, places, levels, loot and party banter into one Full Log. Your AI turns it into a colored story that you read in the in-game **Story Book**.
-- **Stories with your screenshots.** Your screenshots join the run with captions. `Export_Stories.bat` turns every story into a web page with the pictures placed in the story.
+- **Stories with your screenshots.** Your screenshots join the run with captions. `StoryViewer.html`, in the addon folder, shows every story in your browser with the pictures placed in the story, and saves it as one web page you can keep or share.
 - **Use what you want.** RP Copy and the recordings are separate: the setup on first login asks whether you want RP Copy, recordings and stories, or both. Turn RP Copy off and none of it runs.
 - **Private by design.** Everything stays on your PC, and `/rp wipe` deletes it all.
 
 <p align="center"><img src="docs/story-viewer.png" width="640" alt="The in-game Story Book showing a colored dungeon chapter"><br><i>The in-game Story Book</i></p>
 
-<p align="center"><img src="docs/story-export-example.png" width="640" alt="An exported story web page with a screenshot placed in the chapter"><br><i>A story exported with Export_Stories.bat, screenshots in place</i></p>
+<p align="center"><img src="docs/story-export-example.png" width="640" alt="A story web page with a screenshot placed in the chapter"><br><i>A story as a web page, screenshots in place</i></p>
 
 **How an RP reply works:**
 
@@ -26,7 +26,7 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 3. **Your AI answers** with five short in-character replies, one per mood. Pick the one you like there and copy it.
 4. **Back in WoW**, paste it into chat (`/s`, `/p`, `/w` and so on) and send it yourself.
 
-- **Version:** 0.6.1 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.6.2 beta (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPChroniclerDB` (account-wide, on your PC only)
 - **License:** MIT
 
@@ -307,7 +307,7 @@ The Story Book has its own place on the rail. Every story your AI wrote is there
 
 - **Read** it in game, with gold chapter titles, class-colored party names, crimson bosses and foes, sea-green pets and turquoise places. Bosses get an icon: a skull, a gold dragon for an elite, a silver dragon for a rare.
 - **Auto-color.** Names the AI left plain are colored from the run itself: party (with surnames), pets and their species, places, foes, NPCs and quest givers, and items. A name the AI colored once is colored everywhere. It works on stories you already imported too.
-- **Share** copies the story as clean plain text for Discord or a forum. **Details** renames the story or edits any other field. **Re-Import** replaces the text and keeps your details. **Run** jumps to the recording. **Delete** removes the story. **+ Import** at the top of the list adds a new one.
+- **Share** copies the story as clean plain text for Discord or a forum. **Details** renames the story or edits any other field. **Re-Import** replaces the text and keeps your details. **Run** jumps to the recording. **Delete** removes the story. **Copy for viewer** (in the tip above the story) hands a story you imported this session to `StoryViewer.html`. **+ Import** at the top of the list adds a new one.
 - **Titles come from the AI.** Both story templates ask for `Title: <name>` on the first line, and RP Chronicler names the story from that line, never by guessing. A story without one keeps the run's name until you rename it.
 - **Stories stand on their own.** Deleting a recording keeps its story and its details.
 - Drag the grip in the bottom-right corner to make the reader bigger.
@@ -321,7 +321,17 @@ The Story Book has its own place on the rail. Every story your AI wrote is there
 - **Your own screenshots** taken with Print Screen during a run join it, with a caption such as "Fighting Hogger in Elwynn Forest".
 - Each shot is listed in the Full Log as `[SHOT N]`, and the story templates ask the AI to put a `[Shot N]` marker where it fits. The in-game reader hides these markers.
 
-**Export to web pages:** web pages come only from `Export_Stories.bat`, never from inside the game. The GitHub release zip includes it. The CurseForge download leaves it out, so get it from the [GitHub releases](https://github.com/azaxyno/RPChronicler/releases) and put it in `Interface\AddOns\RPChronicler`. `/reload` or log out (the game saves your data then), and double-click `Export_Stories.bat`. It writes every story to `_forever_\RP Chronicler Stories\`: a colored web page with your screenshots in place, plain text, the Full Log, and an `index.html`. Screenshots are matched to each story by time and get a smaller preview image. It needs only Windows PowerShell. To read screenshots from another folder, set the `RPCHRONICLER_SHOTS` environment variable. The Story Book shows a short tip about this, which you can close (bring it back in **Options > AI & Stories**).
+**Read stories in your browser:** double-click `StoryViewer.html` in `Interface\AddOns\RPChronicler`. It is a plain web page that works offline and needs nothing installed.
+
+1. The first time, click **Choose WoW folder** and pick your `_forever_` folder (for example `C:\Program Files (x86)\World of Warcraft\_forever_`). Chrome and Edge remember it, so later you only click **Refresh**.
+2. Click a story to read it with its screenshots in place, and **Save story** to keep it as one web page with the pictures inside (it goes to your Downloads folder).
+
+- **When stories appear:** the game saves your stories to disk when you log out or switch characters, so older stories are always there. For a story you imported this session, click **Copy for viewer** in the Story Book tip, press `Ctrl+C`, and paste it into **Paste a story** on the page.
+- **If the folder is refused:** Chrome and Edge won't open folders under `Program Files`, and Firefox can't remember folders. Then use **Choose RPChronicler.lua** (in `_forever_\WTF\Account\<your account>\SavedVariables`) and, to save pictures with a story, **Choose Screenshots folder**. You can also drag the `_forever_` folder onto the page.
+- **Screenshot format:** browsers show the game's default JPG screenshots. If your game saves TGA, the Story Book tip offers **Use JPG**.
+- **Power users:** the GitHub release zip also has `Export_Stories.bat`, which writes every story, its plain text and its Full Log to `_forever_\RP Chronicler Stories\` in one go (Windows PowerShell).
+
+The Story Book tip can be closed (bring it back in **Options > AI & Stories**).
 
 ---
 
@@ -332,6 +342,7 @@ The Story Book has its own place on the rail. Every story your AI wrote is there
 - **Use only what you want.** The first-run setup asks whether you want **RP Copy**, **recordings and stories**, or **both**. With RP Copy off (also **Options > General > RP Copy**), the Copy view, `Ctrl+C`, slice tabs, the chat it keeps for the copy, Nearby companions and the RP reply template don't run at all.
 - **Your choice of what is kept.** **Options > Privacy** has a switch per kind of chat: say, yell and emotes; whispers; party and raid chat; guild and officer chat; world channels; NPC dialogue. Out-of-character chat is never kept in a recording.
 - **What RP Chronicler records:** recent chat in memory for RP Copy (only while it is on, cleared on `/reload`), auto-recording of dungeons and raids, the open-world prompt, screenshots in runs (auto screenshots in dungeons and raids by default, and your own Print Screen shots), companion updates from chat, the companions you see nearby (in memory only), and a debug log of RP Chronicler's own errors (never chat). The setup covers RP Copy, auto-recording and screenshots; every one of them has a switch in Options.
+- **StoryViewer.html runs only in your browser.** It works offline, can't connect to the internet (its security policy blocks it), and reads only the folder or files you choose. A folder you choose is remembered by your browser only.
 - **Delete everything** with `/rp wipe` or **Options > Privacy > Delete All Data** (click twice). It removes every recording, story, companion and setting and reloads the UI. Deleting `RPChronicler.lua` in your SavedVariables folder does the same.
 - `/rp setup` shows the setup again. A later version that adds a new choice shows only the new ones.
 
@@ -398,7 +409,7 @@ If the game shows a "blocked from an action" popup, `Logs\taint.log` in your gam
    ```
    World of Warcraft\_forever_\Interface\AddOns\RPChronicler\RPChronicler.toc
    ```
-2. Restart the game or `/reload`, and enable **RP Chronicler** on the character select AddOns screen.
+2. Restart the game, and enable **RP Chronicler** on the character select AddOns screen.
 3. Log in. The setup opens once. Then type `/rp`.
 
 ---
@@ -433,7 +444,8 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 19 | `UI_Setup.lua` | First-run setup |
 | 20 | `UI_Commands.lua` | The Ctrl+C binding, floating `[RP]` button and menu, `/rp` commands |
 | | `Bindings.xml` | Key Bindings entries |
-| | `Export_Stories.bat` | Windows exporter: stories and screenshots to HTML and text |
+| | `StoryViewer.html` | Reads your stories and screenshots in the browser, offline, and saves a story as one web page |
+| | `Export_Stories.bat` | Windows exporter (GitHub zip only): all stories, text and Full Logs at once |
 | | `Media/logo.tga` | The logo shown in the setup |
 
 </details>
@@ -471,7 +483,7 @@ Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or 
 - WoW fonts can't draw Unicode symbols, so in-game text is plain ASCII with `|cffRRGGBB...|r` colors. Pasted text turns `|` into `||`, and `ns.NormalizeStoryText` converts it back.
 - Screenshots fade `UIParent` with `SetAlpha` instead of hiding it, which avoids `ADDON_ACTION_BLOCKED` in combat.
 - `COMBAT_LOG_EVENT_UNFILTERED` is Blizzard-only on this client, so RP Chronicler never registers it. A light poller reads boss HP from `boss1-5`, `target`, `focus` and party targets, ends pulls when the group leaves combat, and tracks aggro. Spells, casts, crowd control and pets come from `UNIT_SPELLCAST_*`, `UNIT_AURA`, `UNIT_PET` and `UNIT_HEALTH`. Values the client hides as "secret" are skipped; `/rp diag` shows what is readable.
-- **Versioning.** Every change bumps `## Version` in `RPChronicler.toc`: a patch bump for small fixes, a minor bump for big updates, below 1.0 while in alpha. Each version is tagged and published as a GitHub Release with a zip.
+- **Versioning.** Every change bumps `## Version` in `RPChronicler.toc`: a patch bump for small fixes, a minor bump for big updates, below 1.0 while in beta. Each version is tagged and published as a GitHub Release with a zip.
 
 </details>
 

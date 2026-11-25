@@ -1,11 +1,11 @@
 # RP Chronicler (formerly RPCopy)
 
-A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP scene (`Ctrl+C`) as a text "snapshot" for the player's AI character skill. It keeps notes on companions, records dungeon, raid and open-world runs as a timestamped Full Log for an AI storyteller, and keeps the imported colored stories in an in-game Story Book. It never sends chat. Full module reference: `docs/ARCHITECTURE.md` (internal: untracked by git since 0.6.0, kept locally and in the project files; never publish it). Player docs: `README.md`.
+A WoW: Forever addon (Interface 16001, beta since 0.6.2, MIT). It copies the current RP scene (`Ctrl+C`) as a text "snapshot" for the player's AI character skill. It keeps notes on companions, records dungeon, raid and open-world runs as a timestamped Full Log for an AI storyteller, and keeps the imported colored stories in an in-game Story Book. It never sends chat. Full module reference: `docs/ARCHITECTURE.md` (internal: untracked by git since 0.6.0, kept locally and in the project files; never publish it). Player docs: `README.md`.
 
 ## Working rules
 
 - **Bump the version on every change.** Edit `## Version` in `RPChronicler.toc` (the chat banner and window badge read it), the fallback strings in `Core.lua` (`ns.VERSION`) and `UI_Shell.lua` (`verBadge`), and the Version line in `README.md`.
-  - The addon is in alpha. Versioning restarted at 0.1.0 (the old 3.x tags were retired); stay below 1.0.0 until Mor says otherwise.
+  - The addon is in beta (Mor, 0.6.2; it was alpha before). Versioning restarted at 0.1.0 (the old 3.x tags were retired); stay below 1.0.0 until Mor says otherwise.
   - Small fix: patch bump, e.g. 0.1.0 -> 0.1.1.
   - Big update: minor bump, e.g. 0.1.x -> 0.2.0.
 - Keep the toc load order: Core -> Game -> Debug -> Companions -> Snapshot -> Runs -> RunReport -> Stories -> Templates -> Screenshots -> Events -> Chronicle -> UI_Shell -> UI_Copy -> UI_Companions -> UI_Adventures -> UI_StoryBook -> UI_Options -> UI_Setup -> UI_Commands. Game must load right after Core (it creates the event router `ns.On` that every later file uses). UI_Shell must load first among the UI files (it creates `ns.UI`). Since 0.5.0 UI_StoryBook builds its own BOOK section and rail button, and UI_Setup must load after UI_Options (it reads `ns.CAPTURE_TYPES` and opens from Options > Privacy).
@@ -20,9 +20,9 @@ A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP sce
 - Keep `README.md` in step with user-visible changes, and `docs/ARCHITECTURE.md` in step with structural ones.
 - Commit only after Mor approves. Mor pushes.
 - azaxyno is the only author and contributor. Never add `Co-Authored-By: Claude`, `Claude-Session:` or any other AI attribution to commits, tags or releases.
-- Every pushed version gets a tag `vX.Y.Z` and a GitHub Release (pre-release while in alpha). The release notes have a short intro, a "What's new" list of user-visible changes since the last release, "Fixes", and install steps. Attach `RPChronicler-vX.Y.Z.zip`, which holds an `RPChronicler/` folder with only the addon files (toc, .lua, Bindings.xml, Media/logo.tga, README.md, LICENSE, CREDITS.md, Export_Stories.bat). Leave out docs, tools, .claude, backup, CLAUDE.md and PDFs.
+- Every pushed version gets a tag `vX.Y.Z` and a GitHub Release (pre-release while in beta, title ending in "(beta)"). The release notes have a short intro, a "What's new" list of user-visible changes since the last release, "Fixes", and install steps. Attach `RPChronicler-vX.Y.Z.zip`, which holds an `RPChronicler/` folder with only the addon files (toc, .lua, Bindings.xml, Media/logo.tga, StoryViewer.html, README.md, LICENSE, CREDITS.md, Export_Stories.bat). Leave out docs, tools, .claude, backup, CLAUDE.md and PDFs.
   - Claude's cloud sessions can push branches but not tags or releases. Mor publishes the release from a `releases/new?tag=vX.Y.Z&target=main&prerelease=1` link, with the notes and zip that Claude prepares.
-  - CurseForge: upload `RPChronicler-vX.Y.Z-curseforge.zip` (the same without Export_Stories.bat; the in-game tips point to the GitHub releases for it) as **Alpha** for game version Forever 1.60.1. `.pkgmeta` (package-as RPChronicler) is ready for the packager. Once the project exists, turn the commented `# ## X-Curse-Project-ID: 000000` line in the toc into a real `## X-Curse-Project-ID: <id>`.
+  - CurseForge: upload `RPChronicler-vX.Y.Z-curseforge.zip` (the same without Export_Stories.bat, which `.pkgmeta` also ignores; never link to an outside download for it, since CurseForge forbids external download links) as **Beta** for game version Forever 1.60.1. `.pkgmeta` (package-as RPChronicler) is ready for the packager. Once the project exists, turn the commented `# ## X-Curse-Project-ID: 000000` line in the toc into a real `## X-Curse-Project-ID: <id>`.
 
 ## Map (details in docs/ARCHITECTURE.md, local only)
 
@@ -50,7 +50,8 @@ A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP sce
 | `UI_Commands.lua` | The Ctrl+C override binding, floating `[RP]` button (right-click menu, recording state), `/rp` commands |
 | `Bindings.xml` | The 7 Key Bindings entries (the only way to bind keys other than Ctrl+C since 0.6.1) |
 | `Media/logo.tga` | The setup logo, 128x128 32-bit uncompressed TGA (from `RPCopy-docs/logo/rpchronicler-logo-256.png`) |
-| `Export_Stories.bat` | Windows PowerShell exporter: SavedVariables to HTML and text, with screenshots placed in the stories |
+| `StoryViewer.html` | The player-facing story export (0.6.2): offline page (CSP blocks all network) in the addon folder. One pick of `_forever_` (handle kept in IndexedDB, Chrome/Edge), fallback file pickers and drag and drop for Program Files installs and Firefox, Lua SavedVariables reader, screenshots matched by time, "Paste a story" for `ns.BuildViewerText` (Story Book "Copy for viewer"), Save story = one HTML file with ~1280px JPGs embedded. Same rendering rules as the .bat |
+| `Export_Stories.bat` | Windows PowerShell exporter, GitHub zip only: SavedVariables to HTML and text, with screenshots placed in the stories |
 
 Key facts that are easy to get wrong:
 
@@ -62,4 +63,7 @@ Key facts that are easy to get wrong:
 - Story colors: class colors, but Priest is gray `C0C0C0` and bosses are crimson `dc143c`. The two story templates live in `Templates.lua` (shared part `STORY_SHARED_RULES`) and must match the Full Log tags (`ns.LOG_TAGS`) and the Story Book header/footer that `ns.ParseStoryMeta` reads. Line 1 is `Title: <title>`: the addon names the story from it (no guessing) and strips the label for the reader.
 - 0.6.0 renamed RPCopy to RP Chronicler everywhere: folder and toc `RPChronicler`, title "RP Chronicler", SavedVariables `RPChroniclerDB`, globals and frames `RPChronicler*`, bindings `RPCHRONICLER_*`, slash `/rp` and `/rpchronicler`. RPCopy had no other users, so there is no data migration from it (Mor moved Mor's own SavedVariables by hand).
 - Mor asked to keep the floating `[RP]` button and not add a minimap button.
+- Never tell players to `/reload` (Mor, 0.6.2). The game writes SavedVariables only at logout or reload, so stories reach StoryViewer.html after a logout, or right away through Copy for viewer.
+- Screenshots: Forever saves `WoWScrnShot_MMDDYY_HHMMSS.jpg` (local time) in `_forever_\Screenshots` by default. `ns.ScreenshotFormatOK` / `ns.UseJpgScreenshots` (Screenshots.lua) handle a TGA `screenshotFormat`, which browsers can't show.
+- CurseForge text: avoid `<` `>` inside code spans (its editor double-escapes them); write [text] instead.
 - Testing: there is no game here. Use a lupa (Lua 5.1) mock harness to load every toc file, click every button and fire events. PowerShell can't be run here, so `Export_Stories.bat` changes are untested until Mor runs them.

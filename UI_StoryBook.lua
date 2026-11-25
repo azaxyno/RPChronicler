@@ -133,7 +133,9 @@ B.delBtn:SetPoint("TOPRIGHT", 0, -76)
 B.delBtn.tipTitle = "|cffff6b6bDelete Story|r"
 B.delBtn.tipText = "Click twice. Removes the story only; the recording stays."
 
--- 0.5.0: a dismissible tip on making HTML pages outside the game
+-- 0.5.0: a dismissible tip on reading stories outside the game.
+-- 0.6.2: it points to StoryViewer.html, carries "Copy for viewer" for a
+-- story the game hasn't saved yet, and offers JPG when screenshots are TGA.
 B.tip = CreateFrame("Frame", nil, B.right, UI.BACKDROP)
 B.tip:SetHeight(58)
 B.tip:SetPoint("TOPLEFT", 0, -102)
@@ -142,12 +144,10 @@ UI.ApplyDarkGlass(B.tip, 0.10, 0.09, 0.06, 0.92, 0.60, 0.48, 0.22, 0.70)
 do
     local t = B.tip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     t:SetPoint("TOPLEFT", 8, -5)
-    t:SetPoint("BOTTOMRIGHT", -30, 5)
+    t:SetPoint("RIGHT", -30, 0)
     t:SetJustifyH("LEFT")
     t:SetJustifyV("TOP")
-    t:SetText("|cffffd100Web pages with screenshots:|r |cffd7c4a3get |cfff5e6c8Export_Stories.bat|cffd7c4a3 from |cfff5e6c8github.com/azaxyno/RPChronicler/releases|cffd7c4a3 " ..
-        "(CurseForge downloads leave it out) and put it in Interface\\AddOns\\RPChronicler. /reload or log out so the game saves your stories, then double-click it. " ..
-        "The pages appear in the |cfff5e6c8RP Chronicler Stories|cffd7c4a3 folder of _forever_.|r")
+    B.tipText = t
     local x = UI.CreateSleekButton(B.tip, 20, 18, "x", "danger")
     x:SetPoint("TOPRIGHT", -5, -5)
     x.tipTitle = "|cffffd100Hide this tip|r"
@@ -156,6 +156,37 @@ do
         ns.Set("exportTip", false)
         UI.RefreshStoryBook()
     end)
+    B.viewerBtn = UI.CreateSleekButton(B.tip, 110, 18, "Copy for viewer", "gold")
+    B.viewerBtn:SetPoint("BOTTOMLEFT", 8, 5)
+    B.viewerBtn.tipTitle = "|cffffd100Copy for viewer|r"
+    B.viewerBtn.tipText = "For a story you imported this session: copy it with Ctrl+C and paste it into StoryViewer.html. Older stories are already there."
+    B.jpgBtn = UI.CreateSleekButton(B.tip, 70, 18, "Use JPG", "tool")
+    B.jpgBtn:SetPoint("LEFT", B.viewerBtn, "RIGHT", 6, 0)
+    B.jpgBtn.tipTitle = "|cffffd100Save screenshots as JPG|r"
+    B.jpgBtn.tipText = "Your game saves screenshots as TGA, which browsers can't show. This switches the game's screenshot format to JPG."
+    B.jpgBtn:SetScript("OnClick", function()
+        if ns.UseJpgScreenshots() then
+            UI.SetStatus("Screenshots are now saved as JPG.", "good")
+        else
+            UI.SetStatus("Couldn't change the screenshot format. Leave combat and try again.", "error")
+        end
+        UI.RefreshStoryBook()
+    end)
+end
+
+-- Fills the tip and sizes it to its text; returns its height
+function UI.LayoutStoryTip()
+    local text = "|cffffd100Read your stories with screenshots:|r |cffd7c4a3double-click |cfff5e6c8StoryViewer.html|cffd7c4a3 in Interface\\AddOns\\RPChronicler. " ..
+        "Stories appear there after you log out. For one you imported just now, use Copy for viewer.|r"
+    local jpgOk = ns.ScreenshotFormatOK()
+    if not jpgOk then
+        text = text .. "\n|cffff6b6bYour screenshots are TGA, which browsers can't show.|r"
+    end
+    B.tipText:SetText(text)
+    if jpgOk then B.jpgBtn:Hide() else B.jpgBtn:Show() end
+    local h = math.max(58, math.ceil((B.tipText:GetStringHeight() or 30) + 34))
+    B.tip:SetHeight(h)
+    return h
 end
 
 -- The reader (warm parchment)
@@ -352,7 +383,7 @@ function UI.RefreshStoryBook()
     B.readBg:SetPoint("BOTTOMRIGHT", 0, 0)
     if ns.Get("exportTip") then
         B.tip:Show()
-        B.readBg:SetPoint("TOPLEFT", 0, -164)
+        B.readBg:SetPoint("TOPLEFT", 0, -(102 + UI.LayoutStoryTip() + 4))
     else
         B.tip:Hide()
         B.readBg:SetPoint("TOPLEFT", 0, -104)
@@ -408,6 +439,13 @@ B.shareBtn:SetScript("OnClick", function()
     UI.ShowCopyBox("|cffffd100Share:|r |cfff5e6c8" .. info.name .. "|r",
         "|cffb0bac5Plain text with no color codes, ready for Discord or a forum.|r",
         header .. ns.GetStoryPlainText(adv))
+end)
+B.viewerBtn:SetScript("OnClick", function()
+    local st = CurrentBookRun()
+    if not st then return end
+    UI.ShowCopyBox("|cffffd100Copy for viewer:|r |cfff5e6c8" .. ns.GetBookInfo(st).name .. "|r",
+        "|cffb0bac5Press Ctrl+C, then paste it into StoryViewer.html (Paste a story).|r",
+        ns.BuildViewerText(st))
 end)
 B.delBtn:SetScript("OnClick", function(self)
     local adv = CurrentBookRun()

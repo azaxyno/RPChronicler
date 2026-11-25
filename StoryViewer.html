@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Offline only: this page can't load or send anything over the network.
+     It reads only the folder or files you choose, and only in your browser. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob: file:">
+<title>RP Chronicler Stories</title>
+<style>
+:root{--bg:#17120c;--panel:#1f1810;--line:#8a6d33;--gold:#ffd100;--text:#eceff1;--soft:#d7c4a3;--muted:#9e9e9e;--blue:#69ccf0}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:Georgia,serif;margin:0;line-height:1.65}
+a{color:var(--blue)}
+header{padding:18px 16px 6px;max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+header h1{color:var(--gold);font-size:22px;margin:0;flex:1 1 auto}
+main{max-width:1180px;margin:0 auto;padding:0 16px 40px}
+button{font:inherit;font-size:14px;background:#2a2014;color:var(--gold);border:1px solid var(--line);border-radius:5px;padding:6px 14px;cursor:pointer}
+button:hover{background:#3a2c18}
+button.big{font-size:17px;padding:10px 22px}
+button.link{background:none;border:none;color:var(--blue);padding:0;text-decoration:underline;font-size:inherit}
+.muted{color:var(--muted);font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px 24px;margin:14px 0}
+.card h2{color:var(--gold);font-size:18px;margin:0 0 8px}
+ol{padding-left:22px;margin:6px 0}
+code{background:#0f0b07;border:1px solid #3a2c18;border-radius:3px;padding:0 4px;font-size:13px;word-break:break-all}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+#msg{min-height:1.4em;color:var(--soft)}
+#msg.err{color:#ff8a80}
+.layout{display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start}
+@media (max-width:760px){.layout{grid-template-columns:1fr}}
+#list{list-style:none;margin:0;padding:0}
+#list li{border:1px solid #3a2c18;border-radius:5px;padding:8px 10px;margin:0 0 6px;cursor:pointer;background:#1b150e}
+#list li:hover{border-color:var(--line)}
+#list li.on{border-color:var(--gold);background:#2a2014}
+#list .t{color:var(--gold);display:block}
+#list .s{color:var(--muted);font-size:12px}
+.acct{color:var(--soft);font-size:13px;margin:10px 0 4px}
+#reader .meta{color:var(--muted);font-size:13px;margin:0 0 10px}
+#reader h1{color:var(--gold);font-size:22px;margin:0}
+textarea{width:100%;min-height:140px;background:#0f0b07;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:8px;font:13px Consolas,monospace}
+.story{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px 24px}
+.bi{font-size:0.9em;margin-right:3px}.bi-elite{filter:sepia(1) saturate(5) hue-rotate(-12deg) brightness(1.1)}.bi-rare{filter:grayscale(1) brightness(1.4)}
+figure.shot{margin:16px 0;text-align:center}figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:4px}
+figcaption{color:#b0a080;font-size:13px;font-style:italic;margin-top:4px}
+.gallery{margin-top:24px;border-top:1px solid var(--line);padding-top:8px}
+.drop{outline:3px dashed var(--gold);outline-offset:-8px}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>RP Chronicler Stories</h1>
+  <span id="where" class="muted"></span>
+  <button id="refresh" class="hide">Refresh</button>
+  <button id="change" class="hide">Choose files</button>
+</header>
+<main>
+  <div id="msg"></div>
+
+  <section id="setup" class="card">
+    <h2>Read your stories with their screenshots</h2>
+    <div id="fsaWay">
+      <p>Choose your <b>_forever_</b> folder once. This page remembers it, so next time you only click Refresh.</p>
+      <p class="muted">It is the folder this page is in, three levels up. Usually <code>C:\Program Files (x86)\World of Warcraft\_forever_</code></p>
+      <div class="row"><button id="pick" class="big">Choose WoW folder</button></div>
+      <p class="muted">If your browser says the folder "contains system files" (WoW in Program Files), use the two buttons below.</p>
+    </div>
+    <div id="fileWay">
+      <div class="row">
+        <button id="pickLua">Choose RPChronicler.lua</button>
+        <span class="muted">in <code>_forever_\WTF\Account\&lt;your account&gt;\SavedVariables</code></span>
+      </div>
+      <div class="row">
+        <button id="pickShots">Choose Screenshots folder</button>
+        <span class="muted">in <code>_forever_\Screenshots</code> (only needed to save pictures with a story)</span>
+      </div>
+      <p class="muted">Or drag your _forever_ folder onto this page.</p>
+    </div>
+    <p class="muted">Stories show here once the game has saved them, when you log out or switch characters. A story you imported just now: in the Story Book click <b>Copy for viewer</b>, press Ctrl+C, and paste it below.</p>
+    <details id="pasteBox">
+      <summary><b>Paste a story</b></summary>
+      <textarea id="paste" placeholder="Paste the text from Copy for viewer here"></textarea>
+      <div class="row"><button id="showPaste">Show story</button></div>
+    </details>
+    <p class="muted">This page works offline, inside your browser. It never connects to the internet and only reads what you choose.</p>
+  </section>
+
+  <div id="app" class="layout hide">
+    <nav><ul id="list"></ul></nav>
+    <article id="reader"></article>
+  </div>
+
+  <input id="luaInput" type="file" accept=".lua" multiple class="hide">
+  <input id="shotInput" type="file" webkitdirectory multiple class="hide">
+</main>
+<script>
+"use strict";
+(function () {
+const $ = id => document.getElementById(id);
+const SHOT_RE = /^WoWScrnShot_(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.(jpg|jpeg|png)$/i;
+const HAS_FSA = typeof window.showDirectoryPicker === "function";
+const PREVIEW_W = 1280;
+
+const state = {
+  rootHandle: null,   // remembered folder (Chrome / Edge)
+  saves: [],          // { account, db }
+  shots: [],          // { name, when (ms), size, getFile }
+  tgaSeen: false,
+  items: [],
+  current: null,
+  urls: []
+};
+
+function say(text, isErr) { const m = $("msg"); m.textContent = text || ""; m.className = isErr ? "err" : ""; }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function vals(t) { return t && typeof t === "object" ? Object.values(t) : []; }
+
+// ---------- remembering the folder (IndexedDB, this browser only) ----------
+function idb() {
+  return new Promise((res, rej) => {
+    let q;
+    try { q = indexedDB.open("rpchronicler-viewer", 1); } catch (e) { rej(e); return; }
+    q.onupgradeneeded = () => q.result.createObjectStore("kv");
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => rej(q.error);
+  });
+}
+async function kvGet(key) {
+  try { const db = await idb(); return await new Promise(r => { const q = db.transaction("kv").objectStore("kv").get(key); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); }
+  catch (e) { return null; }
+}
+async function kvSet(key, v) {
+  try { const db = await idb(); await new Promise(r => { const t = db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, key); t.oncomplete = r; t.onerror = r; }); }
+  catch (e) { /* not remembered, still works */ }
+}
+
+// ---------- one folder view over the three ways a browser hands us files ----------
+// node: { name, isDir, list(): Promise<node[]>, file(): Promise<File> }
+function fromHandle(h) {
+  return {
+    name: h.name, isDir: h.kind === "directory",
+    list: async () => { const out = []; for await (const c of h.values()) out.push(fromHandle(c)); return out; },
+    file: () => h.getFile()
+  };
+}
+function fromEntry(e) {
+  return {
+    name: e.name, isDir: e.isDirectory,
+    list: () => new Promise((res, rej) => {
+      const r = e.createReader(), out = [];
+      const more = () => r.readEntries(batch => { if (!batch.length) res(out); else { batch.forEach(b => out.push(fromEntry(b))); more(); } }, rej);
+      more();
+    }),
+    file: () => new Promise((res, rej) => e.file(res, rej))
+  };
+}
+function fromFiles(files) {
+  // webkitdirectory gives a flat list with relative paths; build the tree
+  const root = { name: "", isDir: true, kids: new Map() };
+  for (const f of files) {
+    const parts = (f.webkitRelativePath || f.name).split("/");
+    let d = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!d.kids.has(parts[i])) d.kids.set(parts[i], { name: parts[i], isDir: true, kids: new Map() });
+      d = d.kids.get(parts[i]);
+    }
+    d.kids.set(parts[parts.length - 1], { name: f.name, isDir: false, f });
+  }
+  const wrap = n => ({ name: n.name, isDir: n.isDir, list: async () => [...n.kids.values()].map(wrap), file: async () => n.f });
+  const top = [...root.kids.values()];
+  return top.length === 1 && top[0].isDir ? wrap(top[0]) : wrap(root);
+}
+async function child(node, name) {
+  if (!node || !node.isDir) return null;
+  const low = name.toLowerCase();
+  for (const k of await node.list()) if (k.name.toLowerCase() === low) return k;
+  return null;
+}
+
+// Finds saves and screenshots under whatever folder was picked: _forever_,
+// World of Warcraft (with _forever_ inside), WTF, SavedVariables or Screenshots
+async function scanFolder(node) {
+  let saves = 0, shots = 0;
+  let base = node;
+  if (!(await child(base, "WTF")) && !(await child(base, "Screenshots"))) {
+    const f = await child(base, "_forever_");
+    if (f) base = f;
+  }
+  let wtf = await child(base, "WTF");
+  if (!wtf && base.name.toLowerCase() === "wtf") wtf = base;
+  if (wtf) {
+    const accounts = await child(wtf, "Account");
+    for (const acc of accounts ? await accounts.list() : []) {
+      if (!acc.isDir) continue;
+      const sv = await child(await child(acc, "SavedVariables"), "RPChronicler.lua");
+      if (sv && await addSave(await sv.file(), acc.name)) saves++;
+    }
+  } else {
+    const sv = await child(base, "RPChronicler.lua");
+    if (sv && await addSave(await sv.file(), "")) saves++;
+  }
+  const shotDir = (await child(base, "Screenshots")) || base;
+  for (const k of await shotDir.list()) if (!k.isDir && addShot(k.name, () => k.file())) shots++;
+  return { saves, shots };
+}
+
+function addShot(name, getFile, size) {
+  if (/^WoWScrnShot_.*\.tga$/i.test(name)) state.tgaSeen = true;
+  const m = SHOT_RE.exec(name);
+  if (!m) return false;
+  const when = new Date(2000 + +m[3], +m[1] - 1, +m[2], +m[4], +m[5], +m[6]).getTime();
+  if (state.shots.some(s => s.name === name)) return false;
+  state.shots.push({ name, when, size, getFile });
+  return true;
+}
+
+async function addSave(file, account) {
+  const text = await file.text();
+  let g;
+  try { g = readSavedVariables(text); } catch (e) { say("Could not read " + file.name + ": " + e.message, true); return false; }
+  if (!g.RPChroniclerDB) return false;
+  state.saves = state.saves.filter(s => s.account !== account || !account);
+  state.saves.push({ account: account || ("Account " + (state.saves.length + 1)), db: g.RPChroniclerDB });
+  return true;
+}
+
+// ---------- minimal Lua table reader (enough for WoW SavedVariables) ----------
+function luaString(raw) {
+  return raw.slice(1, -1).replace(/\\(\d{1,3}|[\s\S])/g, (m, c) => {
+    if (c === "n") return "\n";
+    if (c === "r") return "";
+    if (c === "t") return "\t";
+    if (/^\d+$/.test(c)) return String.fromCharCode(+c);
+    return c;
+  });
+}
+function readSavedVariables(text) {
+  const re = /"(?:\\[\s\S]|[^"\\])*"|--[^\n]*|[\[\]{}=,;]|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|[A-Za-z_][A-Za-z0-9_]*/g;
+  const toks = [];
+  let m;
+  while ((m = re.exec(text))) if (!m[0].startsWith("--")) toks.push(m[0]);
+  let pos = 0;
+  function value() {
+    const t = toks[pos++];
+    if (t === "{") {
+      const tbl = {};
+      let idx = 1;
+      while (pos < toks.length && toks[pos] !== "}") {
+        const tk = toks[pos];
+        if (tk === "," || tk === ";") { pos++; continue; }
+        if (tk === "[") { pos++; const k = value(); pos += 2; tbl[String(k)] = value(); }
+        else if (/^[A-Za-z_]/.test(tk) && toks[pos + 1] === "=") { pos += 2; tbl[tk] = value(); }
+        else { tbl[String(idx++)] = value(); }
+      }
+      pos++;
+      return tbl;
+    }
+    if (t === undefined) return null;
+    if (t[0] === '"') return luaString(t);
+    if (t === "true") return true;
+    if (t === "false") return false;
+    if (t === "nil") return null;
+    return Number(t);
+  }
+  const g = {};
+  while (pos < toks.length) {
+    const name = toks[pos];
+    if (toks[pos + 1] === "=") { pos += 2; g[name] = value(); } else pos++;
+  }
+  return g;
+}
+
+// ---------- stories from the saved data ----------
+function buildItems() {
+  const items = [];
+  for (const save of state.saves) {
+    const db = save.db;
+    const runs = [];
+    if (db.activeRun) runs.push(db.activeRun);
+    for (const r of vals(db.adventures)) runs.push(r);
+    const byId = {};
+    runs.forEach(r => { if (r && r.id) byId[r.id] = r; });
+    const used = {};
+    for (const st of vals(db.stories)) {
+      if (!st || !st.story) continue;
+      if (st.runId) used[st.runId] = true;
+      items.push(makeItem(st, st.story, save.account));
+    }
+    // stories saved inside a run (before 0.5.0)
+    for (const r of runs) if (r && r.story && !(r.id && used[r.id])) items.push(makeItem(r, r.story, save.account));
+  }
+  items.sort((a, b) => (b.start || 0) - (a.start || 0));
+  return items;
+}
+function makeItem(meta, story, account) {
+  const book = meta.book || {};
+  const kinds = {};
+  vals(meta.bossKills).forEach(n => { kinds[String(n)] = "skull"; });
+  for (const [n, info] of Object.entries(meta.bossInfo || {})) kinds[n] = (info && info.kind) || "skull";
+  let end = meta.endTime;
+  if (!end && meta.duration > 0 && meta.startTime) end = meta.startTime + meta.duration;
+  if (!end) end = meta.lastSeen;
+  return {
+    account,
+    title: String(book.title || meta.title || "Adventure"),
+    zone: String(book.zone || meta.zone || meta.instanceName || ""),
+    date: String(book.date || meta.startDate || ""),
+    start: meta.startTime || null,
+    end: end || null,
+    duration: meta.duration || 0,
+    shots: vals(meta.shots).filter(s => s && s.at).map((s, i) => ({ n: s.n || i + 1, at: s.at, caption: String(s.description || "") })),
+    bosses: kinds,
+    story: String(story)
+  };
+}
+
+// "Copy for viewer" text from the Story Book (a story imported this session)
+function parsePasted(text) {
+  text = text.replace(/\r/g, "").replace(/\|\|/g, "|");
+  const at = text.indexOf("@story\n");
+  if (!/RP Chronicler story/i.test(text.slice(0, 200)) || at < 0) return null;
+  const head = text.slice(0, at).split("\n");
+  const it = { account: "Pasted", title: "Adventure", zone: "", date: "", start: null, end: null, duration: 0, shots: [], bosses: {}, story: text.slice(at + 7) };
+  for (const line of head) {
+    const m = /^@(\w+)\s?(.*)$/.exec(line.trim());
+    if (!m) continue;
+    const k = m[1], v = m[2];
+    if (k === "title") it.title = v;
+    else if (k === "zone") it.zone = v;
+    else if (k === "date") it.date = v;
+    else if (k === "start") it.start = +v || null;
+    else if (k === "end") it.end = +v || null;
+    else if (k === "duration") it.duration = +v || 0;
+    else if (k === "shot") { const p = /^(\d+)\s+(\d+)\s?(.*)$/.exec(v); if (p) it.shots.push({ n: +p[1], at: +p[2], caption: p[3] }); }
+    else if (k === "boss") { const p = /^(\w+)\s+(.+)$/.exec(v); if (p) it.bosses[p[2]] = p[1]; }
+  }
+  if (!it.end && it.start && it.duration) it.end = it.start + it.duration;
+  return it;
+}
+
+// ---------- WoW color codes to HTML (same rules as the in-game reader) ----------
+function cleanWow(s) {
+  return (s || "").replace(/\|\|/g, "|").replace(/\|T[\s\S]*?\|t/g, "").replace(/\|A[\s\S]*?\|a/g, "").replace(/\|H[\s\S]*?\|h([\s\S]*?)\|h/g, "$1");
+}
+function plain(s) { return cleanWow(s).replace(/\|c[0-9a-fA-F]{8}/g, "").replace(/\|cn[^:|]*:/g, "").replace(/\|r/g, ""); }
+
+// Line 2 sometimes repeats the place ("Zephras Isle | 17m | Zephras Isle")
+function repairHeader(s) {
+  const lines = s.split("\n");
+  let seen = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (!plain(lines[i]).trim()) continue;
+    if (++seen < 2) continue;
+    const m = /^(.*?)(\s+\|{1,2}\s+)(.*?)(\s+\|{1,2}\s+)(.*?)((?:\|{1,2}r)*)(\s*)$/.exec(lines[i]);
+    if (!m || /\s\|{1,2}\s/.test(m[5])) break;
+    const first = plain(m[1]).trim().toLowerCase(), last = plain(m[5]).trim().toLowerCase();
+    if (last && first.includes(last)) lines[i] = m[1] + m[2] + m[3] + m[6] + m[7];
+    break;
+  }
+  return lines.join("\n");
+}
+// The "Title:" line names the story; the page shows it as the heading instead
+function dropTitleLine(s) {
+  const lines = s.split("\n");
+  let n = 0;
+  for (let i = 0; i < lines.length && n < 3; i++) {
+    const p = plain(lines[i]).trim();
+    if (!p) continue;
+    n++;
+    if (/^#*\s*title:/i.test(p)) { lines.splice(i, 1); while (lines.length && !plain(lines[0]).trim()) lines.shift(); break; }
+  }
+  return lines.join("\n");
+}
+function storyHtml(s) {
+  s = esc(cleanWow(s));
+  let out = "", stack = [];
+  for (const p of s.split(/(\|c[0-9a-fA-F]{8}|\|r|\[[Ss]hot\s*\d+\])/)) {
+    let m;
+    if ((m = /^\|c[0-9a-fA-F]{2}([0-9a-fA-F]{6})$/.exec(p))) { out += '<span style="color:#' + m[1] + '">'; stack.push(m[1]); }
+    else if (p === "|r") { if (stack.length) { out += "</span>"; stack.pop(); } }
+    else if (/^\[[Ss]hot\s*\d+\]$/.test(p)) { out += "</span>".repeat(stack.length) + p + stack.map(c => '<span style="color:#' + c + '">').join(""); }
+    else out += p;
+  }
+  out += "</span>".repeat(stack.length);
+  return out.replace(/\n/g, "<br>\n");
+}
+function bossIcons(html, kinds) {
+  html = html.replace(/color:#ff8000/gi, "color:#dc143c");
+  const names = Object.keys(kinds).filter(n => n.length >= 3).sort((a, b) => b.length - a.length);
+  if (!names.length) return html;
+  const enc = {};
+  names.forEach(n => { enc[esc(n)] = kinds[n]; });
+  const re = new RegExp("(?<![\\w])(" + names.map(n => esc(n).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?![\\w])", "g");
+  // never inside a tag
+  return html.split(/(<[^>]+>)/).map(part => part.startsWith("<") ? part : part.replace(re, m => {
+    const k = enc[m] || "skull";
+    return '<span class="bi bi-' + k + '">' + (k === "skull" ? "&#x1F480;" : "&#x1F409;") + "</span>" + m;
+  })).join("");
+}
+
+// ---------- screenshots ----------
+// WoW names shots WoWScrnShot_MMDDYY_HHMMSS.jpg in local time. A story's shots
+// are the files from its start (minus 30s) to its end (plus 2 minutes); the
+// ones RP Chronicler recorded carry a number and a caption.
+function pad(n) { return String(n).padStart(2, "0"); }
+function shotName(at) {
+  const d = new Date(at * 1000);
+  return "WoWScrnShot_" + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getFullYear() % 100) + "_" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + ".jpg";
+}
+function storyShots(it) {
+  if (!it.start) return [];
+  const from = it.start * 1000 - 30000;
+  const to = (it.end ? it.end * 1000 : it.start * 1000 + 6 * 3600000) + 120000;
+  const recorded = it.shots.map(s => ({ ...s, used: false }));
+  const out = [];
+  if (state.shots.length) {
+    for (const f of state.shots.filter(f => f.when >= from && f.when <= to).sort((a, b) => a.when - b.when)) {
+      const r = recorded.find(r => !r.used && Math.abs(r.at * 1000 - f.when) <= 3000);
+      if (r) r.used = true;
+      out.push({ n: r ? r.n : null, when: f.when, caption: r ? r.caption : "", file: f });
+    }
+  } else {
+    // No folder chosen: the page sits in _forever_\Interface\AddOns\RPChronicler,
+    // so it can still show the shots the addon recorded by their names
+    for (const r of recorded) out.push({ n: r.n, when: r.at * 1000, caption: r.caption, guess: r.at });
+  }
+  return out;
+}
+function figure(s, src) {
+  const cap = s.caption ? "<figcaption>" + esc(s.caption) + "</figcaption>" : "";
+  const g = s.guess ? ' data-guess="' + s.guess + '"' : "";
+  return '<figure class="shot"><img src="' + src + '"' + g + ' alt="screenshot" loading="lazy">' + cap + "</figure>";
+}
+function placeShots(html, shots, it, srcOf) {
+  const byN = {};
+  shots.forEach(s => { if (s.n) byN[s.n] = s; });
+  html = html.replace(/\[[Ss]hot\s*(\d+)\]/g, (m, n) => {
+    const s = byN[n];
+    if (s && !s.placed) { s.placed = true; return figure(s, srcOf(s)); }
+    return "";
+  });
+  const left = shots.filter(s => !s.placed);
+  if (!left.length) return html;
+  const lines = html.split("<br>\n");
+  const chapters = [];
+  lines.forEach((l, i) => {
+    const m = /^\s*Chapter\s+\w+\s*:?\s*(.*)$/i.exec(l.replace(/<[^>]+>/g, ""));
+    if (m) chapters.push({ line: i, title: m[1].trim(), extra: [] });
+  });
+  const gallery = [];
+  const span = it.duration || (it.end && it.start ? it.end - it.start : 0);
+  for (const s of left) {
+    let target = null;
+    if (chapters.length && s.caption) {
+      for (const c of chapters) {
+        if (c.title.split(/[^\w']+/).filter(w => w.length >= 5).some(w => s.caption.toLowerCase().includes(w.toLowerCase()))) { target = c; break; }
+      }
+    }
+    if (!target && chapters.length && it.start && span > 0) {
+      const frac = Math.max(0, Math.min(0.999, (s.when / 1000 - it.start) / span));
+      target = chapters[Math.floor(frac * chapters.length)];
+    }
+    if (target) target.extra.push(s); else gallery.push(s);
+  }
+  for (let ci = chapters.length - 1; ci >= 0; ci--) {
+    const c = chapters[ci];
+    if (!c.extra.length) continue;
+    const at = ci + 1 < chapters.length ? chapters[ci + 1].line : lines.length;
+    lines.splice(at, 0, c.extra.map(s => figure(s, srcOf(s))).join(""));
+  }
+  html = lines.join("<br>\n");
+  if (gallery.length) html += '<div class="gallery">' + gallery.map(s => figure(s, srcOf(s))).join("") + "</div>";
+  return html;
+}
+
+// A smaller JPG (about 1280 px wide) for the saved file
+async function previewDataUrl(file) {
+  const bmp = await createImageBitmap(file);
+  const w = Math.min(PREVIEW_W, bmp.width), h = Math.round(bmp.height * w / bmp.width);
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").drawImage(bmp, 0, 0, w, h);
+  if (bmp.close) bmp.close();
+  return c.toDataURL("image/jpeg", 0.82);
+}
+
+// ---------- rendering ----------
+async function renderStory(it, forSave) {
+  const shots = storyShots(it);
+  const src = new Map();
+  for (const s of shots) {
+    if (s.guess) { src.set(s, "../../../Screenshots/" + shotName(s.guess)); continue; }
+    const f = await s.file.getFile();
+    if (forSave) src.set(s, await previewDataUrl(f));
+    else { const u = URL.createObjectURL(f); state.urls.push(u); src.set(s, u); }
+  }
+  let story = dropTitleLine(repairHeader(it.story.replace(/\r/g, "")));
+  let html = bossIcons(storyHtml(story), it.bosses);
+  if (shots.length) html = placeShots(html, shots, it, s => src.get(s));
+  html = html.replace(/\[[Ss]hot\s*\d+\]/g, "");
+  const meta = [it.zone, it.date].filter(Boolean).map(esc).join(" - ");
+  return { html, meta, guessed: shots.some(s => s.guess), count: shots.length };
+}
+
+// When the page guessed a recorded shot's file name, try a few seconds later
+// (the game saves the file a moment after the addon asks for it)
+function fixGuesses(root) {
+  root.querySelectorAll("img[data-guess]").forEach(img => {
+    const at = +img.dataset.guess;
+    let step = 0;
+    const tries = [1, 2, 3, -1];
+    img.onerror = () => {
+      if (step < tries.length) img.src = "../../../Screenshots/" + shotName(at + tries[step++]);
+      else img.closest("figure").remove();
+    };
+  });
+}
+
+async function show(it) {
+  state.current = it;
+  state.urls.forEach(u => URL.revokeObjectURL(u));
+  state.urls = [];
+  document.querySelectorAll("#list li").forEach(li => li.classList.toggle("on", li._it === it));
+  const r = await renderStory(it, false);
+  $("reader").innerHTML = '<div class="row" style="justify-content:space-between"><h1>' + esc(it.title) + '</h1><button id="save">Save story</button></div>' +
+    '<p class="meta">' + r.meta + "</p>" + '<div class="story">' + r.html + "</div>";
+  fixGuesses($("reader"));
+  $("save").onclick = () => saveStory(it);
+}
+
+function safeName(s) {
+  s = s.replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().replace(/\.+$/, "").slice(0, 80);
+  return s || "Adventure";
+}
+async function saveStory(it) {
+  if (!state.shots.length && it.shots.length) {
+    say("To put the screenshots in the saved file, choose your WoW folder (or the Screenshots folder) first.", true);
+    return;
+  }
+  say("Saving " + it.title + "...");
+  const r = await renderStory(it, true);
+  const css = document.querySelector("style").textContent;
+  const page = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:\">" +
+    "<title>" + esc(it.title) + "</title><style>" + css + "main{max-width:860px;margin:32px auto}</style></head><body><main>" +
+    '<h1 style="color:var(--gold);font-size:22px">' + esc(it.title) + '</h1><p class="muted">' + r.meta + "</p>" +
+    '<div class="story">' + r.html + "</div></main></body></html>";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([page], { type: "text/html" }));
+  a.download = safeName((it.date ? it.date.replace(/:/g, "") + " - " : "") + it.title) + ".html";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  say("Saved " + a.download + (r.count ? " with " + r.count + " screenshot(s)." : ".") + " It is in your Downloads folder.");
+}
+
+function showList() {
+  state.items = buildItems();
+  const list = $("list");
+  list.innerHTML = "";
+  const many = new Set(state.items.map(i => i.account)).size > 1;
+  let lastAcct = null;
+  for (const it of state.items) {
+    if (many && it.account !== lastAcct) {
+      lastAcct = it.account;
+      const h = document.createElement("li");
+      h.className = "acct";
+      h.style.cssText = "border:none;background:none;cursor:default;padding:0";
+      h.textContent = it.account;
+      list.appendChild(h);
+    }
+    const li = document.createElement("li");
+    li._it = it;
+    li.innerHTML = '<span class="t">' + esc(it.title) + '</span><span class="s">' + esc([it.zone, it.date].filter(Boolean).join(" - ")) + "</span>";
+    li.onclick = () => show(it);
+    list.appendChild(li);
+  }
+  const has = state.items.length > 0;
+  $("app").classList.toggle("hide", !has);
+  if (has) show(state.current && state.items.find(i => i.title === state.current.title && i.start === state.current.start) || state.items[0]);
+  return state.items.length;
+}
+
+function report(found) {
+  const n = showList();
+  let t;
+  if (!state.saves.length) t = "No RP Chronicler stories found there yet. They appear after you log out once with the addon on.";
+  else if (!n) t = "No stories imported yet. Import one in the game's Story Book.";
+  else t = n + " stor" + (n === 1 ? "y" : "ies") + ", " + state.shots.length + " screenshot(s).";
+  if (state.tgaSeen) t += " Some screenshots are TGA files, which browsers can't show: switch to JPG in the game's Story Book tip.";
+  say(t, !n);
+  $("setup").classList.toggle("hide", n > 0);
+  $("change").classList.toggle("hide", !n);
+}
+
+// ---------- the buttons ----------
+function resetData() { state.saves = []; state.shots = []; state.tgaSeen = false; }
+
+async function loadRoot(handle) {
+  resetData();
+  say("Reading your WoW folder...");
+  try {
+    await scanFolder(fromHandle(handle));
+  } catch (e) {
+    say("Could not read the folder: " + e.message, true);
+    return;
+  }
+  $("where").textContent = "Folder: " + handle.name;
+  $("refresh").classList.remove("hide");
+  report();
+}
+
+async function pickFolder() {
+  let h;
+  try {
+    h = await window.showDirectoryPicker({ id: "rpchronicler-wow", mode: "read" });
+  } catch (e) {
+    if (e && e.name === "AbortError") say("No folder chosen. If the browser refused it, use Choose RPChronicler.lua below.");
+    else say("This browser can't open that folder: " + (e && e.message), true);
+    return;
+  }
+  state.rootHandle = h;
+  await kvSet("root", h);
+  await loadRoot(h);
+}
+
+async function refresh() {
+  const h = state.rootHandle;
+  if (!h) return;
+  try {
+    let p = await h.queryPermission({ mode: "read" });
+    if (p !== "granted") p = await h.requestPermission({ mode: "read" });
+    if (p !== "granted") { say("The browser needs your OK to read the folder again. Click Refresh and choose Allow.", true); return; }
+  } catch (e) { say("Could not open the remembered folder. Choose it again.", true); return; }
+  await loadRoot(h);
+}
+
+$("pick").onclick = pickFolder;
+$("change").onclick = () => { $("setup").classList.toggle("hide"); };
+$("refresh").onclick = refresh;
+$("pickLua").onclick = () => $("luaInput").click();
+$("pickShots").onclick = () => $("shotInput").click();
+$("luaInput").onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  state.saves = [];
+  let n = 0;
+  for (const f of files) if (await addSave(f, files.length > 1 ? f.name : "")) n++;
+  if (!n) { say("That file has no RP Chronicler data. Pick RPChronicler.lua from your SavedVariables folder.", true); return; }
+  report();
+};
+$("shotInput").onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  state.shots = [];
+  for (const f of files) addShot(f.name, async () => f, f.size);
+  report();
+};
+$("showPaste").onclick = () => {
+  const it = parsePasted($("paste").value);
+  if (!it) { say("That doesn't look like Copy for viewer text. In the Story Book click Copy for viewer, then Ctrl+C, then paste here.", true); return; }
+  $("app").classList.remove("hide");
+  $("setup").classList.add("hide");
+  $("change").classList.remove("hide");
+  $("list").querySelectorAll("li").forEach(li => li.classList.remove("on"));
+  show(it);
+  say("Showing the pasted story.");
+};
+
+// Drag and drop: the _forever_ folder, a Screenshots folder, or RPChronicler.lua
+document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("drop"); });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) document.body.classList.remove("drop"); });
+document.addEventListener("drop", async e => {
+  e.preventDefault();
+  document.body.classList.remove("drop");
+  const entries = [...(e.dataTransfer.items || [])].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (!entries.length) return;
+  say("Reading...");
+  for (const en of entries) {
+    const node = fromEntry(en);
+    if (node.isDir) await scanFolder(node);
+    else if (/\.lua$/i.test(node.name)) await addSave(await node.file(), "");
+    else { const f = await node.file(); addShot(f.name, async () => f, f.size); }
+  }
+  report();
+});
+
+// ---------- start ----------
+(async function start() {
+  if (!HAS_FSA) $("fsaWay").classList.add("hide");
+  const h = HAS_FSA ? await kvGet("root") : null;
+  if (!h) return;
+  state.rootHandle = h;
+  $("where").textContent = "Folder: " + h.name;
+  $("refresh").classList.remove("hide");
+  try {
+    if (await h.queryPermission({ mode: "read" }) === "granted") { await loadRoot(h); return; }
+  } catch (e) { /* ask on Refresh */ }
+  say("Click Refresh to read your stories.");
+})();
+
+// for tests
+window.RPCViewer = { readSavedVariables, parsePasted, state, scanFolder, fromFiles, report, show, renderStory };
+})();
+</script>
+</body>
+</html>

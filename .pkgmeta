@@ -8,3 +8,4 @@ ignore:
   - CLAUDE.md
   - "*.pdf"
   - .pkgmeta
+  - Export_Stories.bat

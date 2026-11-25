@@ -139,3 +139,28 @@ ns.On({
         RestoreUI()
     end
 end)
+
+-- 0.6.2: StoryViewer.html shows JPG and PNG. The game can also save TGA
+-- (the screenshotFormat setting), which no browser can show.
+local function GetShotFormat()
+    local ok, v
+    if C_CVar and C_CVar.GetCVar then ok, v = pcall(C_CVar.GetCVar, "screenshotFormat") end
+    if not ok and GetCVar then ok, v = pcall(GetCVar, "screenshotFormat") end
+    if not ok then v = nil end
+    return type(v) == "string" and v:lower() or nil
+end
+
+-- true when the viewer can show the game's screenshots (unknown counts as yes)
+function ns.ScreenshotFormatOK()
+    local f = GetShotFormat()
+    return f == nil or f == "" or f == "jpg" or f == "jpeg" or f == "png"
+end
+
+-- Switches the game's screenshots to JPG (the player clicks for this)
+function ns.UseJpgScreenshots()
+    if InCombat() then return false end
+    local ok
+    if C_CVar and C_CVar.SetCVar then ok = pcall(C_CVar.SetCVar, "screenshotFormat", "jpeg") end
+    if not ok and SetCVar then ok = pcall(SetCVar, "screenshotFormat", "jpeg") end
+    return ok and ns.ScreenshotFormatOK() or false
+end

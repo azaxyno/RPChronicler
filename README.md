@@ -1,10 +1,22 @@
-# RPCopy
+<p align="center"><img src="docs/rpcopy-logo.png" width="180" alt="RPCopy logo"></p>
 
-**Roleplay in World of Warcraft with your own AI character, without typing a novel. Then turn your runs into stories.**
+<h1 align="center">RPCopy</h1>
 
-Press `Ctrl+C` in game and RPCopy copies the scene: who spoke to you, your target, your party, your status and recent chat. Paste it into your AI (Gemini, ChatGPT or Claude) with your character skill, and get five short in-character lines back. Paste your favorite into chat.
+<p align="center"><b>Roleplay in World of Warcraft: Forever with your own AI character, without typing a novel. Then turn your runs into stories.</b></p>
 
-RPCopy also remembers the **companions** you meet, records your **dungeons, raids and open-world adventures**, and keeps the stories your AI writes from them in an in-game **Story Book**. Everything stays on your PC, and RPCopy never sends chat.
+RPCopy is a free addon that sits between WoW and the AI you already use (Gemini, ChatGPT or Claude). It never sends chat and never goes online. It copies text out, and you decide what to paste back.
+
+**What it does:**
+
+- **One-key RP replies.** Press `Ctrl+C` and RPCopy copies the scene: who spoke to you, your target, your party, your pet, your quest, recent chat and your notes on the people there. Paste it into your AI with your character skill and get five short in-character lines, one per mood. Paste your favorite into chat.
+- **Companions that remember.** Save players, NPCs and pets with their relationship, tone, who they are and your history together. Your notes go into every copy where that person is in the scene.
+- **Runs become stories.** Dungeons and raids record by themselves, and open-world adventures record when you start them. RPCopy packs fights, bosses, quests, places, levels, loot and party banter into one Full Log. Your AI turns it into a colored story that you read in the in-game **Story Book**.
+- **Stories with your screenshots.** Your screenshots join the run with captions. `Export_Stories.bat` turns every story into a web page with the pictures placed in the story.
+- **Private by design.** Everything stays on your PC. A short setup on first login lets you choose what is recorded, and `/rp wipe` deletes it all.
+
+<p align="center"><img src="docs/story-viewer.png" width="640" alt="The in-game Story Book showing a colored dungeon chapter"><br><i>The in-game Story Book</i></p>
+
+<p align="center"><img src="docs/story-export-example.png" width="640" alt="An exported story web page with a screenshot placed in the chapter"><br><i>A story exported with Export_Stories.bat, screenshots in place</i></p>
 
 ```
  In game                     Your AI (with your character skill)        In game
@@ -14,7 +26,7 @@ RPCopy also remembers the **companions** you meet, records your **dungeons, raid
                              5 short in-character options
 ```
 
-- **Version:** 0.5.4 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.5.5 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide, on your PC only)
 - **License:** MIT
 
@@ -301,7 +313,6 @@ The Story Book has its own place on the rail. Every story your AI wrote is there
 - **Stories stand on their own.** Deleting a recording keeps its story and its details.
 - Drag the grip in the bottom-right corner to make the reader bigger.
 
-![The in-game Story reader showing a colored Shadowfang Keep chapter](docs/story-viewer.png)
 
 ---
 
@@ -311,7 +322,7 @@ The Story Book has its own place on the rail. Every story your AI wrote is there
 - **Your own screenshots** taken with Print Screen during a run join it, with a caption such as "Fighting Hogger in Elwynn Forest". Turn this off in **Options > Recording**.
 - Each shot is listed in the Full Log as `[SHOT N]`, and the story templates ask the AI to put a `[Shot N]` marker where it fits. The in-game reader hides these markers.
 
-**Export to web pages:** `/reload` or log out (the game saves your data then), and double-click `Export_Stories.bat` in `Interface\AddOns\RPCopy`. It writes every story to `_forever_\RPCopy Stories\`: a colored web page with your screenshots in place, plain text, the Full Log, and an `index.html`. Screenshots are matched to each story by time and get a smaller preview image. It needs only Windows PowerShell. Set other image or screenshot folders in **Options > Stories & Export**. The Story Book shows a short tip about this, which you can close.
+**Export to web pages:** web pages come only from `Export_Stories.bat`, never from inside the game. `/reload` or log out (the game saves your data then), and double-click `Export_Stories.bat` in `Interface\AddOns\RPCopy`. It writes every story to `_forever_\RPCopy Stories\`: a colored web page with your screenshots in place, plain text, the Full Log, and an `index.html`. Screenshots are matched to each story by time and get a smaller preview image. It needs only Windows PowerShell. Set other image or screenshot folders in **Options > Stories & Export**. The Story Book shows a short tip about this, which you can close.
 
 ---
 

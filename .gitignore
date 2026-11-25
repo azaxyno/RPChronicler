@@ -12,7 +12,3 @@ desktop.ini
 
 # Claude Code personal settings
 .claude/settings.local.json
-
-# Internal docs (Mor and Claude only, never on GitHub)
-*.pdf
-docs/ARCHITECTURE.md

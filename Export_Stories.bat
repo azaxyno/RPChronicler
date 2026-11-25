@@ -375,12 +375,6 @@ function Add-StoryShots([string]$html, $shots, $st) {
 
 # ---------- export ----------
 $svFiles = @(Get-ChildItem -Path (Join-Path $wowDir 'WTF\Account\*\SavedVariables\RPChronicler.lua') -ErrorAction SilentlyContinue)
-# 0.6.0: accounts not yet moved over from the old RPCopy addon still have
-# RPCopy.lua (with RPCopyDB); read those too
-$oldFiles = @(Get-ChildItem -Path (Join-Path $wowDir 'WTF\Account\*\SavedVariables\RPCopy.lua') -ErrorAction SilentlyContinue)
-foreach ($o in $oldFiles) {
-    if (-not (Test-Path (Join-Path $o.DirectoryName 'RPChronicler.lua'))) { $svFiles += $o }
-}
 if ($svFiles.Count -eq 0) {
     Write-Host "No RP Chronicler SavedVariables found under $wowDir\WTF."
     Write-Host 'Log in with RP Chronicler enabled, then /reload or log out once, and run this again.'
@@ -403,7 +397,6 @@ foreach ($sv in $svFiles) {
         continue
     }
     $db = $g['RPChroniclerDB']
-    if (-not $db) { $db = $g['RPCopyDB'] }
     if (-not $db) { Write-Host '  No RPChroniclerDB in this file.'; continue }
 
     # Where the game's screenshots are: RPCHRONICLER_SHOTS, then Options > Stories

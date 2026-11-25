@@ -2,8 +2,6 @@
 
 <h1 align="center">RP Chronicler</h1>
 
-<p align="center"><i>Formerly RPCopy. Moving from RPCopy? See <a href="#moving-from-rpcopy">Moving from RPCopy</a>: your data comes with you.</i></p>
-
 <p align="center"><b>Roleplay in World of Warcraft: Forever with your own AI character, without typing a novel. Then turn your runs into stories.</b></p>
 
 RP Chronicler is a free addon that sits between WoW and the AI you already use (Gemini, ChatGPT or Claude). It never sends chat and never goes online. It copies text out, and you decide what to paste back.
@@ -334,7 +332,6 @@ The Story Book has its own place on the rail. Every story your AI wrote is there
 - **Your choice of what is kept.** **Options > Privacy** has a switch per kind of chat: say, yell and emotes; whispers; party, raid and instance chat; guild and officer chat; world channels; NPC dialogue. Out-of-character chat is never kept in a recording.
 - **What RP Chronicler records:** auto-recording of dungeons and raids, the open-world prompt, auto screenshots, your own screenshots, companion updates from chat, and a debug log of RP Chronicler's own errors (never chat). Each one is a choice in the first-run setup and a switch in Options.
 - **Delete everything** with `/rp wipe` or **Options > Privacy > Delete All Data** (click twice). It removes every recording, story, companion and setting and reloads the UI. Deleting `RPChronicler.lua` in your SavedVariables folder does the same.
-- **Moving from RPCopy** (0.6.0): on the first login RP Chronicler copies the old RPCopy data that is already in your SavedVariables. Nothing leaves your PC, and the old file stays as a backup.
 - `/rp setup` shows the setup again. A later version that adds a new kind of recording shows only the new choices.
 
 ---
@@ -354,7 +351,6 @@ The Story Book has its own place on the rail. Every story your AI wrote is there
 | `/rp end` | End and save the active run (also `/rp stop`) |
 | `/rp options` | Open Options (also `/rp config`) |
 | `/rp setup` | Show the privacy note and setup choices again (also `/rp privacy`) |
-| `/rp import rpcopy` | Copy your old RPCopy data in again, replacing the current data (needs the old RPCopy addon loaded, see [Moving from RPCopy](#moving-from-rpcopy)) |
 | `/rp wipe` | Delete all RP Chronicler data, after a confirmation |
 | `/rp debug` | Open the debug report to copy into a bug report (`/rp debug clear` empties it) |
 | `/rp diag` | Print what RP Chronicler can read about your target and your guessed role |
@@ -410,20 +406,6 @@ If the game shows a "blocked from an action" popup, `Logs\taint.log` in your gam
    ```
 2. Restart the game or `/reload`, and enable **RP Chronicler** on the character select AddOns screen.
 3. Log in. The setup opens once. Then type `/rp`.
-
-## Moving from RPCopy
-
-RP Chronicler is the new name of RPCopy (since 0.6.0). Your companions, recordings, stories and settings come with you. WoW only lets an addon read data saved under its own name, so the release zip also holds a tiny `RPCopy` folder: it has no code, it only lets RP Chronicler read your old data once.
-
-1. **Install 0.6.0 over the old version.** Unzip both folders (`RPChronicler` and `RPCopy`) into `Interface\AddOns`, and say yes to replacing files. CurseForge users just update.
-2. **Log in once.** RP Chronicler copies your RPCopy data and turns the old `RPCopy` entry off. Your old `RPCopy.lua` in SavedVariables stays untouched as a backup.
-3. **Delete** the `Interface\AddOns\RPCopy` folder whenever you like. If chat asks you to `/reload` (the old RPCopy code was still running), do that first.
-
-**Already deleted the RPCopy folder before logging in?** Put the `RPCopy` folder from the 0.6.0 zip back and log in again. Or move the data by hand with the game closed: in `WTF\Account\<ACCOUNT>\SavedVariables\`, delete `RPChronicler.lua` if it exists, copy `RPCopy.lua` to `RPChronicler.lua`, open the copy in Notepad and change the first word `RPCopyDB` to `RPChroniclerDB`.
-
-**RP Chronicler already has data and you want your RPCopy data instead?** Put the `RPCopy` folder back, turn it on in the AddOns list, log in and type `/rp import rpcopy`.
-
-Things that do not carry over: key bindings set in the game's **Esc > Key Bindings** menu (set them again under **AddOns > RP Chronicler**; the keys in gear > **Keybinds** do carry over). `/rp` is the same, and `/rpcopy` is now `/rpchronicler`.
 
 ---
 

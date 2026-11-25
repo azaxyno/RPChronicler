@@ -1,8 +1,5 @@
 package-as: RPChronicler
 
-move-folders:
-  RPChronicler/migration/RPCopy: RPCopy
-
 ignore:
   - docs
   - tools

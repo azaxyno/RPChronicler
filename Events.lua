@@ -704,7 +704,6 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         if ns.Debug then ns.Debug("info", "login, version " .. tostring(ns.VERSION or "?")) end
         -- Version banner, read from the toc's ## Version field (see Core.lua)
         print(string.format("|cffffd100RP Chronicler|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
-        if ns.loginNotice then print(ns.loginNotice) end
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Zone info is reliable here, so a saved run is restored at the first one
         RestoreRunOnce()

@@ -286,17 +286,6 @@ SlashCmdList["RPCHRONICLER"] = function(msg)
     elseif low == "wipe" then
         UI.ShowPrompt("|cffff6b6bDelete ALL RP Chronicler data?|r\nEvery recording, story, companion and setting is removed, then the UI reloads. This cannot be undone.",
             "Delete everything", function() ns.WipeAllData() end, "Cancel", nil)
-    elseif low == "import rpcopy" or low == "importold" then
-        -- 0.6.0: copy the old RPCopy data again by hand (it needs the old
-        -- RPCopy addon installed and loaded this session)
-        if type(_G.RPCopyDB) == "table" and next(_G.RPCopyDB) ~= nil then
-            UI.ShowPrompt("|cffffd100Copy your old RPCopy data?|r\nYour current RP Chronicler data is replaced by the RPCopy data, then the UI reloads.",
-                "Copy and reload", function()
-                    if ns.MigrateFromRPCopy(true) and ReloadUI then ReloadUI() end
-                end, "Cancel", nil)
-        else
-            print("|cffffd100RP Chronicler|r No RPCopy data is loaded. Put the RPCopy folder from the 0.6.0 zip back in Interface\\AddOns, turn it on in the AddOns list, log in and type /rp import rpcopy again. See the README (Moving from RPCopy).")
-        end
     elseif low == "debug" then
         UI.ShowCopyBox("|cffffd100RP Chronicler debug report|r",
             "|cffb0bac5Select All, Ctrl+C, and paste it into your bug report. It holds no chat.|r",

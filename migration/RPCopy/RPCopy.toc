@@ -1,5 +1,0 @@
-## Interface: 16001
-## Title: RPCopy (renamed: RP Chronicler)
-## Notes: Leftover of the RPCopy rename. It has no code: it only lets RP Chronicler copy your old RPCopy data once. You can delete this folder after that.
-## Version: 0.6.0
-## SavedVariables: RPCopyDB

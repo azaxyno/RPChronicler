@@ -4,7 +4,7 @@ A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP sce
 
 ## Working rules
 
-- **Bump the version on every change.** Edit `## Version` in `RPChronicler.toc` (and in `migration/RPCopy/RPCopy.toc`) (the chat banner and window badge read it), the fallback strings in `Core.lua` (`ns.VERSION`) and `UI_Shell.lua` (`verBadge`), and the Version line in `README.md`.
+- **Bump the version on every change.** Edit `## Version` in `RPChronicler.toc` (the chat banner and window badge read it), the fallback strings in `Core.lua` (`ns.VERSION`) and `UI_Shell.lua` (`verBadge`), and the Version line in `README.md`.
   - The addon is in alpha. Versioning restarted at 0.1.0 (the old 3.x tags were retired); stay below 1.0.0 until Mor says otherwise.
   - Small fix: patch bump, e.g. 0.1.0 -> 0.1.1.
   - Big update: minor bump, e.g. 0.1.x -> 0.2.0.
@@ -18,9 +18,9 @@ A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP sce
 - Keep `README.md` in step with user-visible changes, and `docs/ARCHITECTURE.md` in step with structural ones.
 - Commit only after Mor approves. Mor pushes.
 - azaxyno is the only author and contributor. Never add `Co-Authored-By: Claude`, `Claude-Session:` or any other AI attribution to commits, tags or releases.
-- Every pushed version gets a tag `vX.Y.Z` and a GitHub Release (pre-release while in alpha). The release notes have a short intro, a "What's new" list of user-visible changes since the last release, "Fixes", and install steps. Attach `RPChronicler-vX.Y.Z.zip`, which holds an `RPChronicler/` folder with only the addon files (toc, .lua, Bindings.xml, README.md, LICENSE, CREDITS.md, Export_Stories.bat), plus the data-only `RPCopy/` folder from `migration/RPCopy` while the rename migration is needed. Leave out docs, tools, migration (inside RPChronicler), .claude, backup, CLAUDE.md and PDFs.
+- Every pushed version gets a tag `vX.Y.Z` and a GitHub Release (pre-release while in alpha). The release notes have a short intro, a "What's new" list of user-visible changes since the last release, "Fixes", and install steps. Attach `RPChronicler-vX.Y.Z.zip`, which holds an `RPChronicler/` folder with only the addon files (toc, .lua, Bindings.xml, README.md, LICENSE, CREDITS.md, Export_Stories.bat) Leave out docs, tools, .claude, backup, CLAUDE.md and PDFs.
   - Claude's cloud sessions can push branches but not tags or releases. Mor publishes the release from a `releases/new?tag=vX.Y.Z&target=main&prerelease=1` link, with the notes and zip that Claude prepares.
-  - CurseForge: upload `RPChronicler-vX.Y.Z-curseforge.zip` (the same without Export_Stories.bat; the in-game tips point to the GitHub releases for it) as **Alpha** for game version Forever 1.60.1. `.pkgmeta` (package-as RPChronicler, move-folders for RPCopy) is ready for the packager. Once the project exists, turn the commented `# ## X-Curse-Project-ID: 000000` line in the toc into a real `## X-Curse-Project-ID: <id>`.
+  - CurseForge: upload `RPChronicler-vX.Y.Z-curseforge.zip` (the same without Export_Stories.bat; the in-game tips point to the GitHub releases for it) as **Alpha** for game version Forever 1.60.1. `.pkgmeta` (package-as RPChronicler) is ready for the packager. Once the project exists, turn the commented `# ## X-Curse-Project-ID: 000000` line in the toc into a real `## X-Curse-Project-ID: <id>`.
 
 ## Map (details in docs/ARCHITECTURE.md, local only)
 
@@ -52,6 +52,6 @@ Key facts that are easy to get wrong:
 - Runs have `kind` (dungeon, raid, world). The Full Log's first line calls the story skill by name: `use wow-dungeon-raid-story` or `use wow-open-world-story`. The names live in `ns.STORY_SKILLS` (Core.lua) and feed both the Full Log and the templates' `name:` lines, so they stay in sync. Old saved logs were rewritten once behind `migratedV060`.
 - Stories live in `RPChroniclerDB.stories` (since 0.5.0), each with a copy of its run's details, so deleting a run keeps the story. `adv.story` is legacy and migrated by `ns.MigrateStories`.
 - Story colors: class colors, but Priest is gray `C0C0C0` and bosses are crimson `dc143c`. The two story templates live in `UI_Options.lua` (shared part `STORY_SHARED_RULES`) and must match the Full Log tags and the Story Book header/footer that `ns.ParseStoryMeta` reads.
-- 0.6.0 rename: the addon, folder and toc are `RPChronicler`, the title "RP Chronicler", SavedVariables `RPChroniclerDB`, globals and frames `RPChronicler*`, bindings `RPCHRONICLER_*`, slash `/rp` and `/rpchronicler`. WoW only loads SavedVariables from a file named after the addon that declares them, so the old data is read through an `RPCopy` addon: the release ships `migration/RPCopy/RPCopy.toc` (no code, `## SavedVariables: RPCopyDB`) as a top-level `RPCopy/` folder, the main toc has `## OptionalDeps: RPCopy`, and Core.lua copies `RPCopyDB` into an empty `RPChroniclerDB` once at ADDON_LOADED (`migratedFromRPCopy`), then disables RPCopy. `/rp import rpcopy` forces it. The literal `RPCopy` / `RPCopyDB` names must stay in that code, the .bat fallback and the README's "Moving from RPCopy".
+- 0.6.0 renamed RPCopy to RP Chronicler everywhere: folder and toc `RPChronicler`, title "RP Chronicler", SavedVariables `RPChroniclerDB`, globals and frames `RPChronicler*`, bindings `RPCHRONICLER_*`, slash `/rp` and `/rpchronicler`. RPCopy had no other users, so there is no data migration from it (Mor moved Mor's own SavedVariables by hand).
 - Mor asked to keep the floating `[RP]` button and not add a minimap button.
 - Testing: there is no game here. Use a lupa (Lua 5.1) mock harness to load every toc file, click every button and fire events. PowerShell can't be run here, so `Export_Stories.bat` changes are untested until Mor runs them.

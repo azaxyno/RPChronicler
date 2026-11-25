@@ -152,9 +152,9 @@ function ns.SyncAdventureRoster()
         -- 0.5.0: the run keeps its own copy of the companion's notes, so an
         -- old Full Log still reads right after the companion is deleted
         local note, comp = "", nil
-        if RPCopyDB and RPCopyDB.players and unit ~= "player" then
+        if RPChroniclerDB and RPChroniclerDB.players and unit ~= "player" then
             local pKey = ns.FindPlayerKey(fullName, true)
-            comp = pKey and RPCopyDB.players[pKey]
+            comp = pKey and RPChroniclerDB.players[pKey]
             if comp and (comp.note or "") ~= "" then note = comp.note end
         end
         -- Pet: name plus species ("Snips (Crab, hunter pet)")
@@ -271,7 +271,7 @@ function ns.StartAdventure(customTitle, isAuto)
         pvpDeaths = 0,
     }
     -- Persist the live run in SavedVariables so /reload or a disconnect can't lose it
-    RPCopyDB.activeRun = activeRun
+    RPChroniclerDB.activeRun = activeRun
     ns.NoteRunPlace(ns.SafeStr(GetRealZoneText()) or zone)
     local startSub = ns.SafeStr(GetSubZoneText())
     if startSub and startSub ~= "" then ns.NoteRunPlace(startSub) end
@@ -289,7 +289,7 @@ function ns.EndAdventure(reason, endTime)
     if not activeRun then return nil end
     ns.EnsureDB()
     ns.SyncAdventureRoster()
-    RPCopyDB.activeRun = nil
+    RPChroniclerDB.activeRun = nil
     activeRun.paused = false
 
     if ns.FightFlush then pcall(ns.FightFlush) end
@@ -314,9 +314,9 @@ function ns.EndAdventure(reason, endTime)
     PushTimeline(activeRun, PreciseStamp(), "Adventure ended (" .. (reason or "Completed") .. ")")
     activeRun.exportText = ns.BuildAdventureFullLog(activeRun)
 
-    table.insert(RPCopyDB.adventures, 1, activeRun)
-    while #RPCopyDB.adventures > 40 do
-        table.remove(RPCopyDB.adventures)
+    table.insert(RPChroniclerDB.adventures, 1, activeRun)
+    while #RPChroniclerDB.adventures > 40 do
+        table.remove(RPChroniclerDB.adventures)
     end
 
     local saved = activeRun
@@ -361,7 +361,7 @@ end
 --    interrupted, so it is never lost. The UI then offers to resume it.
 function ns.RestoreSavedAdventure()
     ns.EnsureDB()
-    local saved = RPCopyDB.activeRun
+    local saved = RPChroniclerDB.activeRun
     if type(saved) ~= "table" or activeRun then return nil end
 
     local gap = math.max(0, time() - (saved.lastSeen or saved.startTime or time()))
@@ -372,7 +372,7 @@ function ns.RestoreSavedAdventure()
     bossThresholdsHit, bossPullEngaged, vitalsCooldowns, brink = {}, {}, {}, {}
     lastHP, deadNow = {}, {}
 
-    if gap <= RESUME_WINDOW and RPCopyDB.resumeAfterReload ~= false then
+    if gap <= RESUME_WINDOW and RPChroniclerDB.resumeAfterReload ~= false then
         activeRun = saved
         activeRun.reloads = (activeRun.reloads or 0) + 1
         activeRun.interruptedAt = nil
@@ -384,7 +384,7 @@ function ns.RestoreSavedAdventure()
     end
 
     -- Close and keep it, marked interrupted
-    RPCopyDB.activeRun = nil
+    RPChroniclerDB.activeRun = nil
     saved.paused = false
     saved.interrupted = true
     local lastSeen = saved.interruptedAt or saved.lastSeen or time()
@@ -393,8 +393,8 @@ function ns.RestoreSavedAdventure()
     saved.endDate = saved.endDate ~= "" and saved.endDate or ns.NowStamp()
     PushTimeline(saved, PreciseStamp(), "Adventure ended (interrupted by a logout or disconnect)", true)
     saved.exportText = ns.BuildAdventureFullLog(saved)
-    table.insert(RPCopyDB.adventures, 1, saved)
-    while #RPCopyDB.adventures > 40 do table.remove(RPCopyDB.adventures) end
+    table.insert(RPChroniclerDB.adventures, 1, saved)
+    while #RPChroniclerDB.adventures > 40 do table.remove(RPChroniclerDB.adventures) end
     if ns.Debug then ns.Debug("run", "closed an interrupted run: " .. tostring(saved.title)) end
     return "interrupted", saved
 end
@@ -402,9 +402,9 @@ end
 -- "Resume" on the interrupted-run prompt: the saved run becomes live again
 function ns.ResumeInterruptedRun(runId)
     if activeRun then return false, "Another run is recording." end
-    for i, adv in ipairs(RPCopyDB.adventures or {}) do
+    for i, adv in ipairs(RPChroniclerDB.adventures or {}) do
         if adv.id == runId then
-            table.remove(RPCopyDB.adventures, i)
+            table.remove(RPChroniclerDB.adventures, i)
             activeRun = adv
             adv.interrupted = nil
             adv.duration = 0
@@ -412,7 +412,7 @@ function ns.ResumeInterruptedRun(runId)
             adv.endDate = ""
             adv.lastSeen = time()
             adv.reloads = (adv.reloads or 0) + 1
-            RPCopyDB.activeRun = adv
+            RPChroniclerDB.activeRun = adv
             if ns.ResetRunTrackers then ns.ResetRunTrackers() end
             PushTimeline(adv, PreciseStamp(), "[RESUMED] Recording resumed after a logout or disconnect", true)
             if ns.Debug then ns.Debug("run", "resumed an interrupted run: " .. tostring(adv.title)) end
@@ -483,8 +483,8 @@ end
 -- Companions you chatted with during the run (open world has no roster)
 function ns.NoteRunCompanion(key)
     if not activeRun or activeRun.paused or not key then return end
-    local e = RPCopyDB and RPCopyDB.players and RPCopyDB.players[key]
-    if type(e) ~= "table" or RPCopyDB.runCompanions == false then return end
+    local e = RPChroniclerDB and RPChroniclerDB.players and RPChroniclerDB.players[key]
+    if type(e) ~= "table" or RPChroniclerDB.runCompanions == false then return end
     activeRun.metCompanions = activeRun.metCompanions or {}
     local m = activeRun.metCompanions[key] or {}
     m.cid, m.note, m.history, m.relationship, m.tone = e.cid, e.note, e.history, e.relationship, e.tone
@@ -561,9 +561,9 @@ function ns.RecordAdventureBossEngage(bossName, unit)
         bossThresholdsHit[bossName] = {}
         PushTimeline(activeRun, PreciseStamp(), "[BOSS ENGAGED] " .. bossName)
         -- Remember confirmed bosses so later runs recognize them right away
-        if RPCopyDB then
-            RPCopyDB.knownBosses = RPCopyDB.knownBosses or {}
-            RPCopyDB.knownBosses[bossName] = true
+        if RPChroniclerDB then
+            RPChroniclerDB.knownBosses = RPChroniclerDB.knownBosses or {}
+            RPChroniclerDB.knownBosses[bossName] = true
         end
     end
     activeBossName = bossName
@@ -742,9 +742,9 @@ function ns.RecordAdventureBossKill(bossName)
     end
     bossThresholdsHit[bossName] = nil
     bossPullEngaged[bossName] = nil
-    if RPCopyDB then
-        RPCopyDB.knownBosses = RPCopyDB.knownBosses or {}
-        RPCopyDB.knownBosses[bossName] = true
+    if RPChroniclerDB then
+        RPChroniclerDB.knownBosses = RPChroniclerDB.knownBosses or {}
+        RPChroniclerDB.knownBosses[bossName] = true
     end
 
     activeRun.bossKills = activeRun.bossKills or {}
@@ -856,9 +856,9 @@ function ns.MarkAdventureHighlight(customNote)
     return true, "Bookmarked moment: " .. text
 end
 
-function RPCopy_MarkMoment()
+function RPChronicler_MarkMoment()
     local ok, status = ns.MarkAdventureHighlight(nil)
-    print("|cff00ff00[RPCopy]|r " .. status)
+    print("|cff00ff00[RP Chronicler]|r " .. status)
     -- Marked moments also get a screenshot when Auto-Shots is on
     if ok and ns.RequestScreenshot then
         ns.RequestScreenshot("mark", "Marked moment")
@@ -868,7 +868,7 @@ end
 -- The run with this id: the live one or a saved one
 function ns.FindAdventure(advId)
     if activeRun and activeRun.id == advId then return activeRun end
-    for _, adv in ipairs((RPCopyDB and RPCopyDB.adventures) or {}) do
+    for _, adv in ipairs((RPChroniclerDB and RPChroniclerDB.adventures) or {}) do
         if adv.id == advId then return adv end
     end
     return nil
@@ -878,7 +878,7 @@ local BOOK_FIELDS = { "title", "instance", "duration", "zone", "date", "party", 
     "foes", "quests", "levels" }
 
 -- =========================================================
--- Stories (0.5.0): RPCopyDB.stories, kept apart from the recordings, so
+-- Stories (0.5.0): RPChroniclerDB.stories, kept apart from the recordings, so
 -- deleting a recording never deletes its story. Each story keeps its own
 -- copy of the run's details (title, zone, roster, bosses, shots ...) at
 -- its top level, so every helper that reads a run reads a story too.
@@ -906,13 +906,13 @@ local function CopyRunMeta(st, adv)
 end
 
 local function Stories()
-    RPCopyDB.stories = type(RPCopyDB.stories) == "table" and RPCopyDB.stories or {}
-    return RPCopyDB.stories
+    RPChroniclerDB.stories = type(RPChroniclerDB.stories) == "table" and RPChroniclerDB.stories or {}
+    return RPChroniclerDB.stories
 end
 
 -- Newest import first
 function ns.GetStories()
-    if not RPCopyDB then return {} end
+    if not RPChroniclerDB then return {} end
     local list = {}
     for _, st in ipairs(Stories()) do
         if type(st) == "table" and (st.story or "") ~= "" then table.insert(list, st) end
@@ -922,7 +922,7 @@ function ns.GetStories()
 end
 
 function ns.FindStory(id)
-    if not id or not RPCopyDB then return nil end
+    if not id or not RPChroniclerDB then return nil end
     for _, st in ipairs(Stories()) do
         if st.id == id then return st end
     end
@@ -931,7 +931,7 @@ end
 
 -- The story written from a run, or nil
 function ns.StoryForRun(runId)
-    if not runId or not RPCopyDB then return nil end
+    if not runId or not RPChroniclerDB then return nil end
     for _, st in ipairs(Stories()) do
         if st.runId == runId and (st.story or "") ~= "" then return st end
     end
@@ -969,7 +969,7 @@ function ns.SetAdventureStory(advId, rawStoryText)
     ns.EnsureDB()
     -- Normalizes || -> |, strips code fences and Markdown, maps non-ASCII
     -- glyphs to ASCII, and auto-closes dangling color escapes (see Core.lua)
-    local cleaned = ns.NormalizeStoryText(rawStoryText)
+    local cleaned = ns.CleanStoryHeader(ns.NormalizeStoryText(rawStoryText))
     local adv = ns.FindAdventure(advId)
     if not adv then return false end
     local st = ns.StoryForRun(adv.id)
@@ -978,7 +978,7 @@ function ns.SetAdventureStory(advId, rawStoryText)
         table.insert(Stories(), 1, st)
     end
     CopyRunMeta(st, adv)
-    if RPCopyDB.autoColorStory ~= false and ns.AutoColorStory then
+    if RPChroniclerDB.autoColorStory ~= false and ns.AutoColorStory then
         local ok, colored = pcall(ns.AutoColorStory, cleaned, st)
         if ok and type(colored) == "string" then cleaned = colored; st.autoColored = ns.AUTOCOLOR_VERSION end
     end
@@ -999,7 +999,7 @@ function ns.SetStoryText(storyId, rawStoryText)
     local run = ns.StoryRun(st)
     if run then return ns.SetAdventureStory(run.id, rawStoryText) end
     local cleaned = ns.NormalizeStoryText(rawStoryText)
-    if RPCopyDB.autoColorStory ~= false and ns.AutoColorStory then
+    if RPChroniclerDB.autoColorStory ~= false and ns.AutoColorStory then
         local ok, colored = pcall(ns.AutoColorStory, cleaned, st)
         if ok and type(colored) == "string" then cleaned = colored; st.autoColored = ns.AUTOCOLOR_VERSION end
     end
@@ -1047,7 +1047,7 @@ function ns.DeleteAdventureStory(advId)
 end
 
 -- 0.5.0 migration: stories that lived inside their runs move to
--- RPCopyDB.stories with a copy of the run's details
+-- RPChroniclerDB.stories with a copy of the run's details
 function ns.MigrateStories()
     local list = Stories()
     local moved = 0
@@ -1064,8 +1064,8 @@ function ns.MigrateStories()
         adv.story = nil
         adv.book = nil
     end
-    for _, adv in ipairs(RPCopyDB.adventures or {}) do Move(adv) end
-    Move(RPCopyDB.activeRun)
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do Move(adv) end
+    Move(RPChroniclerDB.activeRun)
     if moved > 0 and ns.Debug then ns.Debug("info", "moved " .. moved .. " stories into the Story Book") end
     return moved
 end
@@ -1278,7 +1278,7 @@ end
 -- you cleared a note on purpose; a companion who was deleted or renamed
 -- falls back to the copy the run kept. You are never listed.
 local function FindCompanionFor(name, cid)
-    local players = RPCopyDB and RPCopyDB.players
+    local players = RPChroniclerDB and RPChroniclerDB.players
     if not players then return nil end
     if cid then
         for k, e in pairs(players) do
@@ -1318,7 +1318,7 @@ function ns.GetKnownCompanionNotes(adv)
         if CleanNote(src.relationship) ~= "" then table.insert(rel, CleanNote(src.relationship)) end
         if CleanNote(src.tone) ~= "" then table.insert(rel, CleanNote(src.tone)) end
         if note ~= "" or hist ~= "" or #rel > 0 then
-            local max = (RPCopyDB and RPCopyDB.knownNoteMax) or 300
+            local max = (RPChroniclerDB and RPChroniclerDB.knownNoteMax) or 300
             local parts = {}
             if #rel > 0 then table.insert(parts, table.concat(rel, ", ")) end
             if note ~= "" then table.insert(parts, ns.ClipCompanionNote and ns.ClipCompanionNote(note, max) or note) end
@@ -1352,8 +1352,8 @@ ns.FormatCopper = FormatCopper
 
 -- First line of the Full Log: the trigger of the matching story skill
 function ns.GetStoryTrigger(adv)
-    if adv and adv.kind == "world" then return "use adventure story" end
-    return "use story"
+    if adv and adv.kind == "world" then return "use " .. ns.STORY_SKILLS.world end
+    return "use " .. ns.STORY_SKILLS.dungeon
 end
 
 function ns.BuildAdventureFullLog(adv)
@@ -1503,11 +1503,11 @@ end
 
 -- The comfortable paste size of the AI picked in Options, in characters
 function ns.GetAiLimit()
-    local key = RPCopyDB and RPCopyDB.aiModel or "GEMINI_FREE"
+    local key = RPChroniclerDB and RPChroniclerDB.aiModel or "GEMINI_FREE"
     for _, m in ipairs(ns.AI_MODELS or {}) do
         if m.key == key then
             if m.chars then return m.chars, m.label end
-            return (RPCopyDB and RPCopyDB.aiCustomLimit) or 40000, m.label
+            return (RPChroniclerDB and RPChroniclerDB.aiCustomLimit) or 40000, m.label
         end
     end
     return 60000, "Gemini (free)"
@@ -1525,6 +1525,37 @@ end
 -- =========================================================
 local function Trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 
+-- 0.6.0: the story's own line 2 sometimes repeats the place
+-- ("Zephras Isle - Valanaar | 17m 18s | Zephras Isle - Valanaar"). Drop the
+-- last part when the first part already names it. Colors are kept.
+function ns.CleanStoryHeader(text)
+    if type(text) ~= "string" or text == "" then return text end
+    local lines, seen, idx = {}, 0, nil
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        table.insert(lines, line)
+        if not idx and Trim(ns.StripColors(line)) ~= "" then
+            seen = seen + 1
+            if seen == 2 then idx = #lines end
+        end
+    end
+    if not idx then return text end
+    local line = lines[idx]
+    local s1, e1 = line:find("%s+|%s+")
+    if not s1 then return text end
+    local s2, e2 = line:find("%s+|%s+", e1 + 1)
+    if not s2 or line:find("%s+|%s+", e2 + 1) then return text end
+    local last, tail = line:sub(e2 + 1), ""
+    while last:find("|r%s*$") do
+        last = last:gsub("|r%s*$", "", 1)
+        tail = tail .. "|r"
+    end
+    local first = Trim(ns.StripColors(line:sub(1, s1 - 1))):lower()
+    last = Trim(ns.StripColors(last)):lower()
+    if last == "" or not first:find(last, 1, true) then return text end
+    lines[idx] = line:sub(1, s2 - 1) .. tail
+    return table.concat(lines, "\n")
+end
+
 function ns.ParseStoryMeta(text)
     local meta = { chapters = {} }
     local plain = ns.StripColors(ns.NormalizeStoryText and ns.NormalizeStoryText(text or "") or (text or ""))
@@ -1537,7 +1568,7 @@ function ns.ParseStoryMeta(text)
     if #lines == 0 then return meta end
     local first = lines[1]:gsub("^[Tt]itle:%s*", ""):gsub("^#+%s*", "")
     -- A long first line is prose, not a title
-    if #first <= 90 and not first:lower():find("^use %a* ?story") then meta.title = first end
+    if #first <= 90 and not first:lower():find("^use [%w%-]*%s?story") then meta.title = first end
     local second = lines[2] or ""
     if second:find("|", 1, true) then
         local parts = {}
@@ -1546,7 +1577,7 @@ function ns.ParseStoryMeta(text)
         meta.duration = parts[2] ~= "" and parts[2] or nil
         meta.zone = parts[3] ~= "" and parts[3] or nil
         -- 0.5.0: "Zephras Isle | 29m | Zephras Isle" - the zone said twice
-        if meta.zone and meta.instance and meta.zone:lower() == meta.instance:lower() then meta.zone = nil end
+        if meta.zone and meta.instance and meta.instance:lower():find(meta.zone:lower(), 1, true) then meta.zone = nil end
     end
     for i = 2, math.min(#lines, 6) do
         local d = lines[i]:match("[Dd]ate:%s*([^|]+)")
@@ -1643,7 +1674,7 @@ function ns.GetStoryPlainText(adv)
     text = text:gsub("|T.-|t", ""):gsub("|A.-|a", ""):gsub("|H.-|h(.-)|h", "%1")
     text = ns.StripColors(text):gsub("|n", "\n"):gsub("||", "|")
     text = text:gsub("\n\n\n+", "\n\n")
-    return Trim(text) .. "\n\n(Chronicle recorded with RPCopy)"
+    return Trim(text) .. "\n\n(Chronicle recorded with RP Chronicler)"
 end
 
 -- =========================================================
@@ -1738,7 +1769,7 @@ end
 
 -- =========================================================
 -- Auto-color on import (0.5.0): the AI often colors a name only the first
--- time. RPCopy colors every later plain mention of the names it can verify
+-- time. RP Chronicler colors every later plain mention of the names it can verify
 -- from the run: party (class colors), pets, places (teal), foes and bosses
 -- (crimson), NPCs (pale yellow) and items (their quality color). Only
 -- plain prose is touched; text the AI already colored is left alone.

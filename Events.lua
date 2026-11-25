@@ -11,7 +11,7 @@ local function IsBossUnit(unit)
     local lvl = ns.SafeNum(UnitLevel(unit))
     if (cls == "worldboss") or (lvl ~= nil and lvl < 0) then return true end
     local name = ns.SafeStr(UnitName(unit))
-    if name and RPCopyDB and RPCopyDB.knownBosses and RPCopyDB.knownBosses[name] then return true end
+    if name and RPChroniclerDB and RPChroniclerDB.knownBosses and RPChroniclerDB.knownBosses[name] then return true end
     local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
     if name and activeBoss and activeBoss == name then return true end
     -- Classic dungeon bosses are plain elites (no skull, often no boss frames).
@@ -63,7 +63,7 @@ local function CheckInstanceAdventureState(isInitialLogin)
         local zoneName = ns.SafeStr(GetRealZoneText()) or ns.GetCurrentWhere()
         if not active then
             -- Options > Recording: "Auto-record dungeons and raids" (on by default)
-            if ns.StartAdventure and RPCopyDB.autoRecord ~= false then
+            if ns.StartAdventure and RPChroniclerDB.autoRecord ~= false then
                 ns.StartAdventure(zoneName, true)
             end
         else
@@ -92,11 +92,11 @@ local function RestoreRunOnce()
     local result, run = ns.RestoreSavedAdventure()
     local title = run and run.title or "Adventure"
     if result == "resumed" then
-        print("|cffffd100RPCopy|r |cff5cb85cStill recording|r |cffeceff1" .. title .. "|r |cff9aa5b4(restored after reload)|r")
+        print("|cffffd100RP Chronicler|r |cff5cb85cStill recording|r |cffeceff1" .. title .. "|r |cff9aa5b4(restored after reload)|r")
     elseif result == "paused" then
-        print("|cffffd100RPCopy|r |cffffb74dRecording paused|r |cffeceff1" .. title .. "|r |cff9aa5b4- type /rp resume to continue or /rp end to save it|r")
+        print("|cffffd100RP Chronicler|r |cffffb74dRecording paused|r |cffeceff1" .. title .. "|r |cff9aa5b4- type /rp resume to continue or /rp end to save it|r")
     elseif result == "interrupted" then
-        print("|cffffd100RPCopy|r |cffffb74dSaved your last run|r |cffeceff1" .. title .. "|r |cff9aa5b4(cut short by a logout or disconnect)|r")
+        print("|cffffd100RP Chronicler|r |cffffb74dSaved your last run|r |cffeceff1" .. title .. "|r |cff9aa5b4(cut short by a logout or disconnect)|r")
         if ns.OfferInterruptedRun then
             if C_Timer and C_Timer.After then
                 C_Timer.After(3, function() ns.OfferInterruptedRun(run) end)
@@ -434,7 +434,7 @@ local function CaptureQuestContext(prefixLabel, questID)
     ns.state.lastQuestInfo = string.format("%s: %s", prefixLabel, title)
 end
 
-local eventFrame = CreateFrame("Frame", "RPCopyEventFrame")
+local eventFrame = CreateFrame("Frame", "RPChroniclerEventFrame")
 local EVENTS = {
     "PLAYER_LOGIN",
     "PLAYER_ENTERING_WORLD",
@@ -487,7 +487,7 @@ local EVENTS = {
 -- The Forever client runs on the modern (secret-values) engine, where
 -- COMBAT_LOG_EVENT_UNFILTERED is protected. Registering it from an addon
 -- raises ADDON_ACTION_FORBIDDEN ("blocked from an action only available to
--- the Blizzard UI"), so RPCopy never registers it. Boss HP, pull ends and
+-- the Blizzard UI"), so RP Chronicler never registers it. Boss HP, pull ends and
 -- aggro come from the combat poller below; boss kills from ENCOUNTER_END
 -- and dead units; your own deaths from PLAYER_DEAD.
 ns.combatLogAvailable = false
@@ -654,7 +654,7 @@ do
         if not ok and not poller.reported then
             poller.reported = true
             if ns.Debug then ns.Debug("error", "combat poller: " .. tostring(err)) end
-            print("|cffffd100RPCopy|r |cffff6b6bcombat poller error:|r " .. tostring(err) .. " |cff9aa5b4(/rp debug for a report)|r")
+            print("|cffffd100RP Chronicler|r |cffff6b6bcombat poller error:|r " .. tostring(err) .. " |cff9aa5b4(/rp debug for a report)|r")
         end
     end)
 
@@ -663,7 +663,7 @@ do
         acc = POLL_EVERY
     end
 
-    -- /rp diag: what RPCopy can read about your target on this client
+    -- /rp diag: what RP Chronicler can read about your target on this client
     function ns.DiagnoseTarget()
         local out = {}
         local u = "target"
@@ -703,7 +703,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         if ns.DebugReady then ns.DebugReady() end
         if ns.Debug then ns.Debug("info", "login, version " .. tostring(ns.VERSION or "?")) end
         -- Version banner, read from the toc's ## Version field (see Core.lua)
-        print(string.format("|cffffd100RPCopy|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
+        print(string.format("|cffffd100RP Chronicler|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
+        if ns.loginNotice then print(ns.loginNotice) end
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Zone info is reliable here, so a saved run is restored at the first one
         RestoreRunOnce()
@@ -722,11 +723,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
     elseif event == "PLAYER_TARGET_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" then
         local unit = (event == "PLAYER_TARGET_CHANGED") and "target" or "mouseover"
-        if UnitExists(unit) and UnitIsPlayer(unit) and RPCopyDB and RPCopyDB.autoUpdateKnown then
+        if UnitExists(unit) and UnitIsPlayer(unit) and RPChroniclerDB and RPChroniclerDB.autoUpdateKnown then
             local fullName = ns.GetUnitFullName(unit)
             local key = fullName and ns.FindPlayerKey(fullName, true)
-            if key and RPCopyDB.players[key] then
-                ns.CaptureVisibleUnitFields(unit, RPCopyDB.players[key])
+            if key and RPChroniclerDB.players[key] then
+                ns.CaptureVisibleUnitFields(unit, RPChroniclerDB.players[key])
             end
         elseif event == "PLAYER_TARGET_CHANGED" and UnitExists("target") and UnitCanAttack("player", "target") and not UnitIsDead("target") then
             if IsBossUnit("target") and UnitAffectingCombat and UnitAffectingCombat("player") then
@@ -1160,7 +1161,7 @@ do
         if not ok and not tracker.reported then
             tracker.reported = true
             if ns.Debug then ns.Debug("error", "run tracker: " .. tostring(err)) end
-            print("|cffffd100RPCopy|r |cffff6b6brun tracker error:|r " .. tostring(err))
+            print("|cffffd100RP Chronicler|r |cffff6b6brun tracker error:|r " .. tostring(err))
         end
     end)
 

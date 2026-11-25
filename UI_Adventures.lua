@@ -19,11 +19,11 @@ local function Report(msg, kind)
         UI.SetStatus(msg, kind)
     else
         local border = (kind == "error") and { 0.75, 0.28, 0.28 } or { 0.36, 0.72, 0.36 }
-        UI.ShowToast("|cffffd100RPCopy:|r " .. msg, 2.4, border[1], border[2], border[3])
+        UI.ShowToast("|cffffd100RP Chronicler:|r " .. msg, 2.4, border[1], border[2], border[3])
     end
 end
 
-function RPCopy_StartRun()
+function RPChronicler_StartRun()
     local active = ns.GetActiveAdventure()
     if active then
         Report("Already recording " .. (active.title or "an adventure") .. ". End it first.", "error")
@@ -37,14 +37,14 @@ function RPCopy_StartRun()
     RefreshIfOpen()
 end
 
-UI.StartRunFromUI = function() RPCopy_StartRun() end
+UI.StartRunFromUI = function() RPChronicler_StartRun() end
 
 -- One toggle for Start / Stop (the button, the RP icon menu, keybinds)
-function RPCopy_ToggleRun()
-    if ns.GetActiveAdventure() then RPCopy_EndRun() else RPCopy_StartRun() end
+function RPChronicler_ToggleRun()
+    if ns.GetActiveAdventure() then RPChronicler_EndRun() else RPChronicler_StartRun() end
 end
 
-function RPCopy_ToggleRunPause()
+function RPChronicler_ToggleRunPause()
     if not ns.GetActiveAdventure() or not ns.PauseAdventure then
         Report("No adventure is recording.", "error")
         return
@@ -59,7 +59,7 @@ function RPCopy_ToggleRunPause()
     RefreshIfOpen()
 end
 
-function RPCopy_EndRun()
+function RPChronicler_EndRun()
     if not ns.GetActiveAdventure() then
         Report("No adventure is recording.", "error")
         return
@@ -79,7 +79,7 @@ end
 -- =========================================================
 local imp = {}
 do
-    local f = CreateFrame("Frame", "RPCopyStoryImportFrame", UIParent, UI.BACKDROP)
+    local f = CreateFrame("Frame", "RPChroniclerStoryImportFrame", UIParent, UI.BACKDROP)
     f:SetSize(580, 420)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 10)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -117,11 +117,11 @@ do
     boxBg:SetPoint("BOTTOMRIGHT", -14, 42)
     UI.ApplyDarkGlass(boxBg, 0.06, 0.05, 0.04, 0.96, 0.72, 0.56, 0.26, 0.75)
 
-    local scroll = CreateFrame("ScrollFrame", "RPCopyStoryImportScroll", boxBg, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", "RPChroniclerStoryImportScroll", boxBg, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 8, -8)
     scroll:SetPoint("BOTTOMRIGHT", -28, 8)
 
-    local eb = CreateFrame("EditBox", "RPCopyStoryImportEditBox", scroll)
+    local eb = CreateFrame("EditBox", "RPChroniclerStoryImportEditBox", scroll)
     eb:SetMultiLine(true)
     eb:SetMaxLetters(0)
     eb:SetFontObject(ChatFontNormal)
@@ -171,7 +171,7 @@ local function AllRuns()
     local list = {}
     local active = ns.GetActiveAdventure()
     if active then table.insert(list, active) end
-    for _, adv in ipairs(RPCopyDB.adventures or {}) do table.insert(list, adv) end
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do table.insert(list, adv) end
     return list
 end
 UI.AllRuns = AllRuns
@@ -282,7 +282,7 @@ do
     header:SetPoint("TOPLEFT", 10, -8)
 end
 
-A.listScroll = CreateFrame("ScrollFrame", "RPCopyAdvListScroll", A.list, "UIPanelScrollFrameTemplate")
+A.listScroll = CreateFrame("ScrollFrame", "RPChroniclerAdvListScroll", A.list, "UIPanelScrollFrameTemplate")
 A.listScroll:SetPoint("TOPLEFT", 6, -26)
 A.listScroll:SetPoint("BOTTOMRIGHT", -26, 6)
 A.listChild = CreateFrame("Frame", nil, A.listScroll)
@@ -373,10 +373,10 @@ A.boxBg:SetPoint("TOPLEFT", 0, -94)
 A.boxBg:SetPoint("BOTTOMRIGHT", 0, 0)
 UI.ApplyPanelLook(A.boxBg)
 
-A.scroll = CreateFrame("ScrollFrame", "RPCopyAdvScroll", A.boxBg, "UIPanelScrollFrameTemplate")
+A.scroll = CreateFrame("ScrollFrame", "RPChroniclerAdvScroll", A.boxBg, "UIPanelScrollFrameTemplate")
 A.scroll:SetPoint("TOPLEFT", 8, -8)
 A.scroll:SetPoint("BOTTOMRIGHT", -26, 8)
-A.editBox = CreateFrame("EditBox", "RPCopyAdvEditBox", A.scroll)
+A.editBox = CreateFrame("EditBox", "RPChroniclerAdvEditBox", A.scroll)
 A.editBox:SetMultiLine(true)
 A.editBox:SetMaxLetters(0)
 A.editBox:SetFontObject(ChatFontNormal)
@@ -434,16 +434,16 @@ end
 local function GetSelectedAdventure()
     local active = ns.GetActiveAdventure()
     if active and ns.state.selectedAdventureId == active.id then return active end
-    for _, adv in ipairs(RPCopyDB.adventures or {}) do
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do
         if adv.id == ns.state.selectedAdventureId then return adv end
     end
     if active then
         ns.state.selectedAdventureId = active.id
         return active
     end
-    if RPCopyDB.adventures and RPCopyDB.adventures[1] then
-        ns.state.selectedAdventureId = RPCopyDB.adventures[1].id
-        return RPCopyDB.adventures[1]
+    if RPChroniclerDB.adventures and RPChroniclerDB.adventures[1] then
+        ns.state.selectedAdventureId = RPChroniclerDB.adventures[1].id
+        return RPChroniclerDB.adventures[1]
     end
     return nil
 end
@@ -516,7 +516,7 @@ function UI.RefreshAdventuresTab()
     for _, card in ipairs(A.cards) do card:Hide() end
     local entries = {}
     if active then table.insert(entries, { adv = active, isLive = true }) end
-    for _, adv in ipairs(RPCopyDB.adventures or {}) do
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do
         table.insert(entries, { adv = adv, isLive = false })
     end
 
@@ -586,7 +586,7 @@ function UI.RefreshAdventuresTab()
         A.fullBtn:LockHighlight()
         local text = ns.BuildAdventureFullLog(selected)
         A.editBox:SetText(text)
-        local meterOn = selected and RPCopyDB.sizeMeter ~= false
+        local meterOn = selected and RPChroniclerDB.sizeMeter ~= false
         if meterOn then
             local limit, label = ns.GetAiLimit()
             local chars = #text
@@ -615,7 +615,7 @@ function UI.OpenRecording(advId, mode)
     if advId then ns.state.selectedAdventureId = advId end
     if mode then ns.state.adventureViewMode = mode end
     if not UI.frame:IsShown() then
-        RPCopy_Open("", "ADVENTURES")
+        RPChronicler_Open("", "ADVENTURES")
     elseif ns.state.section ~= "ADVENTURES" then
         UI.ShowSection("ADVENTURES")
     else
@@ -668,11 +668,11 @@ A.selectAllBtn:SetScript("OnClick", function()
 end)
 
 A.runBtn:SetScript("OnClick", function()
-    RPCopy_ToggleRun()
+    RPChronicler_ToggleRun()
     UI.RefreshAdventuresTab()
 end)
 A.pauseBtn:SetScript("OnClick", function()
-    RPCopy_ToggleRunPause()
+    RPChronicler_ToggleRunPause()
     UI.RefreshAdventuresTab()
 end)
 A.markBtn:SetScript("OnClick", function()
@@ -690,7 +690,7 @@ A.delBtn:SetScript("OnClick", function(self)
         UI.SetStatus("End the live run before deleting it.", "error")
         return
     end
-    for i, adv in ipairs(RPCopyDB.adventures or {}) do
+    for i, adv in ipairs(RPChroniclerDB.adventures or {}) do
         if adv.id == ns.state.selectedAdventureId then
             if not self.armedAt or GetTime() - self.armedAt > 4 then
                 self.armedAt = GetTime()
@@ -700,7 +700,7 @@ A.delBtn:SetScript("OnClick", function(self)
                 return
             end
             self.armedAt = nil
-            table.remove(RPCopyDB.adventures, i)
+            table.remove(RPChroniclerDB.adventures, i)
             if ns.Debug then ns.Debug("run", "deleted run " .. tostring(adv.title)) end
             ns.state.selectedAdventureId = nil
             adv.storyId = nil

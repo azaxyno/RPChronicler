@@ -12,3 +12,7 @@ desktop.ini
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Internal docs (Mor + Claude only): keep local copies, never publish
+docs/ARCHITECTURE.md
+*.pdf

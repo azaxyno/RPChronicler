@@ -33,7 +33,7 @@ do
     header:SetPoint("TOPLEFT", 10, -8)
 end
 
-P.search = CreateFrame("EditBox", "RPCopyPSearch", P.list, "InputBoxTemplate")
+P.search = CreateFrame("EditBox", "RPChroniclerPSearch", P.list, "InputBoxTemplate")
 P.search:SetSize(92, 20)
 P.search:SetPoint("TOPLEFT", 12, -26)
 P.search:SetAutoFocus(false)
@@ -47,7 +47,7 @@ P.sortBtn:SetPoint("LEFT", P.search, "RIGHT", 4, 0)
 P.sortBtn.tipTitle = "|cffffd100Sort|r"
 P.sortBtn.tipText = "A-Z by name, Seen (last seen first) or Met (first met first)."
 
-P.listScroll = CreateFrame("ScrollFrame", "RPCopyPlayerListScroll", P.list, "UIPanelScrollFrameTemplate")
+P.listScroll = CreateFrame("ScrollFrame", "RPChroniclerPlayerListScroll", P.list, "UIPanelScrollFrameTemplate")
 P.listScroll:SetPoint("TOPLEFT", 6, -52)
 P.listScroll:SetPoint("BOTTOMRIGHT", -26, 6)
 
@@ -77,13 +77,13 @@ do
     UI.Label(P.editor, "Tone", "GameFontHighlightSmall"):SetPoint("TOPLEFT", 160, -42)
 end
 
-P.firstInput = Input("RPCopyPFirstInput", -16, 6)
+P.firstInput = Input("RPChroniclerPFirstInput", -16, 6)
 P.firstInput:SetWidth(104)
-P.lastInput = Input("RPCopyPLastInput", -16, 126)
+P.lastInput = Input("RPChroniclerPLastInput", -16, 126)
 P.lastInput:SetPoint("RIGHT", P.editor, "RIGHT", -2, 0)
-P.relInput = Input("RPCopyPRelInput", -56, 6, nil, 40)
+P.relInput = Input("RPChroniclerPRelInput", -56, 6, nil, 40)
 P.relInput:SetWidth(144)
-P.toneInput = Input("RPCopyPToneInput", -56, 166, nil, 40)
+P.toneInput = Input("RPChroniclerPToneInput", -56, 166, nil, 40)
 P.toneInput:SetPoint("RIGHT", P.editor, "RIGHT", -2, 0)
 P.relInput.tip = "Rival, mentor, best friend, guildmate ..."
 
@@ -126,8 +126,8 @@ local function NoteBox(label, y, name)
     return eb
 end
 
-P.noteInput = NoteBox("|cffffd100Who they are|r |cff8f9ba8(personality, looks, voice)|r", -82, "RPCopyPNoteInput")
-P.historyInput = NoteBox("|cffffd100Our history|r |cff8f9ba8(what you went through together)|r", -150, "RPCopyPHistoryInput")
+P.noteInput = NoteBox("|cffffd100Who they are|r |cff8f9ba8(personality, looks, voice)|r", -82, "RPChroniclerPNoteInput")
+P.historyInput = NoteBox("|cffffd100Our history|r |cff8f9ba8(what you went through together)|r", -150, "RPChroniclerPHistoryInput")
 
 P.info = CreateFrame("Frame", nil, P.editor, UI.BACKDROP)
 P.info:SetPoint("TOPLEFT", 0, -220)
@@ -219,7 +219,7 @@ function UI.LoadPlayerIntoEditor(key)
     ns.state.selectedPlayerKey = key
     P.delBtn.armedAt = nil
     P.delBtn:SetText("Delete")
-    local data = key and RPCopyDB.players[key]
+    local data = key and RPChroniclerDB.players[key]
     local fName, lName = "", ""
     if data then fName, lName = ns.SplitFullName(key) end
     P.firstInput:SetText(fName)
@@ -245,7 +245,7 @@ function UI.RefreshPlayersTab()
     P.sortBtn:SetText(SORT_LABEL[mode] or "A-Z")
     local q = Trim(P.search:GetText()):lower()
     local sorted = {}
-    for k, data in pairs(RPCopyDB.players) do
+    for k, data in pairs(RPChroniclerDB.players) do
         if type(data) == "table" then
             local hay = (k .. " " .. (data.relationship or "") .. " " .. (data.guild or "")):lower()
             if q == "" or hay:find(q, 1, true) then table.insert(sorted, k) end
@@ -253,7 +253,7 @@ function UI.RefreshPlayersTab()
     end
     table.sort(sorted, function(a, b)
         if mode ~= "NAME" then
-            local ka, kb = SortKey(RPCopyDB.players[a], mode), SortKey(RPCopyDB.players[b], mode)
+            local ka, kb = SortKey(RPChroniclerDB.players[a], mode), SortKey(RPChroniclerDB.players[b], mode)
             if ka ~= kb then
                 if mode == "SEEN" then return ka > kb end
                 return ka < kb
@@ -269,7 +269,7 @@ function UI.RefreshPlayersTab()
             P.rows[idx] = rb
         end
         rb:SetPoint("TOPLEFT", 0, -(idx - 1) * 24)
-        local data = RPCopyDB.players[pName]
+        local data = RPChroniclerDB.players[pName]
         local hasNote = (data.note or "") ~= "" or (data.history or "") ~= ""
         local tag = (data.kind == "npc" and " |cffb39ddb(NPC)|r") or (data.kind == "pet" and " |cffb39ddb(pet)|r") or ""
         rb:SetText(pName .. tag .. (hasNote and " |cffff80ab*|r" or ""))
@@ -281,7 +281,7 @@ function UI.RefreshPlayersTab()
         rb:Show()
     end
     P.listChild:SetHeight(math.max(10, #sorted * 24))
-    if next(RPCopyDB.players) == nil then
+    if next(RPChroniclerDB.players) == nil then
         UI.SetHint("No companions yet. Target someone and click Capture (or press Shift+C in the world, or right-click a player).")
     end
 end
@@ -313,7 +313,7 @@ end)
 
 P.includeBtn:SetScript("OnClick", function()
     local key = ns.state.selectedPlayerKey
-    local data = key and RPCopyDB.players[key]
+    local data = key and RPChroniclerDB.players[key]
     if not data then return end
     local idx = 1
     for i, k in ipairs(INCLUDE_ORDER) do if k == (data.include or "auto") then idx = i end end
@@ -347,7 +347,7 @@ P.saveBtn:SetScript("OnClick", function()
         return
     end
     local sel = ns.state.selectedPlayerKey
-    local entry = sel and RPCopyDB.players[sel]
+    local entry = sel and RPChroniclerDB.players[sel]
     if entry then
         -- A rename never overwrites another companion (any case)
         local ok, res = ns.RenameCompanion(sel, newName)
@@ -357,14 +357,14 @@ P.saveBtn:SetScript("OnClick", function()
         end
         newName = res
     else
-        for k in pairs(RPCopyDB.players) do
+        for k in pairs(RPChroniclerDB.players) do
             if k:lower() == newName:lower() then
                 UI.SetStatus("A companion named " .. k .. " already exists. Pick them in the list to edit.", "error")
                 return
             end
         end
         entry = ns.NewCompanionEntry("player")
-        RPCopyDB.players[newName] = entry
+        RPChroniclerDB.players[newName] = entry
     end
     entry.relationship = Trim(P.relInput:GetText())
     entry.tone = Trim(P.toneInput:GetText())
@@ -380,14 +380,14 @@ end)
 P.delBtn:SetScript("OnClick", function(self)
     UI.EnsureOptions()
     local nameToDel = ns.state.selectedPlayerKey
-    if not nameToDel or not RPCopyDB.players[nameToDel] then return end
+    if not nameToDel or not RPChroniclerDB.players[nameToDel] then return end
     if not self.armedAt or GetTime() - self.armedAt > 4 then
         self.armedAt = GetTime()
         self:SetText("|cffff6b6bSure?|r")
         UI.SetStatus("Click Delete again to remove " .. nameToDel .. ".", "error")
         return
     end
-    RPCopyDB.players[nameToDel] = nil
+    RPChroniclerDB.players[nameToDel] = nil
     UI.LoadPlayerIntoEditor(nil)
     UI.RefreshPlayersTab()
     UI.SetStatus("Deleted " .. nameToDel, "good")
@@ -396,9 +396,9 @@ end)
 UI.SetSectionOnShow("PLAYERS", function()
     local k = UnitExists("target") and ns.CompanionByName(ns.UnitCompanionName("target"))
     if k then
-        if RPCopyDB.autoUpdateKnown then ns.CaptureVisibleUnitFields("target", RPCopyDB.players[k]) end
+        if RPChroniclerDB.autoUpdateKnown then ns.CaptureVisibleUnitFields("target", RPChroniclerDB.players[k]) end
         UI.LoadPlayerIntoEditor(k)
-    elseif ns.state.selectedPlayerKey and RPCopyDB.players[ns.state.selectedPlayerKey] then
+    elseif ns.state.selectedPlayerKey and RPChroniclerDB.players[ns.state.selectedPlayerKey] then
         UI.LoadPlayerIntoEditor(ns.state.selectedPlayerKey)
     else
         UI.LoadPlayerIntoEditor(nil)

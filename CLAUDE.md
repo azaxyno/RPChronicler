@@ -1,10 +1,10 @@
-# RPCopy
+# RP Chronicler (formerly RPCopy)
 
-A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP scene (`Ctrl+C`) as a text "snapshot" for the player's AI character skill. It keeps notes on companions, records dungeon, raid and open-world runs as a timestamped Full Log for an AI storyteller, and keeps the imported colored stories in an in-game Story Book. It never sends chat. Full module reference: `docs/ARCHITECTURE.md`. Player docs: `README.md`.
+A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP scene (`Ctrl+C`) as a text "snapshot" for the player's AI character skill. It keeps notes on companions, records dungeon, raid and open-world runs as a timestamped Full Log for an AI storyteller, and keeps the imported colored stories in an in-game Story Book. It never sends chat. Full module reference: `docs/ARCHITECTURE.md` (internal: untracked by git since 0.6.0, kept locally and in the project files; never publish it). Player docs: `README.md`.
 
 ## Working rules
 
-- **Bump the version on every change.** Edit `## Version` in `RPCopy.toc` (the chat banner and window badge read it), the fallback strings in `Core.lua` (`ns.VERSION`) and `UI_Shell.lua` (`verBadge`), and the Version line in `README.md`.
+- **Bump the version on every change.** Edit `## Version` in `RPChronicler.toc` (and in `migration/RPCopy/RPCopy.toc`) (the chat banner and window badge read it), the fallback strings in `Core.lua` (`ns.VERSION`) and `UI_Shell.lua` (`verBadge`), and the Version line in `README.md`.
   - The addon is in alpha. Versioning restarted at 0.1.0 (the old 3.x tags were retired); stay below 1.0.0 until Mor says otherwise.
   - Small fix: patch bump, e.g. 0.1.0 -> 0.1.1.
   - Big update: minor bump, e.g. 0.1.x -> 0.2.0.
@@ -18,19 +18,19 @@ A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP sce
 - Keep `README.md` in step with user-visible changes, and `docs/ARCHITECTURE.md` in step with structural ones.
 - Commit only after Mor approves. Mor pushes.
 - azaxyno is the only author and contributor. Never add `Co-Authored-By: Claude`, `Claude-Session:` or any other AI attribution to commits, tags or releases.
-- Every pushed version gets a tag `vX.Y.Z` and a GitHub Release (pre-release while in alpha). The release notes have a short intro, a "What's new" list of user-visible changes since the last release, "Fixes", and install steps. Attach `RPCopy-vX.Y.Z.zip`, which holds an `RPCopy/` folder with only the addon files (toc, .lua, Bindings.xml, README.md, LICENSE, CREDITS.md, Export_Stories.bat). Leave out docs, tools, .claude, backup, CLAUDE.md and the PDF.
+- Every pushed version gets a tag `vX.Y.Z` and a GitHub Release (pre-release while in alpha). The release notes have a short intro, a "What's new" list of user-visible changes since the last release, "Fixes", and install steps. Attach `RPChronicler-vX.Y.Z.zip`, which holds an `RPChronicler/` folder with only the addon files (toc, .lua, Bindings.xml, README.md, LICENSE, CREDITS.md, Export_Stories.bat), plus the data-only `RPCopy/` folder from `migration/RPCopy` while the rename migration is needed. Leave out docs, tools, migration (inside RPChronicler), .claude, backup, CLAUDE.md and PDFs.
   - Claude's cloud sessions can push branches but not tags or releases. Mor publishes the release from a `releases/new?tag=vX.Y.Z&target=main&prerelease=1` link, with the notes and zip that Claude prepares.
-  - CurseForge: upload the same zip as **Alpha** for game version Forever 1.60.1. `.pkgmeta` (package-as RPCopy) is ready for the packager. Once the project exists, turn the commented `# ## X-Curse-Project-ID: 000000` line in the toc into a real `## X-Curse-Project-ID: <id>`.
+  - CurseForge: upload `RPChronicler-vX.Y.Z-curseforge.zip` (the same without Export_Stories.bat; the in-game tips point to the GitHub releases for it) as **Alpha** for game version Forever 1.60.1. `.pkgmeta` (package-as RPChronicler, move-folders for RPCopy) is ready for the packager. Once the project exists, turn the commented `# ## X-Curse-Project-ID: 000000` line in the toc into a real `## X-Curse-Project-ID: <id>`.
 
-## Map (details in docs/ARCHITECTURE.md)
+## Map (details in docs/ARCHITECTURE.md, local only)
 
 | File | Role |
 |---|---|
-| `Core.lua` | `RPCopyDB` defaults and `ns.EnsureDB` migrations, `ns.TAB_FLAGS` / `ns.DEFAULT_TABS`, `ns.LOG_CATEGORIES` / `ns.LOG_LIMITS` / `ns.AI_MODELS`, `ns.SUMMARY_STATS`, `ns.CAPTURE_TYPES`, `ns.PRIVACY_TEXT`, `ns.WipeAllData`, colors, safe-value helpers, roles, log buffers (`ns.PushLog`), `NormalizeStoryText` |
-| `Companions.lua` | Companion records (players, NPCs, pets), rename, include mode, pet kind and species, `[Known Player]` blocks, the right-click "Add as RPCopy companion" entry |
-| `Debug.lua` | `ns.Debug` ring buffer (no chat), RPCopy-only error hook, blocked actions, `ns.BuildDebugReport` for `/rp debug` |
+| `Core.lua` | `RPChroniclerDB` defaults and `ns.EnsureDB` migrations, `ns.TAB_FLAGS` / `ns.DEFAULT_TABS`, `ns.LOG_CATEGORIES` / `ns.LOG_LIMITS` / `ns.AI_MODELS`, `ns.SUMMARY_STATS`, `ns.CAPTURE_TYPES`, `ns.PRIVACY_TEXT`, `ns.WipeAllData`, colors, safe-value helpers, roles, log buffers (`ns.PushLog`), `NormalizeStoryText` |
+| `Companions.lua` | Companion records (players, NPCs, pets), rename, include mode, pet kind and species, `[Known Player]` blocks, the right-click "Add as RP Chronicler companion" entry |
+| `Debug.lua` | `ns.Debug` ring buffer (no chat), RP Chronicler-only error hook, blocked actions, `ns.BuildDebugReport` for `/rp debug` |
 | `Snapshot.lua` | `ns.BuildSnapshot(tabId, note, expanded)`: Skill Call, Instruction, Location, Direct, Target, Party, Status, Quest, then one time-ordered chat timeline, then companion blocks |
-| `Adventures.lua` | Run lifecycle (interrupted runs, resume) and every `Record*` function, timeline, Summary by run type, Full Log and its size, story storage (`RPCopyDB.stories`, independent of runs) and Story Book metadata, boss icons (`DecorateStoryBosses`), `AutoColorStory` |
+| `Adventures.lua` | Run lifecycle (interrupted runs, resume) and every `Record*` function, timeline, Summary by run type, Full Log and its size, story storage (`RPChroniclerDB.stories`, independent of runs) and Story Book metadata, boss icons (`DecorateStoryBosses`), `AutoColorStory` |
 | `Screenshots.lua` | `ns.RequestScreenshot`: debounced, combat-safe, capped per run; your own Print Screen shots join the run |
 | `Events.lua` | Event router to `ns.*`, chat buffers, loot filter and sources, combat poller (boss HP, pull end, aggro, fight enemies), run trackers (spell, boss cast, CC, pet) |
 | `Chronicle.lua` | `[FIGHT]` / `[FIGHTS]` streak tracker, kills, PvP, quest objectives, quests, NPC filter, levels, places, skills, milestones, loot source, atmosphere, start-recording and interrupted-run prompts |
@@ -49,8 +49,9 @@ Key facts that are easy to get wrong:
 
 - Log entries are tables `{ line, seq, author, chan }` (use `ns.LogLine`). The buffers are social, party, npc, loot, ooc, world (numbered channels), guild (guild and officer) and combat (deaths and level ups, read by Status).
 - A slice tab is `{ id, label, prefix, inc* }`, with flags from `ns.TAB_FLAGS`. Built-in ids are CHAT, WORLD, PARTY, GUILD, QUEST and LOOT (SMART was removed in 0.4.0). Migrations run once in `ns.EnsureDB` behind `migratedV32` / `migratedV031` / `migratedV040` flags.
-- Runs have `kind` (dungeon, raid, world). The Full Log's first line is the story trigger: `use story` (Dungeon/Raid Story) or `use adventure story` (Adventure Story).
-- Stories live in `RPCopyDB.stories` (since 0.5.0), each with a copy of its run's details, so deleting a run keeps the story. `adv.story` is legacy and migrated by `ns.MigrateStories`.
+- Runs have `kind` (dungeon, raid, world). The Full Log's first line calls the story skill by name: `use wow-dungeon-raid-story` or `use wow-open-world-story`. The names live in `ns.STORY_SKILLS` (Core.lua) and feed both the Full Log and the templates' `name:` lines, so they stay in sync. Old saved logs were rewritten once behind `migratedV060`.
+- Stories live in `RPChroniclerDB.stories` (since 0.5.0), each with a copy of its run's details, so deleting a run keeps the story. `adv.story` is legacy and migrated by `ns.MigrateStories`.
 - Story colors: class colors, but Priest is gray `C0C0C0` and bosses are crimson `dc143c`. The two story templates live in `UI_Options.lua` (shared part `STORY_SHARED_RULES`) and must match the Full Log tags and the Story Book header/footer that `ns.ParseStoryMeta` reads.
+- 0.6.0 rename: the addon, folder and toc are `RPChronicler`, the title "RP Chronicler", SavedVariables `RPChroniclerDB`, globals and frames `RPChronicler*`, bindings `RPCHRONICLER_*`, slash `/rp` and `/rpchronicler`. WoW only loads SavedVariables from a file named after the addon that declares them, so the old data is read through an `RPCopy` addon: the release ships `migration/RPCopy/RPCopy.toc` (no code, `## SavedVariables: RPCopyDB`) as a top-level `RPCopy/` folder, the main toc has `## OptionalDeps: RPCopy`, and Core.lua copies `RPCopyDB` into an empty `RPChroniclerDB` once at ADDON_LOADED (`migratedFromRPCopy`), then disables RPCopy. `/rp import rpcopy` forces it. The literal `RPCopy` / `RPCopyDB` names must stay in that code, the .bat fallback and the README's "Moving from RPCopy".
 - Mor asked to keep the floating `[RP]` button and not add a minimap button.
 - Testing: there is no game here. Use a lupa (Lua 5.1) mock harness to load every toc file, click every button and fire events. PowerShell can't be run here, so `Export_Stories.bat` changes are untested until Mor runs them.

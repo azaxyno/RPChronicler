@@ -2,21 +2,25 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.5.4"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.0"
 
-BINDING_HEADER_RPCOPY = "RPCopy (RP Context & Chronicle)"
-BINDING_NAME_RPCOPY_OPEN = "Toggle RPCopy Window"
-BINDING_NAME_RPCOPY_QUICK = "Quick Copy (Last Used Slice)"
-BINDING_NAME_RPCOPY_CAPTURE = "Capture / Update Target Companion"
-BINDING_NAME_RPCOPY_MARK = "Bookmark Adventure Moment"
-BINDING_NAME_RPCOPY_RUN_START = "Start Recording an Adventure"
-BINDING_NAME_RPCOPY_RUN_PAUSE = "Pause / Resume Recording"
-BINDING_NAME_RPCOPY_RUN_END = "End & Save Recording"
+BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
+BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
+BINDING_NAME_RPCHRONICLER_QUICK = "Quick Copy (Last Used Slice)"
+BINDING_NAME_RPCHRONICLER_CAPTURE = "Capture / Update Target Companion"
+BINDING_NAME_RPCHRONICLER_MARK = "Bookmark Adventure Moment"
+BINDING_NAME_RPCHRONICLER_RUN_START = "Start Recording an Adventure"
+BINDING_NAME_RPCHRONICLER_RUN_PAUSE = "Pause / Resume Recording"
+BINDING_NAME_RPCHRONICLER_RUN_END = "End & Save Recording"
 
 ns.MAX_LINES = 25
 ns.MAX_PLAYER_CHAT = 5
 
 ns.DEFAULT_TRIGGER = "use aloria"
+
+-- 0.6.0: the story skills' names (the "name:" line of the two story
+-- templates in UI_Options.lua). The Full Log's first line is "use <name>".
+ns.STORY_SKILLS = { dungeon = "wow-dungeon-raid-story", world = "wow-open-world-story" }
 
 -- Section flags of a slice tab. Every tab can turn each one on or off in
 -- Options > Slice Tabs. Chat sources are merged into one time-ordered timeline.
@@ -117,11 +121,11 @@ ns.SUMMARY_STATS = {
 }
 
 function ns.SummaryOn(key)
-    local c = RPCopyDB and RPCopyDB.summaryStats
+    local c = RPChroniclerDB and RPChroniclerDB.summaryStats
     return not c or c[key] ~= false
 end
 
--- Chat types RPCopy captures (Options > Privacy and the first-run setup)
+-- Chat types RP Chronicler captures (Options > Privacy and the first-run setup)
 ns.CAPTURE_TYPES = {
     { key = "say",     label = "Say, yell and emotes" },
     { key = "whisper", label = "Whispers" },
@@ -132,40 +136,40 @@ ns.CAPTURE_TYPES = {
 }
 
 function ns.CaptureOn(key)
-    local c = RPCopyDB and RPCopyDB.capture
+    local c = RPChroniclerDB and RPChroniclerDB.capture
     return not c or c[key] ~= false
 end
 
 -- The privacy note (first-run setup and Options > Privacy). Plain ASCII.
 ns.PRIVACY_TEXT =
-    "|cffd8dee9RPCopy stores everything on your PC, in your WoW SavedVariables. It has no internet access and sends nothing anywhere. " ..
+    "|cffd8dee9RP Chronicler stores everything on your PC, in your WoW SavedVariables. It has no internet access and sends nothing anywhere. " ..
     "No account, email or real-world personal data is collected.\n" ..
     "Chat and log text only leave your PC if YOU paste them into your own AI tool, and that tool's own privacy terms apply then.\n" ..
-    "You can delete everything at any time with |cff69ccf0/rp wipe|cffd8dee9 (or by deleting RPCopy.lua in your SavedVariables folder).|r"
+    "You can delete everything at any time with |cff69ccf0/rp wipe|cffd8dee9 (or by deleting RPChronicler.lua in your SavedVariables folder).|r"
 
 -- /rp wipe and Options > Privacy: forget everything, then reload
 function ns.WipeAllData()
     if InCombatLockdown and InCombatLockdown() then
-        print("|cffffd100RPCopy|r Leave combat first, then try again.")
+        print("|cffffd100RP Chronicler|r Leave combat first, then try again.")
         return false
     end
     if ns.DropActiveAdventure then ns.DropActiveAdventure() end
-    RPCopyDB = {}
+    RPChroniclerDB = {}
     ns._dbChecked = nil
     ns.EnsureDB()
-    RPCopyDB.wipedAt = time and time() or 0
-    print("|cffffd100RPCopy|r All RPCopy data deleted. Reloading...")
+    RPChroniclerDB.wipedAt = time and time() or 0
+    print("|cffffd100RP Chronicler|r All RP Chronicler data deleted. Reloading...")
     if ReloadUI then ReloadUI() end
     return true
 end
 
 function ns.LogOn(cat)
-    local c = RPCopyDB and RPCopyDB.logCats
+    local c = RPChroniclerDB and RPChroniclerDB.logCats
     return not c or c[cat] ~= false
 end
 
 function ns.Limit(key)
-    local l = RPCopyDB and RPCopyDB.limits
+    local l = RPChroniclerDB and RPChroniclerDB.limits
     local v = l and tonumber(l[key])
     if v then return v end
     for _, d in ipairs(ns.LOG_LIMITS) do
@@ -184,7 +188,7 @@ local function CloneDefaultTabs()
     return copy
 end
 
-RPCopyDB = RPCopyDB or {
+RPChroniclerDB = RPChroniclerDB or {
     players = {},
     adventures = {},
     autoUpdateKnown = true,
@@ -748,58 +752,58 @@ local function ParseLegacyInfo(infoStr)
 end
 
 function ns.ResetDefaultTabs()
-    RPCopyDB.tabs = CloneDefaultTabs()
-    RPCopyDB.migratedV32 = true
-    ns.state.selectedOptionTabId = RPCopyDB.tabs[1].id
-    ns.state.activeFilter = RPCopyDB.tabs[1].id
-    RPCopyDB.lastSliceId = RPCopyDB.tabs[1].id
+    RPChroniclerDB.tabs = CloneDefaultTabs()
+    RPChroniclerDB.migratedV32 = true
+    ns.state.selectedOptionTabId = RPChroniclerDB.tabs[1].id
+    ns.state.activeFilter = RPChroniclerDB.tabs[1].id
+    RPChroniclerDB.lastSliceId = RPChroniclerDB.tabs[1].id
 end
 
 function ns.GetTabConfig(tabId)
     ns.EnsureDB()
-    for _, t in ipairs(RPCopyDB.tabs) do
+    for _, t in ipairs(RPChroniclerDB.tabs) do
         if t.id == tabId then return t end
     end
-    return RPCopyDB.tabs[1]
+    return RPChroniclerDB.tabs[1]
 end
 
--- The full check runs once per RPCopyDB table (it also runs migrations and
+-- The full check runs once per RPChroniclerDB table (it also runs migrations and
 -- rebuilds old Full Logs). Later calls return at once: EnsureDB is called
 -- on every copy, and a slow copy was one lead in the 0.4.0 Ctrl+C bug.
 function ns.EnsureDB()
-    if RPCopyDB and ns._dbChecked == RPCopyDB then return end
-    RPCopyDB = RPCopyDB or {}
-    RPCopyDB.players = RPCopyDB.players or {}
-    RPCopyDB.adventures = RPCopyDB.adventures or {}
-    if RPCopyDB.autoUpdateKnown == nil then
-        RPCopyDB.autoUpdateKnown = true
+    if RPChroniclerDB and ns._dbChecked == RPChroniclerDB then return end
+    RPChroniclerDB = RPChroniclerDB or {}
+    RPChroniclerDB.players = RPChroniclerDB.players or {}
+    RPChroniclerDB.adventures = RPChroniclerDB.adventures or {}
+    if RPChroniclerDB.autoUpdateKnown == nil then
+        RPChroniclerDB.autoUpdateKnown = true
     end
-    if RPCopyDB.autoScreenshots == nil then
-        RPCopyDB.autoScreenshots = false
+    if RPChroniclerDB.autoScreenshots == nil then
+        RPChroniclerDB.autoScreenshots = false
     end
-    if RPCopyDB.quickCtrlC == nil then
-        RPCopyDB.quickCtrlC = true
+    if RPChroniclerDB.quickCtrlC == nil then
+        RPChroniclerDB.quickCtrlC = true
     end
-    if not RPCopyDB.quickCopyKey or RPCopyDB.quickCopyKey == "" then
-        RPCopyDB.quickCopyKey = "CTRL-C"
+    if not RPChroniclerDB.quickCopyKey or RPChroniclerDB.quickCopyKey == "" then
+        RPChroniclerDB.quickCopyKey = "CTRL-C"
     end
-    if RPCopyDB.quickCapture == nil then
-        RPCopyDB.quickCapture = true
+    if RPChroniclerDB.quickCapture == nil then
+        RPChroniclerDB.quickCapture = true
     end
-    if not RPCopyDB.captureTargetKey or RPCopyDB.captureTargetKey == "" then
-        RPCopyDB.captureTargetKey = "SHIFT-C"
+    if not RPChroniclerDB.captureTargetKey or RPChroniclerDB.captureTargetKey == "" then
+        RPChroniclerDB.captureTargetKey = "SHIFT-C"
     end
-    if not RPCopyDB.lastSliceId or RPCopyDB.lastSliceId == "" then
-        RPCopyDB.lastSliceId = "CHAT"
+    if not RPChroniclerDB.lastSliceId or RPChroniclerDB.lastSliceId == "" then
+        RPChroniclerDB.lastSliceId = "CHAT"
     end
-    RPCopyDB.defaultMessages = math.max(1, math.min(10, tonumber(RPCopyDB.defaultMessages) or 3))
-    RPCopyDB.expandMessages = math.max(1, math.min(20, tonumber(RPCopyDB.expandMessages) or 6))
+    RPChroniclerDB.defaultMessages = math.max(1, math.min(10, tonumber(RPChroniclerDB.defaultMessages) or 3))
+    RPChroniclerDB.expandMessages = math.max(1, math.min(20, tonumber(RPChroniclerDB.expandMessages) or 6))
 
-    if type(RPCopyDB.tabs) ~= "table" or #RPCopyDB.tabs == 0 then
-        RPCopyDB.tabs = CloneDefaultTabs()
-        RPCopyDB.migratedV32 = true
+    if type(RPChroniclerDB.tabs) ~= "table" or #RPChroniclerDB.tabs == 0 then
+        RPChroniclerDB.tabs = CloneDefaultTabs()
+        RPChroniclerDB.migratedV32 = true
     else
-        for idx, t in ipairs(RPCopyDB.tabs) do
+        for idx, t in ipairs(RPChroniclerDB.tabs) do
             t.id = t.id or ("CUSTOM_" .. tostring(idx) .. "_" .. tostring(time()))
             t.label = (t.label and t.label ~= "") and t.label or ("Tab " .. idx)
             if t.incOoc == nil then
@@ -809,18 +813,18 @@ function ns.EnsureDB()
             if t.incWorld == nil then t.incWorld = false end
             -- 0.3.1: deaths and level ups moved into the Status line
             t.incCombat = nil
-            if not RPCopyDB.migratedV32 and (t.prefix == nil or t.prefix == "") then
+            if not RPChroniclerDB.migratedV32 and (t.prefix == nil or t.prefix == "") then
                 t.prefix = ns.DEFAULT_TRIGGER
             else
                 t.prefix = t.prefix or ""
             end
         end
-        RPCopyDB.migratedV32 = true
+        RPChroniclerDB.migratedV32 = true
         -- 0.3.1 gave the built-in tabs new contents (Smart = everything nearby,
         -- Party = group focus). Update them once; names and Skill Calls stay.
-        if not RPCopyDB.migratedV031 then
+        if not RPChroniclerDB.migratedV031 then
             for _, def in ipairs(ns.DEFAULT_TABS) do
-                for _, t in ipairs(RPCopyDB.tabs) do
+                for _, t in ipairs(RPChroniclerDB.tabs) do
                     if t.id == def.id then
                         for _, k in ipairs(ns.TAB_FLAGS) do t[k] = def[k] end
                     end
@@ -828,39 +832,39 @@ function ns.EnsureDB()
             end
         end
     end
-    RPCopyDB.migratedV031 = true
+    RPChroniclerDB.migratedV031 = true
     -- 0.4.0: Smart is gone; World and Guild are new built-in tabs
-    if not RPCopyDB.migratedV040 then
-        for i = #RPCopyDB.tabs, 1, -1 do
-            if RPCopyDB.tabs[i].id == "SMART" then table.remove(RPCopyDB.tabs, i) end
+    if not RPChroniclerDB.migratedV040 then
+        for i = #RPChroniclerDB.tabs, 1, -1 do
+            if RPChroniclerDB.tabs[i].id == "SMART" then table.remove(RPChroniclerDB.tabs, i) end
         end
         for idx, def in ipairs(ns.DEFAULT_TABS) do
             local found = false
-            for _, t in ipairs(RPCopyDB.tabs) do
+            for _, t in ipairs(RPChroniclerDB.tabs) do
                 if t.id == def.id then found = true end
             end
             if not found then
                 local item = {}
                 for k, v in pairs(def) do item[k] = v end
-                table.insert(RPCopyDB.tabs, math.min(idx, #RPCopyDB.tabs + 1), item)
+                table.insert(RPChroniclerDB.tabs, math.min(idx, #RPChroniclerDB.tabs + 1), item)
             end
         end
-        if RPCopyDB.lastSliceId == "SMART" then RPCopyDB.lastSliceId = "CHAT" end
-        RPCopyDB.migratedV040 = true
+        if RPChroniclerDB.lastSliceId == "SMART" then RPChroniclerDB.lastSliceId = "CHAT" end
+        RPChroniclerDB.migratedV040 = true
     end
-    for _, t in ipairs(RPCopyDB.tabs) do
+    for _, t in ipairs(RPChroniclerDB.tabs) do
         if t.incGuild == nil then t.incGuild = false end
     end
 
     -- 0.4.0 settings: Full Log categories, limits, recording behaviour
-    RPCopyDB.logCats = type(RPCopyDB.logCats) == "table" and RPCopyDB.logCats or {}
+    RPChroniclerDB.logCats = type(RPChroniclerDB.logCats) == "table" and RPChroniclerDB.logCats or {}
     for _, c in ipairs(ns.LOG_CATEGORIES) do
-        if RPCopyDB.logCats[c.key] == nil then RPCopyDB.logCats[c.key] = true end
+        if RPChroniclerDB.logCats[c.key] == nil then RPChroniclerDB.logCats[c.key] = true end
     end
-    RPCopyDB.limits = type(RPCopyDB.limits) == "table" and RPCopyDB.limits or {}
+    RPChroniclerDB.limits = type(RPChroniclerDB.limits) == "table" and RPChroniclerDB.limits or {}
     for _, d in ipairs(ns.LOG_LIMITS) do
-        local v = tonumber(RPCopyDB.limits[d.key]) or d.default
-        RPCopyDB.limits[d.key] = math.max(d.min, math.min(d.max, math.floor(v)))
+        local v = tonumber(RPChroniclerDB.limits[d.key]) or d.default
+        RPChroniclerDB.limits[d.key] = math.max(d.min, math.min(d.max, math.floor(v)))
     end
     local defaults = {
         autoRecord = true,        -- dungeons and raids record by themselves
@@ -878,7 +882,7 @@ function ns.EnsureDB()
         knownPlayerBlocks = true, -- [Known Player] blocks in snapshots
         knownPlayerMax = 3,       -- at most this many blocks
         knownNoteMax = 300,       -- characters of each note in a block
-        companionMenu = true,     -- "Add as RPCopy companion" in unit menus
+        companionMenu = true,     -- "Add as RP Chronicler companion" in unit menus
         nearbyChip = true,        -- "Nearby companions" chip in the Copy view
         runCompanions = true,     -- companions who chat in a run are Known companions
         rpReplyLength = "SHORT",  -- RP template: SHORT, MEDIUM or LONG
@@ -886,28 +890,28 @@ function ns.EnsureDB()
         exportShotsDir = "",      -- Export_Stories.bat: the game's Screenshots folder ("" = auto)
     }
     for k, v in pairs(defaults) do
-        if RPCopyDB[k] == nil then RPCopyDB[k] = v end
+        if RPChroniclerDB[k] == nil then RPChroniclerDB[k] = v end
     end
-    RPCopyDB.knownPlayerMax = math.max(0, math.min(10, math.floor(tonumber(RPCopyDB.knownPlayerMax) or 3)))
-    RPCopyDB.knownNoteMax = math.max(40, math.min(1000, math.floor(tonumber(RPCopyDB.knownNoteMax) or 300)))
-    RPCopyDB.summaryStats = type(RPCopyDB.summaryStats) == "table" and RPCopyDB.summaryStats or {}
-    RPCopyDB.capture = type(RPCopyDB.capture) == "table" and RPCopyDB.capture or {}
+    RPChroniclerDB.knownPlayerMax = math.max(0, math.min(10, math.floor(tonumber(RPChroniclerDB.knownPlayerMax) or 3)))
+    RPChroniclerDB.knownNoteMax = math.max(40, math.min(1000, math.floor(tonumber(RPChroniclerDB.knownNoteMax) or 300)))
+    RPChroniclerDB.summaryStats = type(RPChroniclerDB.summaryStats) == "table" and RPChroniclerDB.summaryStats or {}
+    RPChroniclerDB.capture = type(RPChroniclerDB.capture) == "table" and RPChroniclerDB.capture or {}
     for _, c in ipairs(ns.CAPTURE_TYPES) do
-        if RPCopyDB.capture[c.key] == nil then RPCopyDB.capture[c.key] = true end
+        if RPChroniclerDB.capture[c.key] == nil then RPChroniclerDB.capture[c.key] = true end
     end
-    RPCopyDB.stories = type(RPCopyDB.stories) == "table" and RPCopyDB.stories or {}
+    RPChroniclerDB.stories = type(RPChroniclerDB.stories) == "table" and RPChroniclerDB.stories or {}
     -- 0.5.0: the Status line is back in Chat and World (it lived in Smart)
-    if not RPCopyDB.migratedV050 then
-        for _, t in ipairs(RPCopyDB.tabs) do
+    if not RPChroniclerDB.migratedV050 then
+        for _, t in ipairs(RPChroniclerDB.tabs) do
             if t.id == "CHAT" or t.id == "WORLD" then t.incStatus = true end
         end
     end
-    if type(RPCopyDB.aiModel) ~= "string" then RPCopyDB.aiModel = "GEMINI_FREE" end
-    RPCopyDB.aiCustomLimit = math.max(1000, tonumber(RPCopyDB.aiCustomLimit) or 40000)
+    if type(RPChroniclerDB.aiModel) ~= "string" then RPChroniclerDB.aiModel = "GEMINI_FREE" end
+    RPChroniclerDB.aiCustomLimit = math.max(1000, tonumber(RPChroniclerDB.aiCustomLimit) or 40000)
 
-    for k, v in pairs(RPCopyDB.players) do
+    for k, v in pairs(RPChroniclerDB.players) do
         if type(v) == "string" then
-            RPCopyDB.players[k] = {
+            RPChroniclerDB.players[k] = {
                 note = v, level = "", race = "", class = "", guild = "",
                 chatHistory = {}, lastSeen = "",
             }
@@ -933,7 +937,7 @@ function ns.EnsureDB()
         end
     end
 
-    for _, adv in ipairs(RPCopyDB.adventures or {}) do
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do
         adv.shots = adv.shots or {}
         -- 0.5.0: every shot is a numbered table
         for i, sh in ipairs(adv.shots) do
@@ -948,11 +952,103 @@ function ns.EnsureDB()
 
     -- 0.5.0 migrations live with their modules: companions (Companions.lua)
     -- and stories moving out of the recordings (Adventures.lua)
-    if not RPCopyDB.migratedV050 and ns.MigrateCompanions and ns.MigrateStories then
+    if not RPChroniclerDB.migratedV050 and ns.MigrateCompanions and ns.MigrateStories then
         pcall(ns.MigrateCompanions)
         pcall(ns.MigrateStories)
-        RPCopyDB.migratedV050 = true
+        RPChroniclerDB.migratedV050 = true
     end
-    if ns.BuildAdventureFullLog and ns.MigrateStories then ns._dbChecked = RPCopyDB end
+    -- 0.6.0: saved Full Logs call the story skill by its name
+    if not RPChroniclerDB.migratedV060 then
+        for _, adv in ipairs(RPChroniclerDB.adventures or {}) do
+            local log = adv.exportText
+            if type(log) == "string" then
+                local skill = (adv.kind == "world") and ns.STORY_SKILLS.world or ns.STORY_SKILLS.dungeon
+                adv.exportText = log:gsub("^use adventure story\n", "use " .. skill .. "\n", 1):gsub("^use story\n", "use " .. skill .. "\n", 1)
+            end
+        end
+        RPChroniclerDB.migratedV060 = true
+    end
+    if ns.BuildAdventureFullLog and ns.MigrateStories then ns._dbChecked = RPChroniclerDB end
 end
 
+
+-- =========================================================
+-- 0.6.0: RPCopy was renamed RP Chronicler. WoW only loads the SavedVariables
+-- of the addon that declares them, from a file named after that addon, so
+-- the old data (RPCopyDB in SavedVariables\RPCopy.lua) is only readable
+-- while the old RPCopy addon is still installed. The toc lists RPCopy under
+-- OptionalDeps, so when it is there it loads first and RPCopyDB is filled
+-- in before our ADDON_LOADED. We then copy it once into RPChroniclerDB,
+-- turn the old addon off for next time and ask for a /reload. RPCopy.lua is
+-- left untouched as a backup.
+-- =========================================================
+do
+    local OLD_ADDON = "RPCopy"
+    local function DeepCopy(v, seen)
+        if type(v) ~= "table" then return v end
+        seen = seen or {}
+        if seen[v] then return seen[v] end
+        local out = {}
+        seen[v] = out
+        for k, x in pairs(v) do out[DeepCopy(k, seen)] = DeepCopy(x, seen) end
+        return out
+    end
+    local function IsEmpty(db)
+        if type(db) ~= "table" then return true end
+        if db.migratedFromRPCopy or db.wipedAt then return false end
+        for _, k in ipairs({ "players", "adventures", "stories" }) do
+            if type(db[k]) == "table" and next(db[k]) ~= nil then return false end
+        end
+        return true
+    end
+    local function OldLoaded()
+        local f = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+        if not f then return false end
+        local ok, loaded = pcall(f, OLD_ADDON)
+        return ok and loaded and true or false
+    end
+    local function DisableOld()
+        local f = (C_AddOns and C_AddOns.DisableAddOn) or DisableAddOn
+        if not f then return end
+        pcall(f, OLD_ADDON)
+        local me = UnitName and UnitName("player")
+        if me then pcall(f, OLD_ADDON, me) end
+    end
+
+    -- Returns true when data was copied
+    function ns.MigrateFromRPCopy(force)
+        local old = _G.RPCopyDB
+        if type(old) ~= "table" or next(old) == nil then return false end
+        if not force and not IsEmpty(RPChroniclerDB) then return false end
+        local copy = DeepCopy(old)
+        copy.migratedFromRPCopy = time and time() or 0
+        RPChroniclerDB = copy
+        ns._dbChecked = nil
+        return true
+    end
+
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("ADDON_LOADED")
+    f:SetScript("OnEvent", function(self, _, name)
+        if name ~= ADDON_NAME then return end
+        self:UnregisterEvent("ADDON_LOADED")
+        local ok, copied = pcall(ns.MigrateFromRPCopy)
+        -- The 0.6.0 zip ships an RPCopy folder with no code (data only). The
+        -- full old addon defines RPCopy_Toggle; then a /reload is needed so
+        -- the two do not run side by side.
+        local oldCode = type(_G.RPCopy_Toggle) == "function"
+        local after = oldCode and "|cffffd100Type /reload now|r, then delete the old folder |cffeceff1Interface\\AddOns\\RPCopy|r."
+            or "You can delete the old folder |cffeceff1Interface\\AddOns\\RPCopy|r."
+        if ok and copied then
+            DisableOld()
+            ns.loginNotice = "|cffffd100RP Chronicler|r |cff5cb85cRPCopy is now RP Chronicler.|r Your companions, recordings, stories and settings were copied over, and the old RPCopy entry is turned off. " .. after
+        elseif OldLoaded() and not (RPChroniclerDB and RPChroniclerDB.migratedFromRPCopy) then
+            -- Both addons hold data: never overwrite, let the player choose
+            ns.loginNotice = "|cffffd100RP Chronicler|r The old |cffeceff1RPCopy|r addon is loaded and both have saved data. " ..
+                "To replace your RP Chronicler data with the RPCopy data, type |cffffd100/rp import rpcopy|r. Otherwise turn RPCopy off in the AddOns list and delete its folder."
+        elseif OldLoaded() then
+            DisableOld()
+            ns.loginNotice = "|cffffd100RP Chronicler|r Your RPCopy data was already moved, so the old |cffeceff1RPCopy|r entry is turned off now. " .. after
+        end
+    end)
+end

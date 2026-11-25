@@ -10,7 +10,7 @@ local UI = ns.UI
 -- combat. Re-open with /rp setup or Options > Privacy.
 -- Everything here can be changed later in Options.
 -- =========================================================
-local SETUP_VERSION = 2
+local SETUP_VERSION = 3   -- 0.6.3: update notices and error reports
 ns.SETUP_VERSION = SETUP_VERSION
 
 local W = 440              -- frame width
@@ -38,6 +38,15 @@ local CHOICES = {
           if not v then ns.Set("autoShots", "OFF")
           elseif ns.Get("autoShots") == "OFF" then ns.Set("autoShots", "INSTANCE") end
       end },
+    -- 0.6.3: the only thing RP Chronicler ever sends, and it is only the version number
+    { since = 3, key = "versionCheck", label = "Update notices", always = true,
+      why = "Sends only RP Chronicler's version number to your group and guild, so you hear when a newer version exists. Nothing else is sent.",
+      get = function() return ns.Get("versionCheck") end,
+      set = function(v) ns.Set("versionCheck", v) end },
+    { since = 3, key = "keepErrors", label = "Keep error reports", always = true,
+      why = "Keeps RP Chronicler's own errors (never chat) in its saved file, for bug reports.",
+      get = function() return ns.Get("keepErrors") end,
+      set = function(v) ns.Set("keepErrors", v) end },
 }
 
 local S = { rows = {} }
@@ -72,8 +81,8 @@ S.privacy:SetPoint("TOP", S.title, "BOTTOM", 0, -8)
 S.privacy:SetWidth(TEXT_W)
 S.privacy:SetJustifyH("CENTER")
 S.privacy:SetSpacing(2)
-S.privacy:SetText("|cffd8dee9Everything stays on your PC: RP Chronicler has no internet access and sends nothing. " ..
-    "Chat and logs only leave when you paste them into your own AI.|r")
+S.privacy:SetText("|cffd8dee9Everything stays on your PC: RP Chronicler has no internet access and never sends your chat, recordings or stories. " ..
+    "They only leave when you paste them into your own AI.|r")
 
 -- The "use" buttons
 S.useHead = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -109,7 +118,7 @@ function S.SyncUse()
     -- recording switches mean nothing with RP Copy alone
     for _, row in ipairs(S.rows) do
         if row.btn:IsShown() then
-            if S.use == "COPY" then row.btn:Disable() else row.btn:Enable() end
+            if S.use == "COPY" and not (row.choice and row.choice.always) then row.btn:Disable() else row.btn:Enable() end
         end
     end
 end
@@ -130,9 +139,35 @@ local function TextH(fs, min)
     return math.max(min or 12, math.floor((fs:GetStringHeight() or min or 12) + 0.5))
 end
 
+-- 0.6.3: the setup widens when its labels need it (big fonts or UI
+-- scale), so no button clips its text
+S.measure = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+S.measure:Hide()
+local function FitWidth(list)
+    local need = 0
+    for _, item in ipairs(list) do
+        if item.label then
+            S.measure:SetText(item.label .. ": OFF")
+            need = math.max(need, (S.measure:GetStringWidth() or 0) + 20)
+        end
+    end
+    for _, u in ipairs(USES) do
+        S.measure:SetText(u.label)
+        need = math.max(need, ((S.measure:GetStringWidth() or 0) + 20) * 3 + 12)
+    end
+    local textW = math.max(TEXT_W, math.min(760, math.ceil(need)))
+    f:SetWidth(textW + 48)
+    for _, fs in ipairs({ S.title, S.privacy, S.useHead, S.useWhy, S.later }) do fs:SetWidth(textW) end
+    for _, r in ipairs(S.rows) do r.btn:SetWidth(textW); r.why:SetWidth(textW) end
+    S.textW = textW
+    return textW
+end
+
 -- Lays out the shown choices under the privacy text and sizes the frame
 local function Layout(list)
     for _, r in ipairs(S.rows) do r.btn:Hide(); r.why:Hide() end
+    local textW = FitWidth(list)
+    local useW = math.floor((textW - 12) / 3)
     local y = -14 - 96 - 8 - TextH(S.title, 18) - 8 - TextH(S.privacy, 26) - 16
     local showUse = false
     for _, item in ipairs(list) do if item.kind == "use" then showUse = true end end
@@ -142,7 +177,8 @@ local function Layout(list)
         y = y - 20
         for i, b in ipairs(S.useBtns) do
             b:ClearAllPoints()
-            b:SetPoint("TOPLEFT", 24 + (i - 1) * (USE_W + 6), y)
+            b:SetWidth(useW)
+            b:SetPoint("TOPLEFT", 24 + (i - 1) * (useW + 6), y)
             b:Show()
         end
         y = y - 30
@@ -162,8 +198,8 @@ local function Layout(list)
             n = n + 1
             local row = S.rows[n]
             if not row then
-                row = { btn = UI.CreateSleekButton(f, TEXT_W, 22, ""), why = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") }
-                row.why:SetWidth(TEXT_W)
+                row = { btn = UI.CreateSleekButton(f, textW, 22, ""), why = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") }
+                row.why:SetWidth(textW)
                 row.why:SetJustifyH("LEFT")
                 row.btn:SetScript("OnClick", function()
                     row.on = not row.on
@@ -198,7 +234,7 @@ local function Finish()
         if row.btn:IsShown() then
             -- RP Copy alone: no automatic recording and no screenshots
             local v = row.on
-            if S.use == "COPY" then v = false end
+            if S.use == "COPY" and not row.choice.always then v = false end
             pcall(row.choice.set, v)
         end
     end
@@ -208,6 +244,13 @@ local function Finish()
     UI.SyncCopyChip()
     UI.UpdateOverrideBindings()
     print("|cffffd100RP Chronicler|r Setup saved. |cff9aa5b4Change it any time in Options (/rp setup shows this again).|r")
+    -- 0.6.3: one next step for each thing you chose
+    if S.use ~= "STORIES" and ns.RpCopyOn() then
+        print("|cffffd100RP Chronicler|r |cff9aa5b4RP Copy, next:|r type /rp, open Options > AI & Stories, copy the RP Template into your AI as a character skill, and put its trigger in Options > Slice Tabs as the Skill Call. Then Ctrl+C copies the scene.")
+    end
+    if S.use ~= "COPY" then
+        print("|cffffd100RP Chronicler|r |cff9aa5b4Stories, next:|r type /rp, open Adventures and press Start (dungeons and raids can start by themselves). When the run ends, copy its Full Log and the story template (Options > AI & Stories) into your AI, then import the story in the Story Book.")
+    end
     ns.Debug("info", "setup saved (v" .. SETUP_VERSION .. ", use " .. tostring(S.use) .. ")")
 end
 S.start:SetScript("OnClick", Finish)

@@ -41,6 +41,14 @@ armEditBox:SetAlpha(0.01)
 if armEditBox.SetFontObject and ChatFontNormal then pcall(armEditBox.SetFontObject, armEditBox, ChatFontNormal) end
 if armEditBox.SetMaxLetters then pcall(armEditBox.SetMaxLetters, armEditBox, 0) end
 if armEditBox.SetMaxBytes then pcall(armEditBox.SetMaxBytes, armEditBox, 0) end
+-- 0.6.3 (gray bars while holding Ctrl): alpha alone did not hide the
+-- selection highlight on the modern client, so the highlighted lines
+-- showed as gray bars over the chat. Text and highlight are fully
+-- transparent now; the text is still there, selected, for the copy.
+if armEditBox.SetHighlightColor then pcall(armEditBox.SetHighlightColor, armEditBox, 0, 0, 0, 0) end
+if armEditBox.SetTextColor then pcall(armEditBox.SetTextColor, armEditBox, 1, 1, 1, 0) end
+if armEditBox.SetShadowColor then pcall(armEditBox.SetShadowColor, armEditBox, 0, 0, 0, 0) end
+if armEditBox.SetTextInsets then pcall(armEditBox.SetTextInsets, armEditBox, 0, 0, 0, 0) end
 armEditBox:Hide()
 
 local Q = { isArmed = false, mode = nil, label = "Chat", expiresAt = 0, ctrlDownAt = nil, holdUsed = false, textLen = 0 }
@@ -71,7 +79,9 @@ function UI.IsCtrlCCopy()
 end
 
 function UI.IsInstantCopyActive()
-    return UI.IsCtrlCCopy() and ns.Get("copyMode") == "INSTANT"
+    -- 0.6.3: with the instruction popup on, Ctrl+C asks first, so the
+    -- hidden box never arms on a Ctrl hold
+    return UI.IsCtrlCCopy() and ns.Get("copyMode") == "INSTANT" and not ns.Get("quickNote")
 end
 
 function UI.DisarmCtrlCopy()
@@ -115,6 +125,39 @@ function UI.ShowQuickCopyBox(reason)
     CopyLog("copy", "copy box shown (" .. (reason or "style") .. "): len " .. #snap)
     UI.ShowCopyBox("|cffffd100RP Chronicler|r |cff69ccf0[" .. Q.label .. "]|r",
         "|cff9aa5b4Selected. Press|r |cffffd100Ctrl+C|r |cff9aa5b4to copy, it closes by itself.|r", snap, true)
+    return true
+end
+
+-- 0.6.3: the instruction popup (Options > General, off by default).
+-- Ctrl+C asks for a one-line instruction for the AI; Enter (or Esc)
+-- shows the snapshot selected, with the instruction as its [Instruction]
+-- line, and Ctrl+C there copies it, like the Copy box style.
+function UI.ShowQuickNotePopup()
+    UI.EnsureOptions()
+    if UI.frame:IsShown() then UI.frame:Hide() end
+    UI.DisarmCtrlCopy()
+    local tabCfg = ns.GetTabConfig(RPChroniclerDB.lastSliceId)
+    Q.label = (tabCfg and tabCfg.label) or "Chat"
+    local function CopyWith(note)
+        local ok, snap = pcall(ns.BuildSnapshot, tabCfg and tabCfg.id or "CHAT", note or "", false)
+        if not ok or type(snap) ~= "string" or ns.IsSecret(snap) then
+            CopyLog("error", "Quick copy (instruction): snapshot failed: " .. tostring(snap))
+            UI.ShowToast("|cffff6b6bRP Chronicler:|r the snapshot failed to build. See /rp debug.", 3.0, 0.75, 0.28, 0.28)
+            return
+        end
+        CopyLog("copy", "instruction popup: len " .. #snap .. ((note or "") ~= "" and ", with instruction" or ""))
+        UI.ShowCopyBox("|cffffd100RP Chronicler|r |cff69ccf0[" .. Q.label .. "]|r",
+            "|cff9aa5b4Selected. Press|r |cffffd100Ctrl+C|r |cff9aa5b4to copy, it closes by itself.|r", snap, true)
+    end
+    UI.AskLine({
+        title = "Instruction for the AI  |cff69ccf0[" .. Q.label .. "]|r",
+        sub = "A quick direction for this reply, like \"be flirty\" or \"reply to Thrall\". Leave it empty for none.",
+        placeholder = "Type an instruction, or just press Enter",
+        okText = "Copy",
+        keys = "Enter: copy   Esc: copy without it",
+        onAccept = function(text) CopyWith(text) end,
+        onEscape = function() CopyWith("") end,
+    })
     return true
 end
 
@@ -286,7 +329,9 @@ do
             CopyLog("copy", "binding fired while armed but unfocused (focused frame " .. FocusName() .. "); re-arming")
             Q.isArmed = false
         end
-        if ns.Get("copyMode") == "BOX" then
+        if ns.Get("quickNote") then
+            UI.ShowQuickNotePopup()
+        elseif ns.Get("copyMode") == "BOX" then
             UI.ShowQuickCopyBox("style")
         elseif not Q.isArmed then
             if UI.ArmCtrlCopy("timed") then
@@ -314,7 +359,9 @@ function RPChronicler_QuickCopy()
         return
     end
     if UI.frame:IsShown() then UI.frame:Hide() end
-    if ns.Get("copyMode") == "BOX" then
+    if ns.Get("quickNote") then
+        UI.ShowQuickNotePopup()
+    elseif ns.Get("copyMode") == "BOX" then
         UI.ShowQuickCopyBox("style")
     elseif UI.ArmCtrlCopy("timed") then
         UI.ShowToast(string.format("|cffffd100Ready:|r Press |cffffd100CTRL-C|r now for |cff69ccf0[%s]|r", Q.label), 2.5, 0.85, 0.68, 0.30)
@@ -468,10 +515,10 @@ C.notePlaceholder:SetText("Instruction for the AI (Enter to add)")
 function UI.UpdateExpandButtonLabel()
     UI.EnsureOptions()
     if ns.state.isExpanded then
-        C.expandBtn:SetText("Collapse (" .. ns.Get("messages") .. ")")
+        UI.SetButtonLabels(C.expandBtn, "Collapse (" .. ns.Get("messages") .. ")", "Less")
         C.expandBtn:LockHighlight()
     else
-        C.expandBtn:SetText("Expand (" .. (ns.Get("messages") * 2) .. ")")
+        UI.SetButtonLabels(C.expandBtn, "Expand (" .. (ns.Get("messages") * 2) .. ")", "More")
         C.expandBtn:UnlockHighlight()
     end
 end
@@ -479,17 +526,36 @@ end
 function UI.SyncCopyChip()
     UI.EnsureOptions()
     if not ns.Get("quickCtrlC") then
-        C.chip:SetText("|cff9aa5b4Quick Copy: OFF|r")
+        UI.SetButtonLabels(C.chip, "|cff9aa5b4Quick Copy: OFF|r", "|cff9aa5b4Off|r")
+    elseif ns.Get("quickNote") then
+        UI.SetButtonLabels(C.chip, "|cffc2d8ffCtrl+C: Ask first|r", "|cffc2d8ffAsk|r")
     elseif ns.Get("copyMode") == "INSTANT" then
-        C.chip:SetText("|cffc2d8ffCtrl+C: Instant|r")
+        UI.SetButtonLabels(C.chip, "|cffc2d8ffCtrl+C: Instant|r", "|cffc2d8ffInstant|r")
     else
-        C.chip:SetText("|cffc2d8ffCtrl+C: Copy box|r")
+        UI.SetButtonLabels(C.chip, "|cffc2d8ffCtrl+C: Copy box|r", "|cffc2d8ffBox|r")
+    end
+end
+
+-- 0.6.3: the bottom row (Expand, the instruction box, the Ctrl+C chip)
+-- sizes its buttons to their text and uses short labels when the
+-- instruction box would get too narrow
+function UI.LayoutCopyBottom()
+    local W = view:GetWidth() or 0
+    if W < 50 then return end
+    for _, short in ipairs({ false, true }) do
+        for _, b in ipairs({ C.expandBtn, C.chip }) do
+            b.useShort = short
+            if b.fullText then b:SetText(short and b.shortText or b.fullText) end
+            b:SetWidth(UI.ButtonWidth(b))
+        end
+        if W - C.expandBtn:GetWidth() - C.chip:GetWidth() - 24 >= 140 then break end
     end
 end
 
 function UI.RefreshBox()
     UI.UpdateExpandButtonLabel()
     UI.SyncCopyChip()
+    UI.LayoutCopyBottom()
     pcall(UI.RefreshNearbyChip)
     local ok, snap = pcall(ns.BuildSnapshot, ns.state.activeFilter, ns.state.activeNote, ns.state.isExpanded)
     if not ok then
@@ -524,7 +590,9 @@ function UI.RebuildSliceTabs()
             btn = UI.CreateSleekButton(C.strip, 60, 22, "")
             C.sliceButtons[idx] = btn
         end
-        local w = math.max(52, #t.label * 7 + 18)
+        btn:SetText(t.label)
+        -- 0.6.3: sized to the label as the game draws it (font and scale)
+        local w = math.min(maxW, math.max(52, UI.ButtonWidth(btn)))
         if x + w > maxW and x > 0 then
             x, y, rows = 0, y - 25, rows + 1
         end
@@ -599,5 +667,5 @@ UI.AddReflow(function()
         C.editBox:SetWidth(w)
         C.editBox:SetHeight(math.max(C.scroll:GetHeight() or 0, 100))
     end
-    if view:IsShown() then UI.RebuildSliceTabs() end
+    if view:IsShown() then UI.RebuildSliceTabs(); UI.LayoutCopyBottom() end
 end)

@@ -20,4 +20,7 @@
     <Binding name="RPCHRONICLER_RUN_END" category="ADDONS">
         RPChronicler_EndRun()
     </Binding>
+    <Binding name="RPCHRONICLER_NOTE" category="ADDONS">
+        RPChronicler_StoryNote()
+    </Binding>
 </Bindings>

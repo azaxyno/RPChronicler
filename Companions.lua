@@ -184,8 +184,9 @@ function ns.CaptureVisibleUnitFields(unit, entry)
         local g = ns.SafeStr(GetGuildInfo(unit))
         if g and g ~= "" then entry.guild = g end
     else
-        local t = ns.SafeStr(UnitCreatureType(unit))
-        if t and t ~= "" and (entry.race or "") == "" then entry.race = t end
+        -- 0.6.3: pets keep their family (Crab, Wolf ...), NPCs their type
+        local t = ns.GetPetSpecies(unit)
+        if t and t ~= "" and ((entry.race or "") == "" or entry.kind == "pet") then entry.race = t end
     end
     entry.lastSeen = ns.NowStamp()
     return true
@@ -436,6 +437,7 @@ function ns.GetKnownPlayerBlocks(people, bodyText)
         local label = (kind == "npc" and "[Known NPC:") or (kind == "pet" and "[Known Pet:") or "[Known Player:"
         local cf = d.classFile or ns.ClassToken(d.class)
         local shown = cf and ns.ColorizeClass(key, cf) or ns.ColorText(key, ns.COLORS.speaker)
+        if kind == "pet" then shown = ns.ColorText(ns.FormatPet(key, Trim(d.race) ~= "" and Trim(d.race) or nil), ns.COLORS.speaker) end
         local lines = { ns.ColorText(label, ns.COLORS.gold) .. " " .. shown .. ns.ColorText("]", ns.COLORS.gold) }
         local rel = {}
         if Trim(d.relationship) ~= "" then table.insert(rel, Trim(d.relationship)) end
@@ -644,42 +646,41 @@ do
 end
 
 -- =========================================================
--- Pet name vs species (0.5.0): "Snips (Crab, hunter pet)". 0.6.1: when
--- the name is the species itself it reads "Crab (hunter pet)".
+-- Pets (0.6.3): one format everywhere, "Name (Family)": a crab named
+-- Snips reads "Snips (Crab)", a crab still named Crab reads "Crab (Crab)".
+-- The family is what the pet is (Crab, Wolf, Imp ...); never a role like
+-- "hunter pet".
 -- =========================================================
-function ns.GetPetKind(unit)
-    unit = unit or "pet"
-    if UnitIsBattlePetCompanion and UnitIsBattlePetCompanion(unit) == true then return "companion pet" end
-    local owner = (unit == "pet" and "player") or (unit:match("^partypet(%d)$") and ("party" .. unit:match("^partypet(%d)$")))
-        or (unit:match("^raidpet(%d+)$") and ("raid" .. unit:match("^raidpet(%d+)$"))) or nil
-    if not owner or not UnitExists(owner) then return "pet" end
-    local _, cls = UnitClass(owner)
-    cls = ns.SafeStr(cls)
-    if cls == "HUNTER" then return "hunter pet" end
-    if cls == "WARLOCK" then return "warlock demon" end
-    if cls == "DEATHKNIGHT" then return "undead minion" end
-    if cls == "MAGE" then return "summoned elemental" end
-    return "pet"
-end
-
 function ns.GetPetSpecies(unit)
     unit = unit or "pet"
     if not UnitExists(unit) then return nil end
     local fam = UnitCreatureFamily and ns.SafeStr(UnitCreatureFamily(unit))
     if fam and fam ~= "" then return fam end
+    -- Companion (battle) pets: their species name
+    if UnitBattlePetSpeciesID and C_PetJournal and C_PetJournal.GetPetInfoBySpeciesID then
+        local ok, sid = pcall(UnitBattlePetSpeciesID, unit)
+        sid = ok and ns.SafeNum(sid) or nil
+        if sid and sid > 0 then
+            local ok2, sname = pcall(C_PetJournal.GetPetInfoBySpeciesID, sid)
+            sname = ok2 and ns.SafeStr(sname) or nil
+            if sname and sname ~= "" then return sname end
+        end
+    end
     local ctype = UnitCreatureType and ns.SafeStr(UnitCreatureType(unit))
     if ctype and ctype ~= "" then return ctype end
     return nil
+end
+
+-- "Name (Family)" from a name and a family (either may be missing)
+function ns.FormatPet(name, family)
+    name = (name and name ~= "") and name or family or "Pet"
+    if family and family ~= "" then return name .. " (" .. family .. ")" end
+    return name
 end
 
 -- Plain text (no colors); nil when there is no such unit
 function ns.GetPetDescriptor(unit)
     unit = unit or "pet"
     if not UnitExists(unit) then return nil end
-    local name = ns.SafeStr(UnitName(unit)) or "Pet"
-    local species = ns.GetPetSpecies(unit)
-    local kind = ns.GetPetKind(unit)
-    local same = species and species:lower() == name:lower()
-    local info = (species and not same) and (species .. ", " .. kind) or kind
-    return name .. " (" .. info .. ")"
+    return ns.FormatPet(ns.SafeStr(UnitName(unit)), ns.GetPetSpecies(unit))
 end

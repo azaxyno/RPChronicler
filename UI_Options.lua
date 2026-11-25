@@ -147,11 +147,20 @@ end
 
 local function LayoutNav()
     local i = 0
+    -- 0.6.3: the nav is as wide as its longest label at the current font
+    local need = 98
+    for _, item in ipairs(PAGE_ORDER) do
+        local b = O.navButtons[item.key]
+        if b then need = math.max(need, UI.ButtonWidth(b)) end
+    end
+    need = math.min(need, 160)
+    O.nav:SetWidth(need + 14)
     for _, item in ipairs(PAGE_ORDER) do
         local b = O.navButtons[item.key]
         if PageShown(item) then
             b:ClearAllPoints()
             b:SetPoint("TOP", 0, -8 - i * 28)
+            b:SetWidth(need)
             b:Show()
             i = i + 1
         else
@@ -239,8 +248,13 @@ local function SettingRows(p, y, defs)
             else
                 UI.SetToggleLook(r.btn, v and true or false, r.def.label .. ": ON", r.def.label .. ": OFF")
             end
+            -- 0.6.3: at least 250 wide, wider when the label needs it
+            if not r.fixedW then
+                local maxW = math.max(250, math.floor(p:GetWidth() or 0))
+                r.btn:SetWidth(math.min(maxW, math.max(250, UI.ButtonWidth(r.btn))))
+            end
         end
-    end, y - #defs * 24, buttons
+    end, y - #defs * 24, buttons, rows
 end
 
 -- A number box for a number setting (its min and max come from ns.SETTINGS)
@@ -297,15 +311,20 @@ local function CheckGrid(p, y, defs, store, prefix, colW)
 end
 UI.OptionsCheckGrid = CheckGrid
 
+-- 0.6.3: returns a layout function; the two buttons flow (UI.FlowRow)
+-- and wrap under each other on a narrow page. It returns the height used.
 local function TemplateButtons(p, y)
     local dBtn = UI.CreateSleekButton(p, 160, 24, "Dungeon/Raid Template", "gold")
-    dBtn:SetPoint("TOPLEFT", 0, y)
     dBtn:SetIcon(UI.ICONS.STORY, 16)
+    UI.SetButtonLabels(dBtn, "Dungeon/Raid Template", "Dungeon/Raid")
     dBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("STORY") end)
     local aBtn = UI.CreateSleekButton(p, 150, 24, "Adventure Template", "gold")
-    aBtn:SetPoint("LEFT", dBtn, "RIGHT", 6, 0)
     aBtn:SetIcon(UI.ICONS.STORY, 16)
+    UI.SetButtonLabels(aBtn, "Adventure Template", "Adventure")
     aBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("ADVENTURE") end)
+    return function(width)
+        return UI.FlowRow(p, { dBtn, aBtn }, nil, { y = -y, width = width, rowH = 24, gap = 6 })
+    end
 end
 
 -- ---------------------------------------------------------
@@ -324,12 +343,15 @@ do
           tip = "In the game world (no text box focused), Ctrl+C copies the last slice tab you used. OFF: Ctrl+C is left to the game.",
           after = function() UI.UpdateOverrideBindings() end },
         { key = "copyMode", label = "Ctrl+C style", names = { INSTANT = "Instant", BOX = "Copy box" },
-          tip = "Instant: hold Ctrl a blink, press C, done. Copy box: Ctrl+C shows the snapshot selected in a small box; Ctrl+C there copies it. Pick Copy box if Instant ever copies nothing." },
+          tip = "Instant: hold Ctrl a blink, press C, done. Copy box: Ctrl+C shows the snapshot selected in a small box; Ctrl+C there copies it. Copy box is the default. With Instant, a Ctrl+key you press after holding Ctrl a moment can be taken by the copy." },
+        { key = "quickNote", label = "Ask for an instruction on Ctrl+C",
+          tip = "Ctrl+C first opens a one-line box for a quick instruction to your AI (\"be flirty\", \"reply to Thrall\"). Enter copies the scene with it as its [Instruction] line; Esc or an empty line copies without one. Then press Ctrl+C once more in the box that shows the scene.",
+          after = function() UI.SyncCopyChip() end },
     })
     local msgRefresh = NumberRow(p, 0, y - 4, "Chat messages per source", "messages",
         "How many recent messages each chat source puts in a snapshot. Expand on the Copy view doubles it.")
     local off = Note(p, "", 0, y - 34)
-    Note(p, "|cff8f9ba8Other shortcuts (open the window, add a companion, mark a moment, start, pause or end a run) are in the game's own Esc > Options > Keybindings > AddOns > RP Chronicler. They have no keys until you set them.|r", 0, y - 64)
+    Note(p, "|cff8f9ba8Other shortcuts (open the window, add a companion, mark a moment, add a story note, start, pause or end a run) are in the game's own Esc > Options > Keybindings > AddOns > RP Chronicler. They have no keys until you set them.|r", 0, y - 64)
     local resetBtn = UI.CreateSleekButton(p, 150, 24, "Reset Window", "tool")
     resetBtn:SetPoint("TOPLEFT", 0, y - 118)
     resetBtn.tipTitle = "|cffffd100Reset Window|r"
@@ -391,7 +413,7 @@ do
     S.prefix:SetPoint("TOPLEFT", 6, -56)
     S.prefix:SetPoint("TOPRIGHT", -2, -56)
     S.prefix:SetAutoFocus(false)
-    Note(ed, "|cff8f9ba8e.g. |cff69ccf0use aloria|cff8f9ba8. Clear it to copy raw data only.|r", 0, -80)
+    Note(ed, "|cff8f9ba8e.g. |cff69ccf0use my-character|cff8f9ba8. Clear it to copy raw data only.|r", 0, -80)
 
     UI.Label(ed, "Included in this slice:"):SetPoint("TOPLEFT", 0, -100)
     -- The scene sections, then the chat sources (both lists live in Core.lua)
@@ -573,7 +595,7 @@ do
     Note(rpPart,
         "|cffffd100Your character skill (one time)|r\n" ..
         "|cffd8dee9Copy the RP Template, fill in your character, and make it a Skill in Gemini, a Project in ChatGPT, or a Skill or Project in Claude. " ..
-        "Use its trigger (like |cff69ccf0use aloria|cffd8dee9) as the Skill Call in Slice Tabs.|r",
+        "Use its trigger (like |cff69ccf0use my-character|cffd8dee9) as the Skill Call in Slice Tabs.|r",
         0, -4)
     local rpBtn = UI.CreateSleekButton(rpPart, 130, 24, "RP Template", "gold")
     rpBtn:SetPoint("TOPLEFT", 0, -78)
@@ -584,9 +606,9 @@ do
           tip = "How long the RP template asks replies to be. Short is like real chat (about 5 to 14 words). Copy the template again after changing it." },
     })
     -- the reply-length button sits next to the RP Template button
-    lenBtns[1]:SetSize(150, 24)
-    lenBtns[1]:ClearAllPoints()
-    lenBtns[1]:SetPoint("LEFT", rpBtn, "RIGHT", 6, 0)
+    -- 0.6.3: both flow on one row, or two on a narrow page
+    lenBtns[1].fixedW = true
+    lenBtns[1]:SetHeight(24)
 
     local stories = CreateFrame("Frame", nil, p)
     stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
@@ -597,12 +619,14 @@ do
         "or |cffffd100Adventure|cffd8dee9 (open world, 'use " .. ns.STORY_SKILLS.world .. "'). After a run, paste its Full Log into the AI and import the story. " ..
         "The AI names the story on its first line, and you can rename it in Story Book > Details.|r",
         0, 0)
-    TemplateButtons(stories, -86)
+    local tplLayout = TemplateButtons(stories, -86)
     local tipRows = SettingRows(stories, -120, {
         { key = "exportTip", label = "Export tip in the Story Book",
           tip = "Shows how to read your stories with screenshots in StoryViewer.html, with Copy for viewer." },
+        { key = "storyCover", label = "Character on the story cover",
+          tip = "The Story Book shows your character on each story's cover, dressed in the gear you wore on that run. Turn it off if your client shows no models." },
     })
-    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -150)
+    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -174)
     O.refresh.AI = function()
         stories:ClearAllPoints()
         stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
@@ -615,6 +639,17 @@ do
         end
         lenRows()
         tipRows()
+        local w = math.floor(p:GetWidth() or 0)
+        if w > 50 then
+            local h = UI.FlowRow(rpPart, { rpBtn, lenBtns[1] }, nil, { y = 78, width = w, rowH = 24, gap = 6 })
+            rpPart:SetHeight(78 + h + 10)
+            tplLayout(w)
+            if ns.RpCopyOn() then
+                stories:ClearAllPoints()
+                stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
+                stories:SetPoint("TOPLEFT", 0, -(22 + 78 + h + 10 + 6))
+            end
+        end
     end
 end
 
@@ -628,20 +663,26 @@ do
     local capHolder = CreateFrame("Frame", nil, p)
     capHolder:SetSize(360, 80)
     local refreshGrid = CheckGrid(capHolder, 0, ns.CAPTURE_TYPES, function() return RPChroniclerDB.capture end, "RPChroniclerOptCap_")
+    -- 0.6.3: error reports kept in the saved file, and the update notice
+    local privHolder = CreateFrame("Frame", nil, p)
+    privHolder:SetSize(360, 52)
+    local privRows = SettingRows(privHolder, 0, {
+        { key = "keepErrors", label = "Keep error reports",
+          tip = "Keeps RP Chronicler's own last 20 errors (with the addon and game version, never chat) in its saved file, so a bug report needs no second try. /rp debug shows them; /rp debug clear deletes them." },
+        { key = "versionCheck", label = "Update notices",
+          tip = "Sends only RP Chronicler's version number to your group and guild, through the game's addon messages, and tells you once when someone has a newer version. Nothing else is ever sent. OFF: nothing is sent or read." },
+    })
     local btns = CreateFrame("Frame", nil, p)
     btns:SetSize(360, 60)
     local setupBtn = UI.CreateSleekButton(btns, 120, 24, "Setup Again", "gold")
-    setupBtn:SetPoint("TOPLEFT", 0, 0)
     setupBtn.tipTitle = "|cffffd100Setup|r"
     setupBtn.tipText = "Shows the first-run setup again (/rp setup)."
     setupBtn:SetScript("OnClick", function() UI.OpenSetup(true) end)
     local reportBtn = UI.CreateSleekButton(btns, 120, 24, "Debug Report", "tool")
-    reportBtn:SetPoint("LEFT", setupBtn, "RIGHT", 6, 0)
     reportBtn.tipTitle = "|cffffd100Debug Report|r"
     reportBtn.tipText = "RP Chronicler keeps a small debug log (its own errors, blocked actions, runs starting and ending; never chat). Copy it into a bug report. Same as /rp debug."
     reportBtn:SetScript("OnClick", function() SlashCmdList["RPCHRONICLER"]("debug") end)
     local wipeBtn = UI.CreateSleekButton(btns, 120, 24, "Delete All Data", "danger")
-    wipeBtn:SetPoint("TOPLEFT", setupBtn, "BOTTOMLEFT", 0, -6)
     wipeBtn.tipTitle = "|cffff6b6bDelete all RP Chronicler data|r"
     wipeBtn.tipText = "Click twice. Deletes every recording, story, companion and setting, then reloads the UI (/rp wipe)."
     wipeBtn:SetScript("OnClick", function(self)
@@ -661,11 +702,20 @@ do
         capLabel:SetPoint("TOPLEFT", 0, -26 - h)
         capHolder:ClearAllPoints()
         capHolder:SetPoint("TOPLEFT", 0, -42 - h)
+        local gridBottom = 42 + h + math.ceil(#ns.CAPTURE_TYPES / 2) * 18 + 10
+        privHolder:ClearAllPoints()
+        privHolder:SetPoint("TOPLEFT", 0, -gridBottom)
+        privHolder:SetWidth(math.max(250, math.floor(p:GetWidth() or 0)))
+        privRows()
         btns:ClearAllPoints()
-        btns:SetPoint("TOPLEFT", 0, -42 - h - math.ceil(#ns.CAPTURE_TYPES / 2) * 18 - 10)
+        btns:SetPoint("TOPLEFT", 0, -(gridBottom + 54))
         refreshGrid()
         wipeBtn.armedAt = nil
         wipeBtn:SetText("Delete All Data")
+        -- 0.6.3: the three buttons flow and wrap with the page width
+        local w = math.max(200, math.floor(p:GetWidth() or 0))
+        btns:SetWidth(w)
+        btns:SetHeight(UI.FlowRow(btns, { setupBtn, reportBtn, wipeBtn }, nil, { width = w, rowH = 24, gap = 6 }))
     end
 end
 

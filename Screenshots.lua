@@ -112,6 +112,7 @@ end
 local function OnManualShot()
     if ownShotAt and (GetTime() - ownShotAt) < OWN_WINDOW then
         ownShotAt = nil
+        if ns.ConfirmLastShot then ns.ConfirmLastShot() end
         return
     end
     local run = ns.GetActiveAdventure()

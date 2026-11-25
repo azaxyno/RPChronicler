@@ -207,6 +207,47 @@ do
 end
 
 -- =========================================================
+-- 0.6.3: one entry in the game's own Options > AddOns, with a single
+-- button that opens RP Chronicler's Options (no settings of its own)
+-- =========================================================
+do
+    local panel = CreateFrame("Frame", "RPChroniclerBlizzOptions", UIParent)
+    panel.name = "RP Chronicler"
+    panel:Hide()
+    local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("|cffffd100RP Chronicler|r |cff8f9ba8v" .. tostring(ns.VERSION or "") .. "|r")
+    local sub = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    sub:SetWidth(520)
+    sub:SetJustifyH("LEFT")
+    sub:SetText("|cffd8dee9Record your adventures and get them back as stories, and copy the live scene for your AI. " ..
+        "Every setting lives in RP Chronicler's own window.|r")
+    local open = UI.CreateSleekButton(panel, 200, 26, "Open RP Chronicler Options", "gold")
+    open:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -14)
+    open:SetScript("OnClick", function()
+        -- closing the game's Options is a panel change: only out of combat
+        if not (InCombatLockdown and InCombatLockdown()) then
+            if SettingsPanel and SettingsPanel.IsShown and SettingsPanel:IsShown() and HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
+        end
+        UI.OpenOptionsPage(RPChroniclerDB and RPChroniclerDB.optionsPage or "GENERAL")
+    end)
+    local slash = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    slash:SetPoint("TOPLEFT", open, "BOTTOMLEFT", 0, -10)
+    slash:SetText("|cff8f9ba8Or type /rp in chat, or click the floating RP button.|r")
+
+    local ok = false
+    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
+        ok = pcall(function()
+            local cat = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+            Settings.RegisterAddOnCategory(cat)
+            UI.blizzCategory = cat
+        end)
+    end
+    if not ok then ns.Debug("info", "no Options > AddOns entry on this client") end
+end
+
+-- =========================================================
 -- Slash commands
 -- =========================================================
 SLASH_RPCHRONICLER1 = "/rp"
@@ -247,8 +288,18 @@ SlashCmdList["RPCHRONICLER"] = function(msg)
         ns.debugVerbose = not ns.debugVerbose
         print("|cff00ff00[RP Chronicler]|r Verbose debug log " .. (ns.debugVerbose and "on until you log out or /reload." or "off."))
     elseif low == "debug clear" then
-        if RPChroniclerDB then RPChroniclerDB.debugLog = {} end
-        print("|cff00ff00[RP Chronicler]|r Debug log cleared.")
+        ns.ClearDebugData()
+        print("|cff00ff00[RP Chronicler]|r Debug log and saved error reports cleared.")
+    elseif low == "note" or low:match("^note%s") then
+        -- 0.6.3: the character's thought, into the Full Log at this moment
+        local text = trimmed:match("^[Nn][Oo][Tt][Ee]%s+(.+)$")
+        if not text then
+            UI.AskStoryNote()
+        else
+            local ok, status = ns.RecordRunNote(text)
+            print((ok and "|cff00ff00[RP Chronicler]|r " or "|cffffb74d[RP Chronicler]|r ") .. status)
+            if ok then pcall(UI.RefreshRunViews) end
+        end
     elseif low == "pause" or low == "resume" then
         local ok, status
         if low == "pause" then

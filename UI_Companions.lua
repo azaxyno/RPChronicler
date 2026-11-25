@@ -16,6 +16,7 @@ UI.companions = P
 local NOTE_MAX = ns.COMPANION_NOTE_MAX
 local INCLUDE_ORDER = { "auto", "always", "never" }
 local INCLUDE_LABEL = { auto = "Include: Auto", always = "Include: Always", never = "Include: Never" }
+local INCLUDE_SHORT = { auto = "Auto", always = "Always", never = "Never" }
 local SORTS = { "NAME", "SEEN", "MET" }
 local SORT_LABEL = { NAME = "A-Z", SEEN = "Seen", MET = "Met" }
 
@@ -153,22 +154,30 @@ P.chatText:SetJustifyH("LEFT")
 P.chatText:SetJustifyV("TOP")
 
 P.captureBtn = UI.CreateSleekButton(P.editor, 70, 22, "Capture")
-P.captureBtn:SetPoint("BOTTOMLEFT", 0, 2)
 P.captureBtn.tipTitle = "|cffffd100Capture Target|r"
 P.captureBtn.tipText = "Save or update who you target: a player, an NPC or a companion pet (or who last whispered you). Shortcut: Shift+C from the world."
 
 P.saveBtn = UI.CreateSleekButton(P.editor, 58, 22, "Save", "gold")
-P.saveBtn:SetPoint("LEFT", P.captureBtn, "RIGHT", 4, 0)
 
 P.includeBtn = UI.CreateSleekButton(P.editor, 112, 22, "Include: Auto", "tool")
-P.includeBtn:SetPoint("LEFT", P.saveBtn, "RIGHT", 4, 0)
 P.includeBtn.tipTitle = "|cffffd100Include in snapshots|r"
 P.includeBtn.tipText = "Auto: when they are your target, in your group or in the copied chat. Always: in every snapshot. Never: never, and not in Full Logs."
 
 P.delBtn = UI.CreateSleekButton(P.editor, 56, 22, "Delete", "danger")
-P.delBtn:SetPoint("BOTTOMRIGHT", 0, 2)
 P.delBtn.tipTitle = "|cffff6b6bDelete|r"
 P.delBtn.tipText = "Click twice to delete this companion. Old Full Logs keep the notes they were recorded with."
+
+-- 0.6.3: the button row sits at the bottom, sized to its text, and wraps
+-- onto two lines when the pane is narrow (UI.FlowRow); the info box ends
+-- above it
+function P.Layout()
+    local W, H = P.editor:GetWidth() or 0, P.editor:GetHeight() or 0
+    if W < 50 or H < 50 then return end
+    local left, right = { P.captureBtn, P.saveBtn, P.includeBtn }, { P.delBtn }
+    local h = UI.FlowRow(P.editor, left, right, { y = 0 })
+    UI.FlowRow(P.editor, left, right, { y = H - h - 2 })
+    P.info:SetPoint("BOTTOMRIGHT", 0, h + 6)
+end
 
 local function V(x, fallback) return (x and x ~= "") and x or fallback end
 
@@ -210,7 +219,8 @@ end
 
 local function SyncInclude(data)
     local inc = (data and data.include) or "auto"
-    P.includeBtn:SetText(INCLUDE_LABEL[inc] or INCLUDE_LABEL.auto)
+    UI.SetButtonLabels(P.includeBtn, INCLUDE_LABEL[inc] or INCLUDE_LABEL.auto, INCLUDE_SHORT[inc] or INCLUDE_SHORT.auto)
+    P.Layout()
     if data then P.includeBtn:Enable() else P.includeBtn:Disable() end
 end
 
@@ -406,6 +416,7 @@ view:SetScript("OnHide", function()
 end)
 
 UI.AddReflow(function()
+    if P.editor:IsVisible() then P.Layout() end
     for _, eb in ipairs({ P.noteInput }) do
         local w = eb.scroll:GetWidth()
         if w and w > 50 then eb:SetWidth(w) end

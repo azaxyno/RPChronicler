@@ -70,6 +70,34 @@ function RPChronicler_EndRun()
     RefreshIfOpen()
 end
 
+-- 0.6.3: a story note, the character's thought at this moment (/rp note,
+-- the Note button and its key binding all come here)
+function UI.AskStoryNote()
+    local run = ns.GetActiveAdventure()
+    if not run then
+        Report("Start recording first: a note goes into a recording's Full Log.", "error")
+        return
+    end
+    if run.paused then
+        Report("Recording is paused. Resume it to add a note.", "error")
+        return
+    end
+    UI.AskLine({
+        title = "Story note",
+        sub = "Your character's thought right now. It goes into the Full Log at this moment, and the story gives it to them as their inner voice.",
+        placeholder = "e.g. Her warning still rings in my ears...",
+        okText = "Add note",
+        keys = "Enter: add   Esc: cancel",
+        onAccept = function(text)
+            if text == "" then return end
+            local ok, msg = ns.RecordRunNote(text)
+            Report(msg, ok and "good" or "error")
+            if ok then RefreshIfOpen() end
+        end,
+    })
+end
+RPChronicler_StoryNote = UI.AskStoryNote
+
 -- =========================================================
 -- Import Adventure Story modal (paste the colored LLM story)
 -- =========================================================
@@ -90,8 +118,11 @@ do
 
     imp.title = UI.Label(f, "|cffffd100Import Adventure Chronicle|r", "GameFontNormal")
     imp.title:SetPoint("TOPLEFT", 14, -12)
-    local sub = UI.Label(f, "|cffd7c4a3Pick the run, paste the colored story (Ctrl+V) and click Save to Story Book.|r", "GameFontHighlightSmall")
+    local sub = UI.Label(f, "|cffd7c4a3Paste the colored story (Ctrl+V) and click Save to Story Book. The run is optional.|r", "GameFontHighlightSmall")
     sub:SetPoint("TOPLEFT", 14, -28)
+    sub:SetPoint("RIGHT", f, "RIGHT", -36, 0)
+    sub:SetJustifyH("LEFT")
+    sub:SetWordWrap(false)
 
     -- Run selector: < Run name >
     imp.prev = UI.CreateSleekButton(f, 22, 20, "<")
@@ -137,16 +168,18 @@ do
             imp.title:SetText("|cffff6b6bPaste a story first before saving!|r")
             return
         end
-        local ok, storyId
-        if f.targetStoryId and not ns.FindAdventure(f.targetAdvId or "") then
-            ok, storyId = ns.SetStoryText(f.targetStoryId, raw)
-        elseif f.targetAdvId then
-            ok, storyId = ns.SetAdventureStory(f.targetAdvId, raw)
-        end
+        -- 0.6.3: one import path; the run is optional (found by Run ID)
+        local ok, storyId, linked = ns.ImportStory(raw, f.targetAdvId, f.targetStoryId)
         if ok then
             f:Hide()
             UI.OpenStoryBook(storyId)
-            UI.SetStatus("Story saved to the Story Book.", "good")
+            if linked then
+                UI.SetStatus("Story saved to the Story Book, linked to " .. (linked.title or "its recording") .. ".", "good")
+            else
+                UI.SetStatus("Story saved to the Story Book (no linked recording).", "good")
+            end
+        else
+            imp.title:SetText("|cffff6b6bCould not save this story.|r")
         end
     end)
 
@@ -172,16 +205,18 @@ local function AllRuns()
 end
 UI.AllRuns = AllRuns
 
+-- 0.6.3: the first choice links the story by the Run ID it carries (or
+-- keeps it on its own); the others link it to one run you pick
 local function ShowImportRun()
     local runs = AllRuns()
     -- Re-importing a story whose recording was deleted: no run to pick
     local st = imp.frame.targetStoryId and ns.FindStory(imp.frame.targetStoryId)
     if st and not ns.StoryRun(st) then
-        imp.runLabel:SetText(string.format("|cfff5e6c8%s|r |cff9aa5b4- replaces this story (its recording was deleted)|r", st.title or "Story"))
+        imp.runLabel:SetText(string.format("|cfff5e6c8%s|r |cff9aa5b4- replaces this story|r", st.title or "Story"))
         imp.prev:Disable(); imp.next:Disable()
         return {}, 0
     end
-    local idx = 1
+    local idx = 0
     for i, adv in ipairs(runs) do
         if adv.id == imp.frame.targetAdvId then idx = i end
     end
@@ -192,17 +227,17 @@ local function ShowImportRun()
         imp.runLabel:SetText(string.format("|cfff5e6c8%s|r |cff9aa5b4- %s - %s (%d of %d)|r%s",
             adv.title or "Adventure", ns.GetRunKindLabel(adv), adv.startDate or "-", idx, #runs, has))
     else
-        imp.runLabel:SetText("|cffff6b6bNo recorded runs yet. Record one first.|r")
+        imp.runLabel:SetText("|cfff5e6c8Link automatically|r |cff9aa5b4- by the story's Run ID, or keep it without a recording|r")
     end
-    if #runs > 1 then imp.prev:Enable(); imp.next:Enable() else imp.prev:Disable(); imp.next:Disable() end
+    if #runs > 0 then imp.prev:Enable(); imp.next:Enable() else imp.prev:Disable(); imp.next:Disable() end
     return runs, idx
 end
 
 local function StepImportRun(delta)
     local runs, idx = ShowImportRun()
     if #runs == 0 then return end
-    idx = ((idx - 1 + delta) % #runs) + 1
-    imp.frame.targetAdvId = runs[idx].id
+    idx = (idx + delta) % (#runs + 1)   -- 0 is "Link automatically"
+    imp.frame.targetAdvId = runs[idx] and runs[idx].id or nil
     ShowImportRun()
 end
 imp.prev:SetScript("OnClick", function() StepImportRun(-1) end)
@@ -212,7 +247,7 @@ imp.next:SetScript("OnClick", function() StepImportRun(1) end)
 local function OpenStoryImportModal(adv, st)
     imp.frame.targetStoryId = st and st.id or nil
     if st and not adv then adv = ns.StoryRun(st) end
-    imp.frame.targetAdvId = adv and adv.id or (ns.state.selectedAdventureId)
+    imp.frame.targetAdvId = adv and adv.id or nil
     imp.title:SetText("|cffffd100Import Story from your AI|r")
     imp.editBox:SetText("")
     ShowImportRun()
@@ -250,6 +285,7 @@ A.runBtn.dot:SetSize(8, 8)
 A.runBtn.dot:SetPoint("LEFT", 8, 0)
 A.runBtn.dot:SetTexture(UI.ICONS.DOT)
 A.runBtn.dot:SetVertexColor(1, 0.2, 0.2, 1)
+UI.SetButtonLabels(A.runBtn, "Start Recording", "Start")
 
 A.pauseBtn = UI.CreateSleekButton(A.recBar, 70, 22, "Pause")
 A.pauseBtn:SetPoint("LEFT", A.runBtn, "RIGHT", 4, 0)
@@ -257,12 +293,18 @@ A.pauseBtn:SetPoint("LEFT", A.runBtn, "RIGHT", 4, 0)
 A.markBtn = UI.CreateSleekButton(A.recBar, 112, 22, "Mark Moment")
 A.markBtn:SetPoint("LEFT", A.pauseBtn, "RIGHT", 4, 0)
 A.markBtn:SetIcon(UI.ICONS.MARK, 16)
+UI.SetButtonLabels(A.markBtn, "Mark Moment", "Mark")
 A.markBtn.tipTitle = "|cffffd100Mark Moment|r"
 A.markBtn.tipText = "Bookmark what just happened so the story gives it a scene. Also /rp mark <note>."
 
+-- 0.6.3: a story note (your character's thought) at this moment
+A.noteBtn = UI.CreateSleekButton(A.recBar, 60, 22, "Note")
+A.noteBtn.tipTitle = "|cffffd100Story note|r"
+A.noteBtn.tipText = "Write your character's thought at this moment. The story gives it to them as their inner voice. Also /rp note <text>."
+A.noteBtn:SetScript("OnClick", function() UI.AskStoryNote() end)
+
 A.recText = A.recBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-A.recText:SetPoint("LEFT", A.markBtn, "RIGHT", 10, 0)
-A.recText:SetPoint("RIGHT", -8, 0)
+A.recText:SetPoint("TOPRIGHT", -8, -10)
 A.recText:SetJustifyH("RIGHT")
 A.recText:SetWordWrap(false)
 
@@ -292,6 +334,7 @@ A.right:SetPoint("BOTTOMRIGHT", 0, 0)
 
 do
     local hero = CreateFrame("Frame", nil, A.right, UI.BACKDROP)
+    A.hero = hero
     hero:SetHeight(60)
     hero:SetPoint("TOPLEFT", 0, 0)
     hero:SetPoint("TOPRIGHT", 0, 0)
@@ -308,39 +351,47 @@ do
     A.heroIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     A.heroIcon:SetTexture(UI.ICONS.ADVENTURES)
 
-    local function HeroLine(template, y)
+    -- 0.6.3: the lines stack (the meta line may take two lines), and
+    -- A.Layout sizes the hero to them
+    local function HeroLine(template, below)
         local fs = hero:CreateFontString(nil, "OVERLAY", template)
-        fs:SetPoint("TOPLEFT", iconFrame, "TOPRIGHT", 10, y)
-        fs:SetPoint("RIGHT", -10, 0)
+        if below then
+            fs:SetPoint("TOPLEFT", below, "BOTTOMLEFT", 0, -2)
+        else
+            fs:SetPoint("TOPLEFT", iconFrame, "TOPRIGHT", 10, -1)
+        end
+        fs:SetPoint("RIGHT", hero, "RIGHT", -10, 0)
         fs:SetJustifyH("LEFT")
         fs:SetWordWrap(false)
         return fs
     end
-    A.heroTitle = HeroLine("GameFontNormal", -1)
-    A.heroMeta = HeroLine("GameFontHighlightSmall", -17)
-    A.heroStats = HeroLine("GameFontHighlightSmall", -31)
+    A.heroTitle = HeroLine("GameFontNormal")
+    A.heroMeta = HeroLine("GameFontHighlightSmall", A.heroTitle)
+    A.heroMeta:SetWordWrap(true)
+    if A.heroMeta.SetMaxLines then A.heroMeta:SetMaxLines(2) end
+    A.heroStats = HeroLine("GameFontHighlightSmall", A.heroMeta)
 end
 
+-- 0.6.3: the Template button is gone (the story templates are in the
+-- Story Book and Options > AI & Stories); A.Layout places this row
 A.summaryBtn = UI.CreateSleekButton(A.right, 66, 22, "Summary")
-A.summaryBtn:SetPoint("TOPLEFT", 0, -66)
 A.fullBtn = UI.CreateSleekButton(A.right, 62, 22, "Full Log")
-A.fullBtn:SetPoint("LEFT", A.summaryBtn, "RIGHT", 4, 0)
 A.fullBtn.tipTitle = "|cffffd100Full Log|r"
 A.fullBtn.tipText = "The whole run for your AI storyteller. Click Select All, then Ctrl+C."
-A.tplBtn = UI.CreateSleekButton(A.right, 70, 22, "Template", "tool")
-A.tplBtn:SetPoint("LEFT", A.fullBtn, "RIGHT", 4, 0)
-A.tplBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-A.tplBtn.tipTitle = "|cffffd100Story Template|r"
 A.storyBtn = UI.CreateSleekButton(A.right, 56, 22, "Story", "gold")
-A.storyBtn:SetPoint("LEFT", A.tplBtn, "RIGHT", 4, 0)
 A.storyBtn.tipTitle = "|cffffd100Story|r"
+-- 0.6.3: correct a wrong name before the story is written
+A.fixBtn = UI.CreateSleekButton(A.right, 70, 22, "Fix names", "tool")
+UI.SetButtonLabels(A.fixBtn, "Fix names", "Fix")
+A.fixBtn.tipTitle = "|cffffd100Fix names|r"
+A.fixBtn.tipText = "A wrong name in this run (a player, boss, foe, companion or pet)? Replace it before you copy the Full Log. The recording keeps the original, so every fix can be undone."
 
 A.delBtn = UI.CreateSleekButton(A.right, 56, 22, "Delete", "danger")
-A.delBtn:SetPoint("TOPRIGHT", 0, -66)
 A.delBtn.tipTitle = "|cffff6b6bDelete|r"
 A.delBtn.tipText = "Click twice to delete this run."
 A.selectAllBtn = UI.CreateSleekButton(A.right, 80, 22, "Select All", "gold")
-A.selectAllBtn:SetPoint("RIGHT", A.delBtn, "LEFT", -4, 0)
+UI.SetButtonLabels(A.selectAllBtn, "Select All", "All")
+A.rowBottom = 94
 
 -- Full Log size meter (Options > Full Log picks the AI and can hide it)
 A.meter = CreateFrame("Button", nil, A.right)
@@ -362,6 +413,30 @@ A.meter:SetScript("OnClick", function()
     UI.OpenOptionsPage("RECORDING")
 end)
 A.meter:Hide()
+
+-- 0.6.3: the record bar, the hero and the button row follow the window
+-- and font size (UI.FlowRow); what sits below them follows their height
+function A.Layout()
+    local barW = A.recBar:GetWidth() or 0
+    if barW < 50 then return end
+    local textW = math.ceil((A.recText:GetStringWidth() or 0) + 12)
+    local reserve = math.max(60, math.min(textW, math.floor(barW * 0.4)))
+    A.recText:SetWidth(reserve - 8)
+    A.runBtn.extraW = A.runBtn.dot:IsShown() and 10 or 0
+    local h = UI.FlowRow(A.recBar, { A.runBtn, A.pauseBtn, A.markBtn, A.noteBtn }, nil, { x = 4, y = 4, width = barW - 8 - reserve })
+    A.recBar:SetHeight(h + 8)
+    local heroH = 14 + (A.heroTitle:GetStringHeight() or 12) + (A.heroMeta:GetStringHeight() or 12) + (A.heroStats:GetStringHeight() or 12)
+    heroH = math.max(60, math.ceil(heroH))
+    A.hero:SetHeight(heroH)
+    local rowH = UI.FlowRow(A.right, { A.summaryBtn, A.fullBtn, A.storyBtn, A.fixBtn }, { A.selectAllBtn, A.delBtn }, { y = heroH + 6 })
+    A.rowBottom = heroH + 6 + rowH + 6
+    A.meter:ClearAllPoints()
+    A.meter:SetPoint("TOPLEFT", 2, -A.rowBottom + 2)
+    A.meter:SetPoint("TOPRIGHT", -2, -A.rowBottom + 2)
+    A.boxBg:ClearAllPoints()
+    A.boxBg:SetPoint("BOTTOMRIGHT", 0, 0)
+    A.boxBg:SetPoint("TOPLEFT", 0, -(A.rowBottom + (A.meter:IsShown() and 18 or 0)))
+end
 
 -- Summary / Full Log text box
 A.boxBg = CreateFrame("Frame", nil, A.right, UI.BACKDROP)
@@ -448,7 +523,7 @@ local function UpdateHero(adv, isLive)
     if not adv then
         A.heroIcon:SetTexture(UI.ICONS.ADVENTURES)
         A.heroTitle:SetText("|cffffd100No Adventure Selected|r")
-        A.heroMeta:SetText("|cff9aa5b4Enter a dungeon or raid, or click Start Recording above|r")
+        A.heroMeta:SetText("|cff9aa5b4Enter a dungeon or raid, or click Start Recording above.|r")
         A.heroStats:SetText("")
         return
     end
@@ -474,7 +549,7 @@ local function UpdateRecordBar(active)
     if active then
         A.runBtn.accentStyle = "danger"
         A.runBtn.ApplyNormalLook()
-        A.runBtn:SetText("Stop & Save")
+        UI.SetButtonLabels(A.runBtn, "Stop & Save", "Stop")
         A.runBtn.dot:Hide()
         A.runBtn.label:SetPoint("LEFT", 5, 0)
         A.pauseBtn:Enable()
@@ -482,24 +557,27 @@ local function UpdateRecordBar(active)
             A.pauseBtn:SetText("|cff5cb85cResume|r")
             A.pauseBtn:LockHighlight()
             A.markBtn:Disable()
+            A.noteBtn:Disable()
             A.recText:SetText("|cffffb74dPaused:|r |cffd8dee9" .. (active.title or "Adventure") .. "|r")
         else
             A.pauseBtn:SetText("|cffffb74dPause|r")
             A.pauseBtn:UnlockHighlight()
             A.markBtn:Enable()
+            A.noteBtn:Enable()
             local mins = math.floor(math.max(0, time() - (active.startTime or time())) / 60)
             A.recText:SetText(string.format("|cffff6b6bRecording:|r |cffd8dee9%s (%dm)|r", active.title or "Adventure", mins))
         end
     else
         A.runBtn.accentStyle = "good"
         A.runBtn.ApplyNormalLook()
-        A.runBtn:SetText("Start Recording")
+        UI.SetButtonLabels(A.runBtn, "Start Recording", "Start")
         A.runBtn.dot:Show()
         A.runBtn.label:SetPoint("LEFT", 14, 0)
         A.pauseBtn:SetText("Pause")
         A.pauseBtn:UnlockHighlight()
         A.pauseBtn:Disable()
         A.markBtn:Disable()
+        A.noteBtn:Disable()
         A.recText:SetText("|cff8f9ba8Not recording|r")
     end
 end
@@ -567,17 +645,15 @@ function UI.RefreshAdventuresTab()
     local hasStory = selected and ns.RunHasStory(selected)
     A.storyBtn:SetText(hasStory and "Story *" or "Story")
     A.storyBtn.tipText = hasStory and "Open this run's story in the Story Book." or "Import a story for this run from your AI."
-    if selected then A.storyBtn:Enable() else A.storyBtn:Disable() end
-    local isWorld = not selected or selected.kind == "world"
-    A.tplBtn.tipText = (isWorld and "Opens the |cffffd100Adventure Story|r template (open world, solo)." or "Opens the |cffffd100Dungeon/Raid Story|r template (one chapter per boss).")
-        .. "\nRight-click for the other one. Paste it into your AI once to make the storyteller skill."
+    if selected then A.storyBtn:Enable(); A.fixBtn:Enable() else A.storyBtn:Disable(); A.fixBtn:Disable() end
+    local nFix = selected and type(selected.fixes) == "table" and #selected.fixes or 0
+    UI.SetButtonLabels(A.fixBtn, nFix > 0 and ("Fix names (" .. nFix .. ")") or "Fix names", nFix > 0 and ("Fix " .. nFix) or "Fix")
+    if UI.fixNames and UI.fixNames:IsShown() then UI.RefreshFixNames() end
     A.summaryBtn:UnlockHighlight()
     A.fullBtn:UnlockHighlight()
 
     local mode = ns.state.adventureViewMode
     if mode ~= "FULL" then mode = "SUMMARY" end
-    A.boxBg:ClearAllPoints()
-    A.boxBg:SetPoint("BOTTOMRIGHT", 0, 0)
     if mode == "FULL" then
         A.fullBtn:LockHighlight()
         local text = ns.BuildAdventureFullLog(selected)
@@ -593,17 +669,15 @@ function UI.RefreshAdventuresTab()
             A.meterText:SetText(string.format("|cff8f9ba8Size:|r |cff%s%.1fk chars (~%.1fk tokens), %d%% of %dk|r%s",
                 color, chars / 1000, tokens / 1000, pct, math.floor(limit / 1000), warn))
             A.meter:Show()
-            A.boxBg:SetPoint("TOPLEFT", 0, -112)
         else
             A.meter:Hide()
-            A.boxBg:SetPoint("TOPLEFT", 0, -94)
         end
     else
         A.meter:Hide()
-        A.boxBg:SetPoint("TOPLEFT", 0, -94)
         A.summaryBtn:LockHighlight()
         A.editBox:SetText(ns.BuildAdventureSummary(selected))
     end
+    A.Layout()
 end
 
 -- Opens Adventures on a run. mode: "SUMMARY" or "FULL" (nil keeps it)
@@ -648,13 +722,6 @@ A.storyBtn:SetScript("OnClick", function()
     end
 end)
 
--- The template that fits the run type; right-click for the other
-A.tplBtn:SetScript("OnClick", function(_, button)
-    local adv = GetSelectedAdventure()
-    local isWorld = not adv or adv.kind == "world"
-    if button == "RightButton" then isWorld = not isWorld end
-    UI.OpenSkillTemplateModal(isWorld and "ADVENTURE" or "STORY")
-end)
 UI.GetSelectedAdventure = GetSelectedAdventure
 
 A.selectAllBtn:SetScript("OnClick", function()
@@ -706,6 +773,172 @@ A.delBtn:SetScript("OnClick", function(self)
     end
 end)
 
+-- =========================================================
+-- Fix names (0.6.3): replace a wrong name in a run before the story is
+-- written. The fixes are a list on the run (ns.AddRunFix); the recording
+-- keeps every original name, so Undo brings it back.
+-- =========================================================
+do
+    local f = CreateFrame("Frame", "RPChroniclerFixNamesFrame", UIParent, UI.BACKDROP)
+    f:SetSize(480, 300)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    f:SetClampedToScreen(true)
+    f:Hide()
+    UI.ApplyDarkGlass(f, 0.05, 0.06, 0.08, 0.97, 0.78, 0.62, 0.28, 0.85)
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "RPChroniclerFixNamesFrame") end
+    UI.fixNames = f
+    local F = { chips = {}, rows = {} }
+
+    F.title = UI.Label(f, "", "GameFontNormal")
+    F.title:SetPoint("TOPLEFT", 14, -12)
+    F.title:SetPoint("RIGHT", -36, 0)
+    F.title:SetWordWrap(false)
+    F.sub = UI.Label(f, "|cffb0bac5A wrong name in the recording? Replace it here before you copy the Full Log. The recording keeps the original, so Undo brings it back.|r", "GameFontHighlightSmall")
+    F.sub:SetPoint("TOPLEFT", 14, -30)
+    F.sub:SetPoint("RIGHT", -14, 0)
+    F.sub:SetWordWrap(true)
+    local closeX = UI.CreateSleekButton(f, 22, 20, "x", "danger")
+    closeX:SetPoint("TOPRIGHT", -8, -8)
+    closeX:SetScript("OnClick", function() f:Hide() end)
+
+    F.chipHead = UI.Label(f, "|cffd8dee9Names in this run (click one):|r", "GameFontHighlightSmall")
+    F.chipBox = CreateFrame("Frame", nil, f)
+
+    local function Box(label)
+        local l = UI.Label(f, "|cffd8dee9" .. label .. "|r", "GameFontHighlightSmall")
+        local eb = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+        eb:SetSize(180, 20)
+        eb:SetAutoFocus(false)
+        eb:SetMaxLetters(80)
+        eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        return l, eb
+    end
+    F.fromLbl, F.from = Box("Wrong name")
+    F.toLbl, F.to = Box("Right name")
+    F.save = UI.CreateSleekButton(f, 80, 22, "Replace", "gold")
+    F.from:SetScript("OnTabPressed", function() F.to:SetFocus() end)
+    F.to:SetScript("OnTabPressed", function() F.from:SetFocus() end)
+    F.listHead = UI.Label(f, "", "GameFontHighlightSmall")
+    F.done = UI.CreateSleekButton(f, 70, 22, "Done")
+    F.done:SetScript("OnClick", function() f:Hide() end)
+
+    local function Run() return f.advId and ns.FindAdventure(f.advId) end
+
+    function UI.RefreshFixNames()
+        local adv = Run()
+        if not adv then f:Hide() return end
+        F.title:SetText("|cffffd100Fix names:|r |cfff5e6c8" .. (adv.title or "Adventure") .. "|r")
+        local W = f:GetWidth() - 28
+        local y = 30 + math.ceil(F.sub:GetStringHeight() or 28) + 10
+        F.chipHead:ClearAllPoints()
+        F.chipHead:SetPoint("TOPLEFT", 14, -y)
+        y = y + 16
+        local names = ns.RunNames(adv)
+        for _, c in ipairs(F.chips) do c:Hide() end
+        local list = {}
+        for i, n in ipairs(names) do
+            local c = F.chips[i]
+            if not c then
+                c = UI.CreateSleekButton(F.chipBox, 60, 18, "")
+                c:SetScript("OnClick", function(self)
+                    F.from:SetText(self.name)
+                    F.to:SetText(self.name)
+                    F.to:SetFocus()
+                    F.to:HighlightText()
+                end)
+                F.chips[i] = c
+            end
+            c.name = n
+            c:SetText(n)
+            c:Show()
+            list[i] = c
+        end
+        F.chipBox:ClearAllPoints()
+        F.chipBox:SetPoint("TOPLEFT", 14, -y)
+        F.chipBox:SetSize(W, 20)
+        local chipH = (#list > 0) and UI.FlowRow(F.chipBox, list, nil, { width = W, rowH = 18, gap = 4 }) or 0
+        if #list == 0 then F.chipHead:SetText("|cff8f9ba8No names recorded in this run yet.|r") else F.chipHead:SetText("|cffd8dee9Names in this run (click one):|r") end
+        y = y + chipH + 12
+        F.fromLbl:ClearAllPoints(); F.fromLbl:SetPoint("TOPLEFT", 14, -y)
+        F.toLbl:ClearAllPoints(); F.toLbl:SetPoint("TOPLEFT", 214, -y)
+        y = y + 14
+        F.from:ClearAllPoints(); F.from:SetPoint("TOPLEFT", 20, -y)
+        F.to:ClearAllPoints(); F.to:SetPoint("TOPLEFT", 220, -y)
+        F.save:ClearAllPoints(); F.save:SetPoint("TOPLEFT", 410, -y)
+        F.save:SetWidth(math.max(56, W - 396))
+        y = y + 30
+        local fixes = type(adv.fixes) == "table" and adv.fixes or {}
+        F.listHead:ClearAllPoints()
+        F.listHead:SetPoint("TOPLEFT", 14, -y)
+        F.listHead:SetText(#fixes > 0 and "|cffd8dee9Fixes in this run:|r" or "|cff8f9ba8No fixes yet.|r")
+        y = y + 16
+        for _, r in ipairs(F.rows) do r.text:Hide(); r.undo:Hide() end
+        for i, fx in ipairs(fixes) do
+            if i > 10 then break end
+            local r = F.rows[i]
+            if not r then
+                r = { text = UI.Label(f, "", "GameFontHighlightSmall"), undo = UI.CreateSleekButton(f, 52, 18, "Undo", "danger") }
+                r.text:SetWordWrap(false)
+                F.rows[i] = r
+            end
+            r.text:ClearAllPoints()
+            r.text:SetPoint("TOPLEFT", 18, -(y + 3))
+            r.text:SetPoint("RIGHT", f, "RIGHT", -76, 0)
+            r.text:SetText("|cff9e9e9e" .. fx.from .. "|r  |cffd8dee9->|r  |cfff5e6c8" .. fx.to .. "|r")
+            r.undo:ClearAllPoints()
+            r.undo:SetPoint("TOPRIGHT", -14, -y)
+            r.undo:SetScript("OnClick", function()
+                ns.RemoveRunFix(adv.id, i)
+                UI.SetStatus("Fix undone: " .. fx.from .. " is back.", "good")
+                UI.RefreshFixNames()
+            end)
+            r.text:Show()
+            r.undo:Show()
+            y = y + 22
+        end
+        F.done:ClearAllPoints()
+        F.done:SetPoint("BOTTOMRIGHT", -14, 10)
+        f:SetHeight(y + 44)
+    end
+
+    F.save:SetScript("OnClick", function()
+        local adv = Run()
+        if not adv then return end
+        local ok, why = ns.AddRunFix(adv.id, F.from:GetText(), F.to:GetText())
+        if ok then
+            UI.SetStatus("Fixed: the Full Log now says " .. ns.StripColors((F.to:GetText() or ""):gsub("||", "|")) .. ".", "good")
+            F.from:SetText("")
+            F.to:SetText("")
+            F.from:ClearFocus()
+            F.to:ClearFocus()
+        else
+            UI.SetStatus(why or "Could not save the fix.", "error")
+        end
+        UI.RefreshFixNames()
+    end)
+    F.to:SetScript("OnEnterPressed", function() F.save:Click() end)
+    F.from:SetScript("OnEnterPressed", function() F.to:SetFocus() end)
+
+    function UI.OpenFixNames(advId)
+        f.advId = advId
+        F.from:SetText("")
+        F.to:SetText("")
+        f:Show()
+        UI.RefreshFixNames()
+    end
+end
+
+A.fixBtn:SetScript("OnClick", function()
+    local adv = GetSelectedAdventure()
+    if adv then UI.OpenFixNames(adv.id) end
+end)
+
 UI.SetSectionOnShow("ADVENTURES", UI.RefreshAdventuresTab)
 
 view:SetScript("OnHide", function() A.editBox:ClearFocus() end)
@@ -718,10 +951,12 @@ do
         if acc < 5 then return end
         acc = 0
         UpdateRecordBar(ns.GetActiveAdventure())
+        A.Layout()
     end)
 end
 
 UI.AddReflow(function()
+    if A.recView:IsVisible() then A.Layout() end
     local w = A.scroll:GetWidth()
     if w and w > 50 then A.editBox:SetWidth(w) end
 end)

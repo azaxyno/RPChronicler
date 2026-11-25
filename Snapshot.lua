@@ -176,13 +176,13 @@ function ns.GetStatusLine()
     end
 
     if UnitExists("pet") then
-        -- 0.5.0: name plus species, e.g. "Snips (Crab, hunter pet)"
+        -- 0.6.3: "Name (Family)", e.g. "Snips (Crab)"
         local petInfo = (ns.GetPetDescriptor("pet")) or ns.SafeStr(UnitName("pet")) or "Pet"
         if UnitIsDead("pet") then
             petInfo = petInfo .. " " .. ns.ColorText("[Dead]", ns.COLORS.death)
         else
             local petHp = FormatHealthPercent("pet")
-            if petHp then petInfo = petInfo .. " (" .. petHp .. ")" end
+            if petHp then petInfo = petInfo .. ", " .. petHp end
             if GetPetHappiness then
                 local ok, hap = pcall(GetPetHappiness)
                 hap = ok and ns.SafeNum(hap) or nil
@@ -291,7 +291,7 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
         end
     end
     if tabCfg and tabCfg.prefix and tabCfg.prefix ~= "" then
-        -- Line 1 invokes the character skill in the AI, e.g. "[Skill Call] use aloria"
+        -- Line 1 invokes the character skill in the AI, e.g. "[Skill Call] use my-character"
         table.insert(lines, ns.ColorText("[Skill Call]", ns.COLORS.header) .. " " .. tabCfg.prefix)
     end
 

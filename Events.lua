@@ -203,8 +203,8 @@ local function ResolveLinkColor(colorTag, linkData, fullLink)
             local ok, res = pcall(C_Item.GetItemQualityByID, itemId)
             if ok and type(res) == "number" then q = res end
         end
-        if not q and GetItemInfo then
-            local ok, _, _, res = pcall(GetItemInfo, fullLink)
+        if not q and C_Item and C_Item.GetItemInfo then
+            local ok, _, _, res = pcall(C_Item.GetItemInfo, fullLink)
             if ok and type(res) == "number" then q = res end
         end
     end
@@ -640,6 +640,7 @@ local function OnEvent(event, ...)
     if event == "PLAYER_LOGIN" then
         ns.EnsureDB()
         ns.DebugReady()
+        pcall(ns.RunClientCheck)
         ns.Debug("info", "login, version " .. tostring(ns.VERSION or "?"))
         -- Version banner, read from the toc's ## Version field (see Core.lua)
         print(string.format("|cffffd100RP Chronicler|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
@@ -896,7 +897,7 @@ do
         local who, short
         if T.PETS[unit] then
             local petName, owner = ns.SafeStr(UnitName(unit)), ShortName(T.PETS[unit])
-            who = petName and owner and string.format("%s (%s's pet)", petName, owner)
+            who = petName and owner and string.format("%s's pet %s", owner, ns.FormatPet(petName, ns.GetPetSpecies(unit)))
             short = petName
         else
             who = ShortName(unit)
@@ -961,10 +962,6 @@ do
             local ok, d = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
             if not ok or not d then return nil end
             return ns.SafeStr(d.name) or false
-        elseif UnitDebuff then
-            local ok, n = pcall(UnitDebuff, unit, i)
-            if not ok or n == nil then return nil end
-            return ns.SafeStr(n) or false
         end
         return nil
     end
@@ -1012,10 +1009,8 @@ do
         if not UnitExists(unit) then return end
         local petName = ns.SafeStr(UnitName(unit))
         if not petName then return end
-        -- 0.5.0: name plus species, so "Crab" is never just a word
-        local species = ns.GetPetSpecies(unit)
-        local kind = (unit == "pet" and ns.GetPetKind) and ns.GetPetKind("pet") or "pet"
-        local label = string.format("%s (%s%s's %s)", petName, species and (species .. ", ") or "", owner, kind)
+        -- 0.6.3: "Mor's pet Snips (Crab)", so "Crab" is never just a word
+        local label = string.format("%s's pet %s", owner, ns.FormatPet(petName, ns.GetPetSpecies(unit)))
         local dead = UnitIsDead(unit) == true
         if dead and not st.dead then
             ns.RecordAdventureLine(string.format("[PET DEATH] %s died", label))

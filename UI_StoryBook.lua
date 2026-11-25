@@ -113,23 +113,18 @@ do
 end
 
 B.shareBtn = UI.CreateSleekButton(B.right, 52, 22, "Share", "gold")
-B.shareBtn:SetPoint("TOPLEFT", 0, -76)
 B.shareBtn.tipTitle = "|cffffd100Share|r"
 B.shareBtn.tipText = "Copy the story as clean plain text, for Discord or a forum post."
 B.editBtn = UI.CreateSleekButton(B.right, 56, 22, "Details")
-B.editBtn:SetPoint("LEFT", B.shareBtn, "RIGHT", 4, 0)
 B.editBtn.tipTitle = "|cffffd100Edit Details|r"
 B.editBtn.tipText = "Rename the story, or change the instance, zone, duration, date or party shown here."
 B.reimportBtn = UI.CreateSleekButton(B.right, 68, 22, "Re-Import")
-B.reimportBtn:SetPoint("LEFT", B.editBtn, "RIGHT", 4, 0)
 B.reimportBtn.tipTitle = "|cffffd100Re-Import|r"
 B.reimportBtn.tipText = "Replace this story with a new one. Details you edited by hand are kept."
 B.recBtn = UI.CreateSleekButton(B.right, 40, 22, "Run", "tool")
-B.recBtn:SetPoint("LEFT", B.reimportBtn, "RIGHT", 4, 0)
 B.recBtn.tipTitle = "|cffffd100Open the Run|r"
 B.recBtn.tipText = "Open the run this story was written from (Summary and Full Log), while the recording still exists."
 B.delBtn = UI.CreateSleekButton(B.right, 54, 22, "Delete", "danger")
-B.delBtn:SetPoint("TOPRIGHT", 0, -76)
 B.delBtn.tipTitle = "|cffff6b6bDelete Story|r"
 B.delBtn.tipText = "Click twice. Removes the story only; the recording stays."
 
@@ -157,11 +152,16 @@ do
         UI.RefreshStoryBook()
     end)
     B.viewerBtn = UI.CreateSleekButton(B.tip, 110, 18, "Copy for viewer", "gold")
-    B.viewerBtn:SetPoint("BOTTOMLEFT", 8, 5)
+    UI.SetButtonLabels(B.viewerBtn, "Copy for viewer", "Copy")
     B.viewerBtn.tipTitle = "|cffffd100Copy for viewer|r"
     B.viewerBtn.tipText = "For a story you imported this session: copy it with Ctrl+C and paste it into StoryViewer.html. Older stories are already there."
+    -- 0.6.3: the path to StoryViewer.html, ready to paste into a browser
+    B.pathBtn = UI.CreateSleekButton(B.tip, 84, 18, "Viewer path", "tool")
+    UI.SetButtonLabels(B.pathBtn, "Viewer path", "Path")
+    B.pathBtn.tipTitle = "|cffffd100Where is StoryViewer.html?|r"
+    B.pathBtn.tipText = "Shows its path, ready to copy into your browser's address bar."
+    B.pathBtn:SetScript("OnClick", function() UI.ShowViewerPath() end)
     B.jpgBtn = UI.CreateSleekButton(B.tip, 70, 18, "Use JPG", "tool")
-    B.jpgBtn:SetPoint("LEFT", B.viewerBtn, "RIGHT", 6, 0)
     B.jpgBtn.tipTitle = "|cffffd100Save screenshots as JPG|r"
     B.jpgBtn.tipText = "Your game saves screenshots as TGA, which browsers can't show. This switches the game's screenshot format to JPG."
     B.jpgBtn:SetScript("OnClick", function()
@@ -174,19 +174,138 @@ do
     end)
 end
 
+-- 0.6.3: Viewer path box. RP Chronicler can't know where the game is
+-- installed, so it never shows a guessed path as yours: StoryViewer.html
+-- shows its own address with a Copy button, you paste it here once, and
+-- from then on this box hands it back, ready for the address bar.
+do
+    local f = CreateFrame("Frame", "RPChroniclerViewerPathFrame", UIParent, UI.BACKDROP)
+    f:SetSize(580, 170)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    f:Hide()
+    UI.ApplyStoryTomeLook(f)
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "RPChroniclerViewerPathFrame") end
+    local title = UI.Label(f, "|cffffd100Open StoryViewer.html in your browser|r", "GameFontNormal")
+    title:SetPoint("TOPLEFT", 14, -12)
+    local sub = UI.Label(f, "", "GameFontHighlightSmall")
+    sub:SetPoint("TOPLEFT", 14, -30)
+    sub:SetPoint("RIGHT", f, "RIGHT", -14, 0)
+    sub:SetJustifyH("LEFT")
+    sub:SetJustifyV("TOP")
+    sub:SetWordWrap(true)
+    sub:SetSpacing(2)
+    local closeX = UI.CreateSleekButton(f, 22, 20, "x", "danger")
+    closeX:SetPoint("TOPRIGHT", -8, -8)
+    closeX:SetScript("OnClick", function() f:Hide() end)
+    local eb = CreateFrame("EditBox", "RPChroniclerViewerPathBox", f, "InputBoxTemplate")
+    eb:SetHeight(22)
+    eb:SetPoint("BOTTOMLEFT", 20, 40)
+    eb:SetPoint("BOTTOMRIGHT", -16, 40)
+    eb:SetAutoFocus(false)
+    eb:SetMaxLetters(260)
+    eb:SetFontObject(ChatFontNormal)
+    local hint = eb:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("LEFT", 2, 0)
+    hint:SetText("Paste the address StoryViewer.html shows (Ctrl+V)")
+    local example = UI.Label(f, "", "GameFontHighlightSmall")
+    example:SetPoint("BOTTOMLEFT", eb, "TOPLEFT", -4, 4)
+    example:SetPoint("RIGHT", f, "RIGHT", -14, 0)
+    example:SetWordWrap(false)
+    local function Sync()
+        local has = (eb:GetText() or ""):match("%S") ~= nil
+        if has then hint:Hide() else hint:Show() end
+    end
+    eb:SetScript("OnEscapePressed", function() f:Hide() end)
+    eb:SetScript("OnEnterPressed", function(self)
+        self:SetText(ns.StoryViewerPath())
+        self:HighlightText()
+    end)
+    eb:SetScript("OnTextChanged", function(self, userInput)
+        if userInput then ns.SetStoryViewerPath(self:GetText()) end
+        Sync()
+    end)
+    eb:SetScript("OnEditFocusLost", function(self)
+        -- show the browser-ready form of what was pasted
+        local saved = ns.StoryViewerPath()
+        if saved ~= "" and saved ~= self:GetText() then self:SetText(saved) end
+    end)
+    local clear = UI.CreateSleekButton(f, 70, 22, "Clear", "tool")
+    clear:SetPoint("BOTTOMLEFT", 14, 10)
+    clear.tipTitle = "|cffffd100Clear|r"
+    clear.tipText = "Forget the saved address, to paste a new one."
+    clear:SetScript("OnClick", function()
+        ns.SetStoryViewerPath("")
+        eb:SetText("")
+        eb:SetFocus()
+    end)
+    local done = UI.CreateSleekButton(f, 70, 22, "Done", "gold")
+    done:SetPoint("BOTTOMRIGHT", -14, 10)
+    done:SetScript("OnClick", function() f:Hide() end)
+    function UI.ShowViewerPath()
+        local saved = ns.StoryViewerPath()
+        if saved ~= "" then
+            sub:SetText("|cffd7c4a3Press |cffffd100Ctrl+C|cffd7c4a3, paste it into your browser's address bar and press Enter. " ..
+                "This is the address you pasted from StoryViewer.html; paste a new one if you moved the game.|r")
+            example:SetText("|cff8f9ba8Your StoryViewer.html:|r")
+        else
+            sub:SetText("|cffd7c4a3First time: open your game folder, go to |cfff5e6c8_forever_\\Interface\\AddOns\\RPChronicler|cffd7c4a3 and double-click |cfff5e6c8StoryViewer.html|cffd7c4a3. " ..
+                "The page shows its own address with a |cffffd100Copy|cffd7c4a3 button: paste it here once (Ctrl+V), and from then on this box gives it back to you.|r")
+            example:SetText("|cff8f9ba8It looks like (example, yours may differ): " .. ns.VIEWER_PATH_EXAMPLE .. "|r")
+        end
+        f:SetHeight(math.max(150, 124 + math.ceil(sub:GetStringHeight() or 28)))
+        eb:SetText(saved)
+        Sync()
+        f:Show()
+        eb:SetFocus()
+        eb:SetCursorPosition(0)
+        eb:HighlightText()
+    end
+end
+
 -- Fills the tip and sizes it to its text; returns its height
 function UI.LayoutStoryTip()
-    local text = "|cffffd100Read your stories with screenshots:|r |cffd7c4a3double-click |cfff5e6c8StoryViewer.html|cffd7c4a3 in Interface\\AddOns\\RPChronicler. " ..
-        "Stories appear there after you log out. For one you imported just now, use Copy for viewer.|r"
+    local text = "|cffffd100Read your stories with screenshots:|r |cffd7c4a3open |cfff5e6c8StoryViewer.html|cffd7c4a3 (Viewer path). " ..
+        "Picking your |cfff5e6c8RPChronicler.lua|cffd7c4a3 there loads every story the game has saved, after you log out or switch characters. " ..
+        "For one you imported just now, use Copy for viewer.|r"
     local jpgOk = ns.ScreenshotFormatOK()
     if not jpgOk then
         text = text .. "\n|cffff6b6bYour screenshots are TGA, which browsers can't show.|r"
     end
     B.tipText:SetText(text)
     if jpgOk then B.jpgBtn:Hide() else B.jpgBtn:Show() end
-    local h = math.max(58, math.ceil((B.tipText:GetStringHeight() or 30) + 34))
+    -- 0.6.3: the buttons flow under the text and wrap when the pane is narrow
+    local textH = math.ceil(B.tipText:GetStringHeight() or 30)
+    local rowH = UI.FlowRow(B.tip, { B.viewerBtn, B.pathBtn, B.jpgBtn }, nil,
+        { x = 8, y = textH + 10, width = (B.tip:GetWidth() or 300) - 16, rowH = 18 })
+    local h = math.max(58, textH + 10 + rowH + 6)
     B.tip:SetHeight(h)
     return h
+end
+
+-- 0.6.3: the action row, the tip and the reader follow the pane's width
+-- and the font size (UI.FlowRow): the row wraps instead of overlapping
+function UI.LayoutStoryBook()
+    if (B.right:GetWidth() or 0) < 50 then return end
+    local rowH = UI.FlowRow(B.right, { B.shareBtn, B.editBtn, B.reimportBtn, B.recBtn }, { B.delBtn }, { y = 76 })
+    local top = 76 + rowH + 4
+    B.tip:ClearAllPoints()
+    B.tip:SetPoint("TOPLEFT", 0, -top)
+    B.tip:SetPoint("TOPRIGHT", 0, -top)
+    if ns.Get("exportTip") then
+        B.tip:Show()
+        top = top + UI.LayoutStoryTip() + 4
+    else
+        B.tip:Hide()
+    end
+    B.readBg:ClearAllPoints()
+    B.readBg:SetPoint("BOTTOMRIGHT", 0, 0)
+    B.readBg:SetPoint("TOPLEFT", 0, -top)
 end
 
 -- The reader (warm parchment)
@@ -218,6 +337,93 @@ do
     B.text:SetShadowOffset(1, -1)
     B.text:SetShadowColor(0, 0, 0, 0.95)
     pcall(B.text.SetFont, B.text, "Fonts\\FRIZQT__.TTF", 14, "")
+
+    -- 0.6.3: the story's cover, above the text: your character (a 3D model
+    -- dressed in the gear worn on that run) with the title and that gear
+    B.cover = CreateFrame("Frame", nil, B.child, UI.BACKDROP)
+    B.cover:SetPoint("TOPLEFT", 0, 0)
+    B.cover:SetPoint("TOPRIGHT", 0, 0)
+    B.cover:SetHeight(200)
+    UI.ApplyDarkGlass(B.cover, 0.14, 0.10, 0.07, 0.65, 0.70, 0.55, 0.25, 0.55)
+    B.cover:Hide()
+    local okModel, model = pcall(CreateFrame, "DressUpModel", nil, B.cover)
+    if okModel and model then
+        model:SetSize(150, 188)
+        model:SetPoint("LEFT", 6, 0)
+        B.model = model
+    end
+    B.coverTitle = B.cover:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    B.coverTitle:SetPoint("TOPLEFT", 170, -16)
+    B.coverTitle:SetPoint("RIGHT", -12, 0)
+    B.coverTitle:SetJustifyH("LEFT")
+    pcall(B.coverTitle.SetFont, B.coverTitle, "Fonts\\MORPHEUS.TTF", 20, "")
+    B.coverGear = B.cover:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    B.coverGear:SetPoint("TOPLEFT", B.coverTitle, "BOTTOMLEFT", 0, -10)
+    B.coverGear:SetPoint("RIGHT", -12, 0)
+    B.coverGear:SetJustifyH("LEFT")
+    B.coverGear:SetJustifyV("TOP")
+    B.coverGear:SetSpacing(3)
+end
+
+-- 0.6.3: dresses the cover model in the run's gear. The model shows the
+-- character you are playing, so it only appears on that character's own
+-- stories. Every model call is guarded (some clients draw no models).
+local function DressCover(st)
+    local m = B.model
+    if not m then return false end
+    local ok = pcall(m.SetUnit, m, "player")
+    if not ok then return false end
+    pcall(m.Undress, m)
+    for _, g in ipairs(type(st.gear) == "table" and st.gear or {}) do
+        if type(g) == "table" and g.link then pcall(m.TryOn, m, g.link) end
+    end
+    pcall(m.SetFacing, m, 0.35)
+    return true
+end
+
+-- Fills the cover; returns its height (0 when the story has none)
+function UI.LayoutStoryCover(st, info)
+    local gear = type(st.gear) == "table" and st.gear or {}
+    if not ns.Get("storyCover") or #gear == 0 then
+        B.cover:Hide()
+        return 0
+    end
+    local mine = st.char and st.char == ns.PlayerName()
+    local names = {}
+    for _, g in ipairs(gear) do
+        if g.name and (tonumber(g.q) or 0) >= 2 then
+            local hex = ({ [2] = "1eff00", [3] = "0070dd", [4] = "a335ee", [5] = "ff8000" })[tonumber(g.q)] or "f5e6c8"
+            table.insert(names, "|cff" .. hex .. g.name .. "|r")
+        end
+    end
+    B.coverTitle:SetText("|cffffd100" .. info.name .. "|r")
+    local who = st.char and ("|cffd7c4a3" .. st.char .. "|r") or "|cffd7c4a3You|r"
+    local lines = { who .. " |cffb0a080wore on this run:|r" }
+    if #names > 0 then
+        for i = 1, math.min(#names, 9) do table.insert(lines, "  " .. names[i]) end
+    else
+        table.insert(lines, "  |cff9e9e9eplain traveling clothes|r")
+    end
+    B.coverGear:SetText(table.concat(lines, "\n"))
+    local x = 12
+    if mine and B.model then
+        B.model:Show()
+        x = 170
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function() if B.cover:IsShown() then DressCover(st) end end)
+        else
+            DressCover(st)
+        end
+    elseif B.model then
+        B.model:Hide()
+    end
+    B.coverTitle:ClearAllPoints()
+    B.coverTitle:SetPoint("TOPLEFT", x, -16)
+    B.coverTitle:SetPoint("RIGHT", -12, 0)
+    local h = math.max(mine and B.model and 200 or 0, 16 + (B.coverTitle:GetStringHeight() or 20) + 10 + (B.coverGear:GetStringHeight() or 40) + 16)
+    B.cover:SetHeight(math.ceil(h))
+    B.cover:Show()
+    return math.ceil(h) + 10
 end
 
 -- Empty state: how to make a story
@@ -277,9 +483,49 @@ do
 end
 
 local function UpdateReaderHeight()
-    local h = B.text:GetStringHeight() or 200
+    local h = (B.text:GetStringHeight() or 200) + (B.coverH or 0)
     B.child:SetHeight(math.max(230, h + 32))
     B.scroll:UpdateScrollChildRect()
+end
+
+-- 0.6.3: small touches: a page-turn sound and a fade when you open
+-- another story, and a soft glow on stories imported this session until
+-- you open them. All guarded.
+local function PageTurn()
+    if PlaySound and SOUNDKIT and SOUNDKIT.IG_ABILITY_PAGE_TURN then pcall(PlaySound, SOUNDKIT.IG_ABILITY_PAGE_TURN) end
+end
+local function FadeIn(frame)
+    if UIFrameFadeIn then pcall(UIFrameFadeIn, frame, 0.3, 0, 1) end
+end
+B.sessionStart = time and time() or 0
+B.seen = {}
+local function Glow(card, on)
+    if on and not card.glow then
+        local t = card:CreateTexture(nil, "BACKGROUND")
+        t:SetPoint("TOPLEFT", -3, 3)
+        t:SetPoint("BOTTOMRIGHT", 3, -3)
+        t:SetTexture(UI.SOLID_TEX)
+        t:SetVertexColor(1, 0.82, 0.30, 0.55)
+        card.glow = t
+        if card.CreateAnimationGroup then
+            local ag = card:CreateAnimationGroup()
+            local a = ag:CreateAnimation("Alpha")
+            if a.SetFromAlpha then a:SetFromAlpha(0.15); a:SetToAlpha(0.9) end
+            if a.SetDuration then a:SetDuration(0.9) end
+            if a.SetTarget then pcall(a.SetTarget, a, t) end
+            if ag.SetLooping then ag:SetLooping("BOUNCE") end
+            card.glowAnim = ag
+        end
+    end
+    if card.glow then
+        if on then
+            card.glow:Show()
+            if card.glowAnim and not card.glowAnim:IsPlaying() then card.glowAnim:Play() end
+        else
+            card.glow:Hide()
+            if card.glowAnim then card.glowAnim:Stop() end
+        end
+    end
 end
 
 local function MakeCard(parent)
@@ -332,6 +578,7 @@ function UI.RefreshStoryBook()
         card.subLbl:SetText("|cffb0a080" .. ((info.instance ~= "" and info.instance) or ns.GetRunKindLabel(adv)) .. " - " .. (info.date or "") .. "|r")
         local sel = (adv.id == ns.state.bookStoryId)
         card.isSelected = sel
+        Glow(card, (adv.importedAt or 0) >= B.sessionStart and not B.seen[adv.id] and not sel)
         if sel then
             card:SetBackdropColor(0.22, 0.16, 0.08, 0.96)
             card:SetBackdropBorderColor(0.90, 0.73, 0.32, 0.95)
@@ -379,15 +626,17 @@ function UI.RefreshStoryBook()
     B.stats:SetText(ns.GetBookStats(info))
     if ns.StoryRun(adv) then B.recBtn:Enable() else B.recBtn:Disable() end
 
-    B.readBg:ClearAllPoints()
-    B.readBg:SetPoint("BOTTOMRIGHT", 0, 0)
-    if ns.Get("exportTip") then
-        B.tip:Show()
-        B.readBg:SetPoint("TOPLEFT", 0, -(102 + UI.LayoutStoryTip() + 4))
-    else
-        B.tip:Hide()
-        B.readBg:SetPoint("TOPLEFT", 0, -104)
+    UI.LayoutStoryBook()
+    B.seen[adv.id] = true
+    for idx, card in ipairs(B.cards) do
+        if card:IsShown() and list[idx] and list[idx].id == adv.id then Glow(card, false) end
     end
+
+    local okCover, coverH = pcall(UI.LayoutStoryCover, adv, info)
+    B.coverH = okCover and coverH or 0
+    if not okCover then B.cover:Hide() end
+    B.text:ClearAllPoints()
+    B.text:SetPoint("TOPLEFT", B.child, "TOPLEFT", 2, -(2 + B.coverH))
 
     local shown = ns.NormalizeStoryText(adv.story)
     shown = ns.CleanStoryHeader(shown)
@@ -410,8 +659,10 @@ function UI.RefreshStoryBook()
     B.text:SetText(ns.DecorateStoryBosses(shown, adv))
     UpdateReaderHeight()
     if B.shownId ~= adv.id then
+        if B.shownId then PageTurn() end
         B.shownId = adv.id
         B.scroll:SetVerticalScroll(0)
+        FadeIn(B.child)
     end
     if C_Timer and C_Timer.After then C_Timer.After(0, UpdateReaderHeight) end
 end
@@ -549,6 +800,7 @@ UI.SetSectionOnShow("BOOK", function() UI.RefreshStoryBook() end)
 root:SetScript("OnHide", function() UI.HideTooltip() end)
 
 UI.AddReflow(function()
+    if B.right:IsVisible() then UI.LayoutStoryBook() end
     local w = B.scroll:GetWidth()
     if w and w > 50 then
         B.child:SetWidth(w)

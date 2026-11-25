@@ -16,10 +16,12 @@ local BOOK_FIELDS = { "title", "instance", "duration", "zone", "date", "party", 
 -- its top level, so every helper that reads a run reads a story too.
 --   { id, runId, story, book, importedAt, title, zone, kind, ... }
 -- =========================================================
-local STORY_META = { "title", "zone", "instanceName", "kind", "startDate", "endDate", "startTime", "endTime",
+local STORY_META = { "code", "title", "zone", "instanceName", "kind", "startDate", "endDate", "startTime", "endTime",
     "participants", "bossKills", "bossInfo", "wipes", "deaths", "foesDefeated", "killCounts", "kills", "shots",
     "places", "levelStart", "levelEnd", "questsDone", "coin", "keyLoot", "highlights", "metCompanions",
-    "pvpKills", "pvpDeaths", "skills", "milestones", "lastSeen" }
+    "pvpKills", "pvpDeaths", "skills", "milestones", "lastSeen",
+    -- 0.6.3: the cover (who and what they wore), name fixes, version stamp
+    "char", "gear", "fixes", "addonVersion", "clientBuild" }
 
 local function DeepCopy(v, depth)
     if type(v) ~= "table" then return v end
@@ -35,6 +37,8 @@ local function CopyRunMeta(st, adv)
         if adv[k] ~= nil then st[k] = DeepCopy(adv[k]) end
     end
     st.duration = ns.GetRunDuration(adv)
+    -- 0.6.3: the story's copy of the run reads the fixed names
+    if ns.FixRunCopy then pcall(ns.FixRunCopy, st) end
 end
 
 local function Stories()
@@ -103,7 +107,7 @@ function ns.SetAdventureStory(advId, rawStoryText)
     ns.EnsureDB()
     -- Normalizes || -> |, strips code fences and Markdown, maps non-ASCII
     -- glyphs to ASCII, and auto-closes dangling color escapes (see Core.lua)
-    local cleaned = ns.CleanStoryHeader(ns.NormalizeStoryText(rawStoryText))
+    local cleaned = ns.CleanStoryHeader(ns.StripRunIdLine(ns.NormalizeStoryText(rawStoryText)))
     local adv = ns.FindAdventure(advId)
     if not adv then return false end
     local st = ns.StoryForRun(adv.id)
@@ -116,10 +120,126 @@ function ns.SetAdventureStory(advId, rawStoryText)
     if ok and type(colored) == "string" then cleaned = colored; st.autoColored = ns.AUTOCOLOR_VERSION end
     st.story = cleaned
     st.importedAt = time()
+    st.importedWith = ns.VERSION
     adv.storyId = st.id
     local meta = ApplyBook(st, cleaned)
     ns.Debug("run", string.format("story imported for %s (%d chars, %d chapters)", tostring(meta.title or adv.title), #cleaned, #(meta.chapters or {})))
     return true, st.id
+end
+
+-- =========================================================
+-- Run ID in the story (0.6.3): the AI ends the story with "Run ID: X".
+-- Import links the story by it; the line itself is not kept in the text.
+-- =========================================================
+function ns.ReadStoryRunCode(text)
+    local plain = ns.StripColors(tostring(text or "")):gsub("||", "|")
+    local code
+    for c in plain:gmatch("[Rr][Uu][Nn]%s*[Ii][Dd]%s*:%s*%[?([%w]+)") do code = c end
+    return code and code:upper() or nil
+end
+
+function ns.StripRunIdLine(text)
+    if type(text) ~= "string" then return text end
+    local out = {}
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        if not ns.StripColors(line):match("^%s*[Rr][Uu][Nn]%s*[Ii][Dd]%s*:") then table.insert(out, line) end
+    end
+    while #out > 0 and ns.StripColors(out[#out]):match("^%s*$") do table.remove(out) end
+    return table.concat(out, "\n")
+end
+
+-- The story already saved with this Run ID (its recording may be gone)
+local function StoryByCode(code)
+    if not code then return nil end
+    for _, st in ipairs(Stories()) do
+        if (st.story or "") ~= "" and ns.RunCode(st) == code then return st end
+    end
+    return nil
+end
+
+-- One way in for every import. The recording is found from the story's
+-- Run ID, else the run the player picked (advId); with neither, the story
+-- is kept on its own (no recording needed). storyId: a story to replace.
+-- Returns ok, storyId, linked (the run it was linked to, or nil).
+function ns.ImportStory(rawStoryText, advId, storyId)
+    ns.EnsureDB()
+    if type(rawStoryText) ~= "string" or rawStoryText:match("^%s*$") then return false end
+    local code = ns.ReadStoryRunCode(ns.NormalizeStoryText(rawStoryText))
+    local target = storyId and ns.FindStory(storyId) or nil
+    local adv = (target and ns.StoryRun(target)) or (advId and ns.FindAdventure(advId))
+        or (code and ns.FindAdventureByCode(code)) or nil
+    if adv then
+        local ok, id = ns.SetAdventureStory(adv.id, rawStoryText)
+        return ok, id, ok and adv or nil
+    end
+    -- 0.6.3: no Run ID (older template): the run that started at the
+    -- story's "Date:" (the header copies it from the Full Log)
+    if not code and not target then
+        adv = ns.FindAdventureByDate(ns.ParseStoryMeta(ns.NormalizeStoryText(rawStoryText)).date)
+        if adv then
+            local ok, id = ns.SetAdventureStory(adv.id, rawStoryText)
+            return ok, id, ok and adv or nil
+        end
+    end
+    target = target or StoryByCode(code)
+    if target then
+        local ok, id = ns.SetStoryText(target.id, rawStoryText)
+        return ok, id, nil
+    end
+    -- Unlinked: a story with no recording behind it
+    local st = { id = NewStoryId(), code = code }
+    table.insert(Stories(), 1, st)
+    local cleaned = ns.CleanStoryHeader(ns.StripRunIdLine(ns.NormalizeStoryText(rawStoryText)))
+    local ok, colored = pcall(ns.AutoColorStory, cleaned, st)
+    if ok and type(colored) == "string" then cleaned = colored; st.autoColored = ns.AUTOCOLOR_VERSION end
+    st.story = cleaned
+    st.importedAt = time()
+    st.importedWith = ns.VERSION
+    local meta = ApplyBook(st, cleaned)
+    st.title = meta.title or "Story"
+    st.zone = meta.zone or meta.instance
+    st.startDate = meta.date
+    ns.Debug("run", string.format("story imported without a recording (%d chars)", #cleaned))
+    return true, st.id, nil
+end
+
+-- The one run (live or saved) that started at this "YYYY-MM-DD HH:MM", or nil
+function ns.FindAdventureByDate(stamp)
+    stamp = type(stamp) == "string" and stamp:match("(%d%d%d%d%-%d%d%-%d%d %d%d:%d%d)") or nil
+    if not stamp then return nil end
+    local found
+    local function Check(adv)
+        if type(adv) == "table" and adv.startDate == stamp then
+            if found then found = false else found = found == nil and adv or found end
+        end
+    end
+    Check(ns.GetActiveAdventure and ns.GetActiveAdventure())
+    for _, adv in ipairs((RPChroniclerDB and RPChroniclerDB.adventures) or {}) do Check(adv) end
+    return found or nil
+end
+
+-- 0.6.3: stories imported unlinked (no Run ID, older template) get their
+-- title from the first line and their recording from the header date.
+-- Runs at login; a story already linked or renamed by hand is left alone.
+function ns.RelinkStories()
+    for _, st in ipairs(Stories()) do
+        if type(st) == "table" and (st.story or "") ~= "" then
+            local book = type(st.book) == "table" and st.book or nil
+            local okMeta, meta = pcall(ns.ParseStoryMeta, st.story)
+            meta = okMeta and meta or {}
+            if book and not book.title and not (book.edited or {}).title and meta.title then
+                book.title = meta.title
+            end
+            if not st.runId then
+                local adv = ns.FindAdventureByDate(meta.date)
+                if adv and not ns.StoryForRun(adv.id) then
+                    CopyRunMeta(st, adv)
+                    st.runId = adv.id
+                    adv.storyId = st.id
+                end
+            end
+        end
+    end
 end
 
 -- Re-import onto a story whose recording may be gone
@@ -128,7 +248,7 @@ function ns.SetStoryText(storyId, rawStoryText)
     if not st then return false end
     local run = ns.StoryRun(st)
     if run then return ns.SetAdventureStory(run.id, rawStoryText) end
-    local cleaned = ns.NormalizeStoryText(rawStoryText)
+    local cleaned = ns.StripRunIdLine(ns.NormalizeStoryText(rawStoryText))
     local ok, colored = pcall(ns.AutoColorStory, cleaned, st)
     if ok and type(colored) == "string" then cleaned = colored; st.autoColored = ns.AUTOCOLOR_VERSION end
     st.story = cleaned
@@ -277,6 +397,13 @@ function ns.ParseStoryMeta(text)
         local t = lines[i]:gsub("^#+%s*", ""):match("^[Tt]itle:%s*(.-)%s*$")
         if t and t ~= "" then meta.title = t:sub(1, 120); titleAt = i; break end
     end
+    -- 0.6.3: a story from an older template has no "Title:" label; when
+    -- line 2 is the "<place> | <duration> | <zone>" header, line 1 is the title
+    if not titleAt and #lines >= 2 and lines[2]:find("|", 1, true)
+        and not lines[1]:find("|", 1, true) and not lines[1]:match("^[Cc]hapter%s") and #lines[1] <= 120 then
+        meta.title = lines[1]:gsub("^#+%s*", "")
+        titleAt = 1
+    end
     local second = lines[(titleAt or 1) + 1] or ""
     if second:find("|", 1, true) then
         local parts = {}
@@ -347,7 +474,8 @@ end
 -- 0.5.0: "[Shot 3]" markers place screenshots in the exported page; the
 -- reader and the plain text leave them out
 function ns.StripShotMarkers(text)
-    text = (text or ""):gsub("%s*%[[Ss]hot%s*%d+%]", "")
+    -- [Shot 3] (before 0.6.3) and [Shot TPX8OK-3]
+    text = (text or ""):gsub("%s*%[[Ss][Hh][Oo][Tt]%s*[%w]*%-?%d+%]", "")
     return text
 end
 
@@ -374,17 +502,75 @@ function ns.BuildViewerText(st)
     if not endT and st.startTime and (tonumber(st.duration) or 0) > 0 then endT = st.startTime + st.duration end
     Put("end", endT and math.floor(endT))
     Put("duration", tonumber(st.duration) and math.floor(st.duration))
+    -- 0.6.3: the Run ID, and each shot as "<ID> <time> <file name> <caption>"
+    Put("run", ns.RunCode(st))
+    Put("version", st.importedWith or st.addonVersion)
     for i, sh in ipairs(st.shots or {}) do
         if type(sh) == "table" and sh.at then
-            Put("shot", (sh.n or i) .. " " .. math.floor(sh.at) .. " " .. OneLine(sh.description))
+            local file = sh.file or ns.ShotFileStem(sh.at) or "-"
+            Put("shot", ns.ShotId(st, sh, i) .. " " .. math.floor(sh.at) .. " " .. file .. " " .. OneLine(sh.description))
         end
     end
     for name, kind in pairs(ns.GetRunBossKinds(st)) do Put("boss", kind .. " " .. name) end
+    -- 0.6.3: the run's key moments for the viewer's timeline
+    local run = ns.StoryRun(st)
+    for _, line in ipairs(ns.TimelineMarks(run)) do Put("mark", line) end
     table.insert(out, "@story")
     table.insert(out, (tostring(st.story):gsub("||", "|")))
     -- Pipes doubled, so the copy box shows the color codes as text and the
     -- clipboard keeps them (the viewer turns || back into |)
     return (table.concat(out, "\n"):gsub("|", "||"))
+end
+
+-- 0.6.3: StoryViewer.html's address, to paste into a browser. An addon
+-- can't see where the game is installed, so RP Chronicler never guesses:
+-- StoryViewer.html shows its own address with a Copy button, the player
+-- pastes it into the Viewer path box once, and it is kept from then on.
+-- A Windows path (E:\World of Warcraft\...) is turned into the
+-- browser-ready form ("file:///E:/World%20of%20Warcraft/...").
+ns.VIEWER_PATH_EXAMPLE = "file:///C:/Program%20Files%20(x86)/World%20of%20Warcraft/_forever_/Interface/AddOns/RPChronicler/StoryViewer.html"
+function ns.ViewerUrl(path)
+    path = tostring(path or ""):gsub("[\r\n]", ""):match("^%s*(.-)%s*$")
+    if path == "" then return "" end
+    if path:match("^%a:[\\/]") then
+        path = "file:///" .. path:gsub("\\", "/")
+    elseif path:match("^\\\\") then
+        path = "file:" .. path:gsub("\\", "/")
+    end
+    if path:match("^file:") then path = path:gsub(" ", "%%20") end
+    return path
+end
+-- The saved address, or "" when the player hasn't pasted one yet
+function ns.StoryViewerPath()
+    local p = ns.Get("viewerPath")
+    return (type(p) == "string" and p:match("%S")) and ns.ViewerUrl(p) or ""
+end
+function ns.SetStoryViewerPath(path)
+    return ns.Set("viewerPath", ns.ViewerUrl(path))
+end
+
+-- 0.6.3: the key moments of a run (bosses, wipes, deaths, fights, shots,
+-- levels, quests, places, notes) as "HH:MM:SS [TAG] text" lines, for the
+-- Story Viewer's timeline. At most 300.
+local MARK_TAGS = { "BOSS ENGAGED", "BOSS KILL", "BOSS RESET", "WIPE", "DEATH", "FIGHT", "KILL", "SHOT", "LEVEL",
+    "QUEST", "PLACE", "NOTE", "HIGHLIGHT", "MILESTONE", "LOOT" }
+function ns.TimelineMarks(run)
+    local out = {}
+    if type(run) ~= "table" then return out end
+    for _, line in ipairs(run.fullTimeline or {}) do
+        local stamp, tag = tostring(line):match("^%[(%d%d:%d%d:%d%d)%]%s*%[([%u ]+)")
+        if stamp and tag then
+            for _, t in ipairs(MARK_TAGS) do
+                if tag == t or tag:sub(1, #t + 1) == t .. " " then
+                    local text = ns.ApplyRunFixes(run, ns.StripColors(tostring(line):sub(12)))
+                    table.insert(out, stamp .. " " .. text:sub(1, 160))
+                    break
+                end
+            end
+        end
+        if #out >= 300 then break end
+    end
+    return out
 end
 
 -- The stats line of a story, by run type, with zeros hidden

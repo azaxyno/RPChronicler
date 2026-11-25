@@ -473,8 +473,7 @@ local function OnPetChange()
     local now = GetTime()
     if name and (now - C.tameAt) < 20 and name ~= C.petName then
         C.tameAt = 0
-        local species = ns.GetPetSpecies("pet")
-        Line("milestones", string.format("[MILESTONE] %s tamed a new pet: %s%s", Me(), name, species and (" (" .. species .. ")") or ""))
+        Line("milestones", string.format("[MILESTONE] %s tamed a new pet: %s", Me(), ns.FormatPet(name, ns.GetPetSpecies("pet"))))
     end
     C.petName = name or C.petName
 end
@@ -529,9 +528,9 @@ local function OnNewPet(petID)
     local name
     if C_PetJournal and C_PetJournal.GetPetInfoByPetID then
         local ok, _, custom, _, _, _, _, _, species = pcall(C_PetJournal.GetPetInfoByPetID, petID)
-        if ok then name = ns.SafeStr(custom) or ns.SafeStr(species) end
+        if ok then name = ns.FormatPet(ns.SafeStr(custom) or ns.SafeStr(species), ns.SafeStr(species)) end
     end
-    Line("milestones", string.format("[MILESTONE] %s gained a new companion pet%s", Me(), name and (": " .. name) or ""))
+    Line("milestones", string.format("[MILESTONE] %s gained a new pet%s", Me(), name and (": " .. name) or ""))
 end
 
 -- =========================================================
@@ -750,9 +749,6 @@ function ns.IsQuestItem(link)
     if not link then return false end
     if C_Item and C_Item.GetItemInfoInstant then
         local ok, _, itemType, _, _, _, classID = pcall(C_Item.GetItemInfoInstant, link)
-        if ok and (classID == 12 or itemType == "Quest") then return true end
-    elseif GetItemInfoInstant then
-        local ok, _, itemType, _, _, _, classID = pcall(GetItemInfoInstant, link)
         if ok and (classID == 12 or itemType == "Quest") then return true end
     end
     return false

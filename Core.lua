@@ -1,8 +1,8 @@
 local ADDON_NAME, ns = ...
 
-local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.2"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.3"
 
 BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
 BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
@@ -12,11 +12,12 @@ BINDING_NAME_RPCHRONICLER_MARK = "Bookmark Adventure Moment"
 BINDING_NAME_RPCHRONICLER_RUN_START = "Start Recording an Adventure"
 BINDING_NAME_RPCHRONICLER_RUN_PAUSE = "Pause / Resume Recording"
 BINDING_NAME_RPCHRONICLER_RUN_END = "End & Save Recording"
+BINDING_NAME_RPCHRONICLER_NOTE = "Add a Story Note (character's thought)"
 
 ns.MAX_LINES = 25
 ns.MAX_PLAYER_CHAT = 5
 
-ns.DEFAULT_TRIGGER = "use aloria"
+ns.DEFAULT_TRIGGER = "use my-character"
 
 -- 0.6.0: the story skills' names (the "name:" line of the two story
 -- templates in UI_Options.lua). The Full Log's first line is "use <name>".
@@ -89,10 +90,13 @@ ns.LOG_GROUPS = {
       tip = "Quests accepted and done, objectives, and what quest givers, bosses and named NPCs say." },
     { key = "travel", label = "Travel and progress", cats = { "levels", "places", "milestones" },
       tip = "Level ups, new places, and milestones: new spells, pets, mounts, achievements and reputation." },
-    { key = "loot", label = "Loot", cats = { "loot", "lootSource" },
-      tip = "Green and better items, who got them and where they came from." },
+    { key = "loot", label = "Loot and gear", cats = { "loot", "lootSource", "gear" },
+      tip = "Green and better items, who got them and where they came from, and the gear you wore on the run." },
     { key = "chat", label = "Group chat", cats = { "chat", "guildmates" },
       tip = "Say, yell, emotes, whispers and group chat, and which party members are your guildmates. Guild and world channels and OOC never go in." },
+    -- 0.6.3: what you type with /rp note (or the Note button) during a run
+    { key = "notes", label = "Your notes", cats = { "notes" },
+      tip = "Your character's thoughts that you add with /rp note or the Note button while a run records." },
 }
 ns.LOG_CAT_GROUP = {}
 for _, g in ipairs(ns.LOG_GROUPS) do
@@ -112,7 +116,7 @@ ns.LOG_TAGS = {
     { tag = "[CC]", text = "mind control, fear, stun, polymorph." },
     { tag = "[AGGRO]", text = "a foe turning on someone else." },
     { tag = "[DANGER] [SAVED] [DEATH] [REZ]", text = "near death, pulled back from the brink, a death with what they were fighting, a resurrection." },
-    { tag = "[PET] [PET DEATH]", text = "the party's pets. Pets show as \"Name (Species, owner's hunter pet)\", e.g. \"Snips (Crab, ...)\": Snips is the pet's own name and a crab is what it is. Always call the pet by its name and write it as the creature it is (\"Snips, her crab\"). A pet named after its species shows as \"Crab (hunter pet)\": it is simply named Crab." },
+    { tag = "[PET] [PET DEATH]", text = "the party's pets. Every pet shows as \"Name (Family)\": \"Snips (Crab)\" means a crab named Snips. Always call the pet by its name and write it as the creature it is (\"Snips the crab\"). \"Crab (Crab)\" is a crab that is simply named Crab." },
     { tag = "[MILESTONE]", text = "a new spell, pet, mount, achievement or reputation standing." },
     { tag = "[QUEST]", text = "quests accepted and completed." },
     { tag = "[QUEST TEXT]", text = "the quest giver's own words (quote them sparingly)." },
@@ -121,7 +125,8 @@ ns.LOG_TAGS = {
     { tag = "[PLACE]", text = "a new place reached." },
     { tag = "[LOOT]", text = "an item with who got it and where it came from (crafted, from a foe, quest reward, bought, traded, mail, gathered)." },
     { tag = "[HIGHLIGHT]", text = "a moment the player marked: give it a scene." },
-    { tag = "[SHOT N]", text = "a screenshot taken at that moment; the \"Screenshots\" list in the header numbers them. Put the marker [Shot N] on its own line in the story where that picture fits best (each number once, in order), plain and outside any color code: close every |c...|r before it. A marker changes nothing else: after it, keep coloring every name exactly as before. RP Chronicler hides the markers in game and the exporter shows the pictures there." },
+    { tag = "[NOTE]", text = "the player's character's own thought or feeling at that moment, typed by the player: their inner voice. Weave it in as what they think or feel right there (never as spoken dialogue), and let it color the scene." },
+    { tag = "[SHOT ID]", text = "a screenshot taken at that moment, with its ID (e.g. [SHOT TPX8OK-2]); the \"Screenshots\" list in the header gives every ID and what was happening. Pick only the pictures that fit the story (a few of many is fine, skip the rest) and put each marker on its own line where it fits best, copied exactly with its full ID, e.g. [Shot TPX8OK-2] (each ID once, in story order), plain and outside any color code: close every |c...|r before it. A marker changes nothing else: after it, keep coloring every name exactly as before. RP Chronicler hides the markers in game and the story viewer shows the pictures there." },
     { tag = "[Party] [Say] [Emote] [Whisper]", text = "real chat quotes: weave them in verbatim." },
 }
 
@@ -147,7 +152,7 @@ ns.KNOWN_NOTE_MAX = 300
 ns.SETTINGS = {
     { key = "rpCopy",            default = true,       label = "RP Copy (live scene copy)" },
     { key = "quickCtrlC",        default = true,       label = "Ctrl+C copies the scene" },
-    { key = "copyMode",          default = "INSTANT",  choices = { "INSTANT", "BOX" } },
+    { key = "copyMode",          default = "BOX",      choices = { "INSTANT", "BOX" } },
     { key = "messages",          default = 3,          min = 1, max = 10 },
     { key = "autoRecord",        default = true,       label = "Auto-record dungeons and raids" },
     { key = "promptOnGroup",     default = true,       label = "Ask to record on group join" },
@@ -159,8 +164,19 @@ ns.SETTINGS = {
     { key = "companionMenu",     default = true,       label = "Add as companion (right-click)" },
     { key = "runCompanions",     default = true,       label = "Companions in the Full Log" },
     { key = "rpReplyLength",     default = "SHORT",    choices = { "SHORT", "MEDIUM", "LONG" } },
+    -- 0.6.3: Ctrl+C first asks for a one-line instruction for the AI
+    { key = "quickNote",         default = false,      label = "Ask for an instruction on Ctrl+C" },
+    -- 0.6.3: the 3D character on a story's cover (some clients draw no models)
+    { key = "storyCover",        default = true,       label = "Character on the story cover" },
+    -- 0.6.3: RP Chronicler's own errors are kept in the saved file
+    { key = "keepErrors",        default = true,       label = "Keep error reports" },
+    -- 0.6.3: send only the version number to your group and guild
+    { key = "versionCheck",      default = true,       label = "Update notices" },
     -- Not a switch: the Story Book export tip, hidden once you close it
     { key = "exportTip",         default = true },
+    -- Not a switch (0.6.3): StoryViewer.html's address, pasted once by you
+    -- from the page itself (an addon can't see where the game is installed)
+    { key = "viewerPath",        default = "", text = true },
 }
 ns.SETTING = {}
 for _, d in ipairs(ns.SETTINGS) do ns.SETTING[d.key] = d end
@@ -177,7 +193,9 @@ ns.REMOVED_SETTINGS = {
 }
 
 local function Coerce(d, v)
-    if d.choices then
+    if d.text then
+        return type(v) == "string" and v:sub(1, 260) or d.default
+    elseif d.choices then
         for _, c in ipairs(d.choices) do if c == v then return v end end
         return d.default
     elseif d.min then
@@ -246,10 +264,11 @@ end
 
 -- The privacy note (first-run setup and Options > Privacy). Plain ASCII.
 ns.PRIVACY_TEXT =
-    "|cffd8dee9RP Chronicler stores everything on your PC, in your WoW SavedVariables. It has no internet access and sends nothing anywhere. " ..
+    "|cffd8dee9RP Chronicler stores everything on your PC, in your WoW SavedVariables. It has no internet access and never sends your chat, recordings, stories or notes anywhere. " ..
     "No account, email or real-world personal data is collected.\n" ..
-    "RP Copy (one switch) keeps recent chat in memory for the live copy. Recording (only while a run is on) keeps a Full Log with in-character chat, never OOC. " ..
-    "Screenshots go to your normal WoW Screenshots folder. Each of these can be turned off in Options.\n" ..
+    "RP Copy (one switch) keeps recent chat in memory for the live copy. Recording (only while a run is on) keeps a Full Log with in-character chat (never OOC), the notes you type with /rp note and the gear you wore. " ..
+    "Screenshots go to your normal WoW Screenshots folder. Error reports (RP Chronicler's own errors, never chat) are kept in the saved file for bug reports. Each of these can be turned off in Options.\n" ..
+    "Update notices: RP Chronicler sends only its version number to your group and guild, through the game, so you hear when a newer one exists. No network, no recorded data. Turn it off in Options > Privacy.\n" ..
     "StoryViewer.html (in the addon folder) runs only in your browser, offline, and reads only the folder you choose.\n" ..
     "Chat and log text only leave your PC if YOU paste them into your own AI tool, and that tool's own privacy terms apply then.\n" ..
     "You can delete everything at any time with |cff69ccf0/rp wipe|cffd8dee9 (or by deleting RPChronicler.lua in your SavedVariables folder).|r"
@@ -682,10 +701,6 @@ local function AuraRole(unit)
             local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HELPFUL")
             if not ok or type(data) ~= "table" then break end
             name = ns.SafeStr(data.name)
-        elseif UnitBuff then
-            local ok, n = pcall(UnitBuff, unit, i)
-            if not ok or n == nil then break end
-            name = ns.SafeStr(n)
         else
             break
         end
@@ -704,9 +719,6 @@ local function PlayerFormRole()
             local sName
             if C_Spell and C_Spell.GetSpellName then
                 local okS, n = pcall(C_Spell.GetSpellName, spellID)
-                sName = okS and ns.SafeStr(n) or nil
-            elseif GetSpellInfo then
-                local okS, n = pcall(GetSpellInfo, spellID)
                 sName = okS and ns.SafeStr(n) or nil
             end
             if sName and ROLE_AURAS[sName] then return ROLE_AURAS[sName] end
@@ -1079,6 +1091,11 @@ function ns.EnsureDB()
         pcall(ns.MigrateCompanions)
         pcall(ns.MigrateStories)
         RPChroniclerDB.migratedV050 = true
+    end
+    -- 0.6.3: link stories imported without a Run ID to their recording
+    if ns.RelinkStories and not ns.storiesRelinked then
+        ns.storiesRelinked = true
+        pcall(ns.RelinkStories)
     end
     -- 0.6.0: saved Full Logs call the story skill by its name
     if not RPChroniclerDB.migratedV060 then

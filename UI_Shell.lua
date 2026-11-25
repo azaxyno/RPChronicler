@@ -187,6 +187,112 @@ function UI.CreateSleekButton(parent, width, height, text, accentStyle)
     return btn
 end
 
+-- =========================================================
+-- Responsive rows (0.6.3): one helper lays out every row of buttons.
+-- Each button is sized to its text (font and UI scale included). When a
+-- row runs out of room its buttons switch to their short labels, then
+-- the row wraps onto more lines, so buttons never overlap or clip at any
+-- window or font size. Views call it from their refresh and on resize,
+-- and anchor what sits below the row to the height it returns.
+-- =========================================================
+do
+    local function TextWidth(fs)
+        local w = fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth() or fs:GetStringWidth()
+        return tonumber(w) or 0
+    end
+
+    -- Full and (optional) short label for a button in a flowing row
+    function UI.SetButtonLabels(btn, full, short)
+        btn.fullText, btn.shortText = full, short
+        btn:SetText(btn.useShort and short or full)
+    end
+
+    -- The width a button needs for its current label (and icon)
+    function UI.ButtonWidth(btn)
+        local w = TextWidth(btn.label) + 16 + (btn.extraW or 0)
+        if btn.icon and btn.icon:IsShown() then w = w + (btn.icon:GetWidth() or 0) + 4 end
+        return math.max(btn.minW or 28, math.ceil(w))
+    end
+
+    local function Labels(list, short)
+        for _, b in ipairs(list) do
+            if b.fullText then
+                b.useShort = short and b.shortText and true or false
+                b:SetText(b.useShort and b.shortText or b.fullText)
+            end
+        end
+    end
+
+    local function Shown(list)
+        local out = {}
+        for _, b in ipairs(list or {}) do
+            if b and b:IsShown() then table.insert(out, b) end
+        end
+        return out
+    end
+
+    local function Sum(list, gap)
+        local t = 0
+        for i, b in ipairs(list) do t = t + UI.ButtonWidth(b) + (i > 1 and gap or 0) end
+        return t
+    end
+
+    -- parent: the frame the buttons sit in; left: buttons from the left
+    -- edge; right: buttons kept together on the right edge. opts: x, y
+    -- (offsets from parent's TOPLEFT), width (default: parent's), gap,
+    -- rowH. Returns the height used.
+    function UI.FlowRow(parent, left, right, opts)
+        opts = opts or {}
+        local gap, rowH = opts.gap or 4, opts.rowH or 22
+        local x0, y0 = opts.x or 0, opts.y or 0
+        local W = math.floor(opts.width or (parent:GetWidth() or 0))
+        left, right = Shown(left), Shown(right)
+        if W < 40 then W = 400 end
+        Labels(left, false)
+        Labels(right, false)
+        local need = Sum(left, gap) + Sum(right, gap) + ((#left > 0 and #right > 0) and 12 or 0)
+        if need > W then
+            Labels(left, true)
+            Labels(right, true)
+        end
+        local x, row = 0, 0
+        local function Put(b, px, w)
+            b:ClearAllPoints()
+            b:SetPoint("TOPLEFT", parent, "TOPLEFT", x0 + px, -(y0 + row * (rowH + gap)))
+            b:SetWidth(w)
+            b:SetHeight(rowH)
+        end
+        for _, b in ipairs(left) do
+            local w = math.min(UI.ButtonWidth(b), W)
+            if x > 0 and x + w > W then row, x = row + 1, 0 end
+            Put(b, x, w)
+            x = x + w + gap
+        end
+        if #right > 0 then
+            local rw = Sum(right, gap)
+            if x > 0 and x + 8 + rw > W then row, x = row + 1, 0 end
+            if rw <= W then
+                local px = W - rw
+                for _, b in ipairs(right) do
+                    local w = UI.ButtonWidth(b)
+                    Put(b, px, w)
+                    px = px + w + gap
+                end
+            else
+                x = 0
+                for _, b in ipairs(right) do
+                    local w = math.min(UI.ButtonWidth(b), W)
+                    if x > 0 and x + w > W then row, x = row + 1, 0 end
+                    Put(b, x, w)
+                    x = x + w + gap
+                end
+            end
+        end
+        if #left == 0 and #right == 0 then return 0 end
+        return (row + 1) * rowH + row * gap
+    end
+end
+
 -- A two-state toggle button: label "Name: ON" / "Name: OFF"
 function UI.SetToggleLook(btn, isOn, onText, offText)
     btn:SetText(isOn and ("|cff5cb85c" .. onText .. "|r") or ("|cff9aa5b4" .. offText .. "|r"))
@@ -198,7 +304,7 @@ end
 -- =========================================================
 local RAIL_W = 92   -- 0.6.1: wide enough for "Companions" in full
 UI.DEFAULT_W, UI.DEFAULT_H = 680, 490
-UI.MIN_W, UI.MIN_H = 600, 450
+UI.MIN_W, UI.MIN_H = 640, 460   -- 0.6.3: rows wrap, so nothing overlaps at this size
 
 local copyFrame = CreateFrame("Frame", "RPChroniclerFrame", UIParent, UI.BACKDROP)
 UI.frame = copyFrame
@@ -285,7 +391,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.2") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.3") .. "|r")
 end
 
 -- Left rail
@@ -438,7 +544,10 @@ function UI.ShowSection(key)
     for k, s in pairs(UI.sections) do
         if k ~= key then s.frame:Hide() end
     end
+    local changed = not sec.frame:IsShown()
     sec.frame:Show()
+    -- 0.6.3: a short fade-in when you switch sections (guarded)
+    if changed and UIFrameFadeIn then pcall(UIFrameFadeIn, sec.frame, 0.2, 0, 1) end
     for k, b in pairs(UI.railButtons) do
         if k == key then b:LockHighlight() else b:UnlockHighlight() end
     end
@@ -483,9 +592,6 @@ do
         local mw, mh = MaxSize()
         if copyFrame.SetResizeBounds then
             copyFrame:SetResizeBounds(UI.MIN_W, UI.MIN_H, mw, mh)
-        else
-            if copyFrame.SetMinResize then copyFrame:SetMinResize(UI.MIN_W, UI.MIN_H) end
-            if copyFrame.SetMaxResize then copyFrame:SetMaxResize(mw, mh) end
         end
     end
 
@@ -802,6 +908,89 @@ do
         eb:SetCursorPosition(0)
         eb:HighlightText()
     end
+end
+
+-- =========================================================
+-- One-line question (0.6.3): a small box with one text line, used for
+-- a story note (/rp note) and the Ctrl+C instruction for the AI.
+-- UI.AskLine{ title, sub, placeholder, okText, onAccept(text), onEscape() }
+-- Enter accepts (an empty line too); Esc calls onEscape, or just closes.
+-- =========================================================
+do
+    local f = CreateFrame("Frame", "RPChroniclerAskLineFrame", UIParent, UI.BACKDROP)
+    f:SetSize(440, 104)
+    f:SetPoint("TOP", UIParent, "TOP", 0, -200)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    f:SetClampedToScreen(true)
+    f:Hide()
+    UI.ApplyDarkGlass(f, 0.05, 0.07, 0.10, 0.97, 0.82, 0.65, 0.30, 0.90)
+
+    local title = UI.Label(f, "", "GameFontNormal")
+    title:SetPoint("TOPLEFT", 14, -12)
+    title:SetPoint("RIGHT", -36, 0)
+    local sub = UI.Label(f, "", "GameFontHighlightSmall")
+    sub:SetPoint("TOPLEFT", 14, -30)
+    sub:SetPoint("RIGHT", -14, 0)
+    sub:SetWordWrap(true)
+    local closeX = UI.CreateSleekButton(f, 22, 20, "x", "danger")
+    closeX:SetPoint("TOPRIGHT", -8, -8)
+
+    local eb = CreateFrame("EditBox", "RPChroniclerAskLineBox", f, "InputBoxTemplate")
+    eb:SetHeight(22)
+    eb:SetPoint("BOTTOMLEFT", 20, 40)
+    eb:SetPoint("BOTTOMRIGHT", -16, 40)
+    eb:SetAutoFocus(false)
+    eb:SetMaxLetters(240)
+    local hint = eb:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("LEFT", 2, 0)
+
+    local okBtn = UI.CreateSleekButton(f, 90, 22, "OK", "gold")
+    okBtn:SetPoint("BOTTOMLEFT", 14, 10)
+    local keys = UI.Label(f, "", "GameFontHighlightSmall")
+    keys:SetPoint("LEFT", okBtn, "RIGHT", 8, 0)
+
+    local opts
+    local function Close() f:Hide() end
+    local function Accept()
+        local o = opts
+        local text = ((eb:GetText() or ""):gsub("||", "|")):match("^%s*(.-)%s*$")
+        f:Hide()
+        if o and o.onAccept then pcall(o.onAccept, text) end
+    end
+    local function Escape()
+        local o = opts
+        f:Hide()
+        if o and o.onEscape then pcall(o.onEscape) end
+    end
+    eb:SetScript("OnEnterPressed", Accept)
+    eb:SetScript("OnEscapePressed", Escape)
+    eb:SetScript("OnTextChanged", function(self)
+        if (self:GetText() or "") == "" then hint:Show() else hint:Hide() end
+    end)
+    okBtn:SetScript("OnClick", Accept)
+    closeX:SetScript("OnClick", Close)
+    f:SetScript("OnHide", function() eb:ClearFocus() end)
+
+    function UI.AskLine(o)
+        opts = o or {}
+        title:SetText("|cffffd100" .. (opts.title or "RP Chronicler") .. "|r")
+        sub:SetText("|cffb0bac5" .. (opts.sub or "") .. "|r")
+        hint:SetText(opts.placeholder or "")
+        okBtn:SetText(opts.okText or "OK")
+        okBtn:SetWidth(UI.ButtonWidth(okBtn))
+        keys:SetText("|cff8f9ba8" .. (opts.keys or "Enter: OK   Esc: cancel") .. "|r")
+        eb:SetText("")
+        hint:Show()
+        f:SetHeight(math.max(104, 84 + math.ceil(sub:GetStringHeight() or 14)))
+        f:Show()
+        eb:SetFocus()
+    end
+    UI.askLine = f
 end
 
 -- =========================================================

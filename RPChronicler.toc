@@ -1,7 +1,9 @@
 ## Interface: 16001
 ## Title: RP Chronicler
-## Notes: AI roleplay snapshots, companion notes and colored adventure stories
-## Version: 0.6.2
+## Notes: Record your adventures and get them back as AI-written stories you read in game, plus live RP scene copy for your AI
+## Version: 0.6.3
+## Author: azaxyno
+## IconTexture: Interface\AddOns\RPChronicler\Media\logo
 ## SavedVariables: RPChroniclerDB
 # CurseForge: once the project exists, change the next line to
 # "## X-Curse-Project-ID: <project id>" (two #, no space before X)
@@ -17,6 +19,7 @@ RunReport.lua
 Stories.lua
 Templates.lua
 Screenshots.lua
+Updates.lua
 Events.lua
 Chronicle.lua
 UI_Shell.lua

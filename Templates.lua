@@ -99,11 +99,12 @@ local STORY_SHARED_RULES = [[
 READING THE LOG (HIDDEN CONTEXT)
 
 1. Stay Faithful to the Log: build the story only from the real roster, places, foes, bosses, quests, loot, deaths and chat quotes in the log. Use rich fantasy prose for the scenes, but never invent bosses, kills, loot, quests, deaths or player quotes.
-2. Header lines: "Run type:" says Dungeon, Raid or Open world adventure. The Roster gives each member's level, class and role ([Tank], [Healer], [DPS]). A member marked "<Guild> (guildmate)" shares the player's guild: treat them as old companions-in-arms of the same guild and mention the shared guild naturally once or twice. "Known companions:" lines are the player's own RP notes: let them shape how that character acts and talks, but never quote a note or invent a scene from it.
+2. Header lines: "Run type:" says Dungeon, Raid or Open world adventure. The Roster gives each member's level, class and role ([Tank], [Healer], [DPS]). A member marked "<Guild> (guildmate)" shares the player's guild: treat them as old companions-in-arms of the same guild and mention the shared guild naturally once or twice. "Known companions:" lines are the player's own RP notes: let them shape how that character acts and talks, but never quote a note or invent a scene from it. "Wearing (Name):" lists the notable gear the player's character wore: describe it once or twice where it fits (a cloak in the wind, a blade drawn), never as a list.
 3. Timestamps, HP and mana are hidden context: [HH:MM:SS], [BOSS HP], [LOW MANA], [DANGER] and combat tags tell you order and intensity only. The story prose must NEVER mention clock times, durations, or any HP, mana or percent numbers. "at 4% HP" becomes "with the beast staggering on its last breath".
 ]] .. "4. Tags and what they mean:\n" .. TagGlossary() .. "\n" .. [[
 5. Do not shrink the run into a dry summary. Messy moments (wipes, near deaths, panicked chat, lucky loot) are what make it memorable.
 6. No Icons: never write |T or |A texture codes. RP Chronicler adds boss icons itself.
+7. Story length: a reader should finish the story in a few minutes. When the header has a "Story length:" line, never write more chapters than it allows. Group related quests and events into one chapter (a quest chain, one village's troubles, a stretch of road), sum up routine quests, travel and easy fights in a sentence or two, and keep full scenes for the moments that matter: bosses, hard fights, near deaths, named foes, [NOTE] and [HIGHLIGHT] moments and real chat.
 
 STORY BOOK HEADER AND FOOTER (REQUIRED, RP Chronicler reads them)
 
@@ -113,6 +114,7 @@ Line 3: |cff9e9e9eDate: <date from the log header> | Party: <names, comma separa
 Then a blank line and the story. Start each chapter with a gold header line: |cffffd100Chapter 1: <chapter name>|r
 Last line (footer), dungeon or raid: |cff9e9e9eBosses: <N> | Wipes: <N> | Deaths: <N>|r
 Last line (footer), open world: |cff9e9e9eFoes: <N> | Quests: <N> | Levels: <from> -> <to> | Deaths: <N>|r and leave out any part that is zero or missing.
+Very last line, after the footer: |cff9e9e9eRun ID: <the Run ID from the log header>|r, copied exactly (e.g. Run ID: TPX8OK). RP Chronicler links the story to its recording with it. Leave the line out only if the log has no Run ID.
 The header and footer are the only place where the duration and the counts may appear.
 
 RP CHRONICLER COLOR PALETTE (|cffRRGGBB...|r)
@@ -166,9 +168,11 @@ Turn an RP Chronicler open-world Full Log into a personal, introspective adventu
 
 STRUCTURE
 
-- Chapters follow places and events, not bosses: a new region or subzone ([PLACE]), a quest taken or finished ([QUEST]), a hard fight ([FIGHT] with a near death or a [KILL] of a named foe), a milestone ([LEVEL], [MILESTONE], a new pet or mount).
+- Chapters follow places and events, not bosses, and each chapter holds a whole stretch of the road: a region or village and its quests together, a quest chain from start to end, a hard fight ([FIGHT] with a near death, a [KILL] of a named foe), a milestone ([LEVEL], [MILESTONE], a new pet or mount). Never one chapter per quest.
+- Long runs stay short: follow the "Story length:" line in the header (most open-world stories need 3 to 5 chapters). Routine quests ("kill ten", "collect six") get a line of travel color inside a chapter, not a chapter of their own.
 - Set each scene with the place. The character may reflect on the road, their pet and the people they met.
 - Quest givers' words ([QUEST TEXT]) and NPC lines may be quoted briefly, in their own voice.
+- [NOTE] lines are the character's own thoughts: let the story dwell on them, they are the heart of an introspective tale.
 - Ordinary trash fights become a line of travel color, not a scene. Elites, rares and near deaths get the drama.
 - If the character travelled with others, give them presence from the roster and real chat quotes. Guildmates are old friends.
 - A quiet closing: where the character rests, what they carry, what is still ahead.

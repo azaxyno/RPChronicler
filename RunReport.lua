@@ -186,7 +186,8 @@ function ns.BuildAdventureSummary(adv)
         end
     end
     while lines[#lines] == "" do table.remove(lines) end
-    return table.concat(lines, "\n")
+    -- 0.6.3: names fixed by the player (Fix names) read fixed here too
+    return ns.ApplyRunFixes(adv, table.concat(lines, "\n"))
 end
 
 -- Companions of a run (party members plus, in 0.5.0, companions you
@@ -265,6 +266,52 @@ local function FormatCopper(c)
 end
 ns.FormatCopper = FormatCopper
 
+-- 0.6.3: how long the story should be. A long open-world run with many
+-- quests must not become ten chapters: the header gives the AI a cap.
+function ns.StoryChapterCap(adv)
+    if not adv then return nil end
+    local mins = ns.GetRunDuration(adv) / 60
+    if adv.kind == "world" then
+        if mins < 20 then return 3 elseif mins < 45 then return 4 elseif mins < 90 then return 5 end
+        return 6
+    end
+    local bosses = #(adv.bossKills or {})
+    if bosses > 6 then return 8 end
+    return nil
+end
+
+-- 0.6.3: quest objectives of a quest finished later in the run add
+-- nothing to its "Completed" line, so the Full Log leaves them out
+local function FinishedQuests(tl)
+    local done = {}
+    for _, line in ipairs(tl) do
+        local rest = type(line) == "string" and line:match("%[QUEST%] Completed: (.+)$")
+        if rest then
+            done[rest] = true
+            local short = rest:match("^(.-) for .+$")
+            if short then done[short] = true end
+        end
+    end
+    return done
+end
+local function FoldedObjective(line, done)
+    local rest = line:match("%[QUEST%] Objective done: (.+)$")
+    if not rest then return false end
+    for title in pairs(done) do
+        if rest == title or rest:sub(1, #title + 3) == title .. " - " then return true end
+    end
+    return false
+end
+
+-- 0.6.3: the green and better gear the player wore, by name
+local function GearLine(adv)
+    local names = {}
+    for _, g in ipairs(type(adv.gear) == "table" and adv.gear or {}) do
+        if type(g) == "table" and g.name and (tonumber(g.q) or 0) >= 2 and #names < 10 then table.insert(names, g.name) end
+    end
+    return #names > 0 and table.concat(names, ", ") or nil
+end
+
 -- First line of the Full Log: the trigger of the matching story skill
 function ns.GetStoryTrigger(adv)
     if adv and adv.kind == "world" then return "use " .. ns.STORY_SKILLS.world end
@@ -286,6 +333,9 @@ function ns.BuildAdventureFullLog(adv)
     if adv.kind ~= "world" then head = head .. string.format(" | Wipes: %d", adv.wipes or 0) end
     head = head .. string.format(" | Deaths: %d", adv.deaths or 0)
     table.insert(out, head)
+    -- 0.6.3: the Run ID, which the story repeats on its last line
+    local code = ns.RunCode(adv)
+    if code then table.insert(out, "Run ID: " .. code) end
     local lvText = ns.GetRunLevels(adv)
     local extra = {}
     if lvText then table.insert(extra, "Levels: " .. lvText) end
@@ -294,6 +344,10 @@ function ns.BuildAdventureFullLog(adv)
     if #extra > 0 then table.insert(out, table.concat(extra, " | ")) end
     if adv.interrupted then
         table.insert(out, "Note: the recording was cut short by a logout or disconnect.")
+    end
+    local cap = ns.StoryChapterCap(adv)
+    if cap then
+        table.insert(out, string.format("Story length: %d chapters at most. Group related quests and events into one chapter, sum up routine ones in a line or two, and keep the scenes for the moments that matter.", cap))
     end
     table.insert(out, "")
 
@@ -317,6 +371,10 @@ function ns.BuildAdventureFullLog(adv)
     end
     if #mates > 0 then
         table.insert(out, "Guildmates in the party: " .. table.concat(mates, ", "))
+    end
+    local gear = ns.LogOn("gear") and GearLine(adv)
+    if gear then
+        table.insert(out, "Wearing (" .. (adv.char or "the player") .. "): " .. gear)
     end
     table.insert(out, "")
 
@@ -366,14 +424,15 @@ function ns.BuildAdventureFullLog(adv)
         end
     end
 
-    -- 0.5.0: numbered screenshots, so the story can place [Shot N] markers
+    -- 0.5.0: numbered screenshots, so the story can place [Shot N] markers.
+    -- 0.6.3: each with its run-qualified ID; the AI picks the ones that fit
     if #(adv.shots or {}) > 0 then
         table.insert(out, "")
-        table.insert(out, "Screenshots (write [Shot N] where each fits the story):")
+        table.insert(out, "Screenshots (pick only the ones that fit the story and copy the marker exactly):")
         for i, sh in ipairs(adv.shots) do
             if type(sh) == "table" then
                 local stamp = sh.at and date and date("%H:%M:%S", sh.at) or "?"
-                table.insert(out, string.format("- Shot %d at %s: %s", sh.n or i, stamp, ns.SafeStr(sh.description) or "moment"))
+                table.insert(out, string.format("- [Shot %s] at %s: %s", ns.ShotId(adv, sh, i), stamp, ns.SafeStr(sh.description) or "moment"))
             end
         end
     end
@@ -383,8 +442,12 @@ function ns.BuildAdventureFullLog(adv)
     local tl = adv.fullTimeline or {}
     local keep = ns.Limit("timelineMax")
     local startIdx = math.max(1, #tl - keep + 1)
+    local finished = FinishedQuests(tl)
     for i = startIdx, #tl do
         local cleanLine = ns.StripColors(tl[i])
+        if cleanLine and FoldedObjective(cleanLine, finished) then cleanLine = nil end
+        -- Lines from before 0.6.3 say "[SHOT 2]": give them the full ID
+        if cleanLine and code then cleanLine = cleanLine:gsub("%[SHOT (%d+)%]", "[SHOT " .. code .. "-%1]") end
         -- No out-of-character lines (OOC channel, (( )), [OOC], [OOC Note]),
         -- and old [COMBAT START] / [COMBAT END] pairs are left out
         if cleanLine and cleanLine ~= "" and not ns.IsOocText(cleanLine)
@@ -393,7 +456,8 @@ function ns.BuildAdventureFullLog(adv)
         end
     end
 
-    return table.concat(out, "\n")
+    -- 0.6.3: names fixed by the player; the recording itself is unchanged
+    return ns.ApplyRunFixes(adv, table.concat(out, "\n"))
 end
 
 -- Size of the Full Log, for the size meter: characters and rough tokens

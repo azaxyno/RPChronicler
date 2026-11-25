@@ -5,15 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Offline only: this page can't load or send anything over the network.
      It reads only the folder or files you choose, and only in your browser. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob: file:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob: file:; font-src data:">
 <title>RP Chronicler Stories</title>
 <style>
+/* Cinzel (SIL Open Font License, see CREDITS.md), ASCII only, embedded so the page stays offline */
+@font-face{font-family:"Cinzel RPC";font-weight:600;src:url(data:font/woff2;base64,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) format("woff2")}
 :root{--bg:#17120c;--panel:#1f1810;--line:#8a6d33;--gold:#ffd100;--text:#eceff1;--soft:#d7c4a3;--muted:#9e9e9e;--blue:#69ccf0}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--text);font-family:Georgia,serif;margin:0;line-height:1.65}
 a{color:var(--blue)}
 header{padding:18px 16px 6px;max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 header h1{color:var(--gold);font-size:22px;margin:0;flex:1 1 auto}
+h1,h2,.card h2,#list .t,.tl-head{font-family:"Cinzel RPC",Georgia,serif;letter-spacing:.02em}
+#reader{animation:fadein .35s ease-out}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.addr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.addr input{flex:1 1 320px;min-width:0;background:#0f0b07;color:var(--soft);border:1px solid #3a2c18;border-radius:4px;padding:5px 8px;font:12px Consolas,monospace}
+.timeline{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 16px;margin:0 0 14px}
+.tl-head{color:var(--gold);font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tl-bar{position:relative;height:26px;background:#120e09;border:1px solid #3a2c18;border-radius:4px;cursor:pointer}
+.tl-tick{position:absolute;top:3px;bottom:3px;width:3px;margin-left:-1px;border-radius:2px;background:#6d6d6d}
+.tl-tick.boss{background:#dc143c;width:5px;margin-left:-2px}.tl-tick.bad{background:#ff5252}.tl-tick.shot{background:#69ccf0}
+.tl-tick.prog{background:#ffd100}.tl-tick.note{background:#ff80ab}.tl-tick.loot{background:#e066ff}
+.tl-now{position:absolute;top:-3px;bottom:-3px;width:2px;background:#fff;box-shadow:0 0 6px #ffd100;pointer-events:none}
+.tl-range{width:100%;margin:8px 0 2px;accent-color:#ffd100}
+.tl-line{color:var(--soft);font-size:14px;min-height:1.5em}
+.tl-line .tm{color:var(--muted);font-size:12px;margin-right:8px}
+.tl-shot{margin-top:8px;max-width:420px}.tl-shot img{max-width:100%;border:1px solid var(--line);border-radius:4px}
 main{max-width:1180px;margin:0 auto;padding:0 16px 40px}
 button{font:inherit;font-size:14px;background:#2a2014;color:var(--gold);border:1px solid var(--line);border-radius:5px;padding:6px 14px;cursor:pointer}
 button:hover{background:#3a2c18}
@@ -42,6 +60,7 @@ textarea{width:100%;min-height:140px;background:#0f0b07;color:var(--text);border
 .story{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px 24px}
 .bi{font-size:0.9em;margin-right:3px}.bi-elite{filter:sepia(1) saturate(5) hue-rotate(-12deg) brightness(1.1)}.bi-rare{filter:grayscale(1) brightness(1.4)}
 figure.shot{margin:16px 0;text-align:center}figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:4px}
+figure.missing .ph{border:1px dashed var(--line);border-radius:4px;padding:28px 16px;color:var(--muted);font-size:14px;background:#120e09}
 figcaption{color:#b0a080;font-size:13px;font-style:italic;margin-top:4px}
 .gallery{margin-top:24px;border-top:1px solid var(--line);padding-top:8px}
 .drop{outline:3px dashed var(--gold);outline-offset:-8px}
@@ -64,19 +83,25 @@ figcaption{color:#b0a080;font-size:13px;font-style:italic;margin-top:4px}
       <p>Choose your <b>_forever_</b> folder once. This page remembers it, so next time you only click Refresh.</p>
       <p class="muted">It is the folder this page is in, three levels up. Usually <code>C:\Program Files (x86)\World of Warcraft\_forever_</code></p>
       <div class="row"><button id="pick" class="big">Choose WoW folder</button></div>
-      <p class="muted">If your browser says the folder "contains system files" (WoW in Program Files), use the two buttons below.</p>
+      <p class="muted">If your browser says the folder "contains system files" (WoW in Program Files), use Other ways below.</p>
     </div>
+    <details id="otherWays">
+    <summary id="otherSum"><b>Other ways</b> <span class="muted">(Firefox, or when the browser refuses the folder)</span></summary>
+    <p id="ffNote" class="muted hide">Firefox doesn't let a page keep access to your files, so after a refresh pick RPChronicler.lua again (the picker opens where you left it) or drag it onto the page. In Chrome or Edge this page remembers your picks and you only click Refresh.</p>
     <div id="fileWay">
       <div class="row">
         <button id="pickLua">Choose RPChronicler.lua</button>
-        <span class="muted">in <code>_forever_\WTF\Account\&lt;your account&gt;\SavedVariables</code></span>
+        <span class="muted">in <code>_forever_\WTF\Account\&lt;your account&gt;\SavedVariables</code>. This one file loads all your stories.</span>
       </div>
       <div class="row">
         <button id="pickShots">Choose Screenshots folder</button>
         <span class="muted">in <code>_forever_\Screenshots</code> (only needed to save pictures with a story)</span>
       </div>
-      <p class="muted">Or drag your _forever_ folder onto this page.</p>
+      <p class="muted">Or drag your _forever_ folder (or RPChronicler.lua) onto this page.</p>
+      <p id="remNote" class="muted"></p>
     </div>
+    </details>
+    <p class="muted"><b>Tip:</b> picking <b>RPChronicler.lua</b> alone loads every story you have saved. The game saves it when you log out or switch characters.</p>
     <p class="muted">Stories show here once the game has saved them, when you log out or switch characters. A story you imported just now: in the Story Book click <b>Copy for viewer</b>, press Ctrl+C, and paste it below.</p>
     <details id="pasteBox">
       <summary><b>Paste a story</b></summary>
@@ -84,6 +109,8 @@ figcaption{color:#b0a080;font-size:13px;font-style:italic;margin-top:4px}
       <div class="row"><button id="showPaste">Show story</button></div>
     </details>
     <p class="muted">This page works offline, inside your browser. It never connects to the internet and only reads what you choose.</p>
+    <div class="addr"><span class="muted">This page's address:</span><input id="addr" readonly><button id="copyAddr">Copy</button></div>
+    <p class="muted">Paste it once into the game: Story Book tip &gt; <b>Viewer path</b>. From then on the game hands it back to you, ready for the address bar.</p>
   </section>
 
   <div id="app" class="layout hide">
@@ -98,14 +125,21 @@ figcaption{color:#b0a080;font-size:13px;font-style:italic;margin-top:4px}
 "use strict";
 (function () {
 const $ = id => document.getElementById(id);
-const SHOT_RE = /^WoWScrnShot_(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.(jpg|jpeg|png)$/i;
+const SHOT_RE = /^(WoWScrnShot_(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2}))\.(jpg|jpeg|png)$/i;
+// [Shot 2] (before 0.6.3) or [Shot TPX8OK-2] (run ID and number)
+const MARK_RE = /\[[Ss]hot\s*(?:([A-Za-z0-9]+)-)?(\d+)\]/g;
+const MARK_SPLIT = /(\|c[0-9a-fA-F]{8}|\|r|\[[Ss]hot\s*(?:[A-Za-z0-9]+-)?\d+\])/;
+const MARK_ONE = /^\[[Ss]hot\s*(?:[A-Za-z0-9]+-)?\d+\]$/;
+const NEAR = 3000; // a file this close (ms) to a recorded shot is that shot
 const HAS_FSA = typeof window.showDirectoryPicker === "function";
 const PREVIEW_W = 1280;
 
 const state = {
   rootHandle: null,   // remembered folder (Chrome / Edge)
   saves: [],          // { account, db }
-  shots: [],          // { name, when (ms), size, getFile }
+  shots: [],          // { name, stem, wall (ms), size, getFile }
+  byStem: new Map(),  // file name without extension -> shot file
+  shotIndex: {},      // "TPX8OK-2" -> recorded shot, from every run in the saves
   tgaSeen: false,
   items: [],
   current: null,
@@ -205,13 +239,27 @@ async function scanFolder(node) {
   return { saves, shots };
 }
 
+// "wall" is the file's clock time read as if it were UTC. The game names
+// files in the computer's local time, and comparing wall clocks never
+// depends on the browser's time zone (Firefox's privacy mode says UTC).
+function wallOfStem(stem) {
+  const m = /^WoWScrnShot_(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/i.exec(stem || "");
+  return m ? Date.UTC(2000 + +m[3], +m[1] - 1, +m[2], +m[4], +m[5], +m[6]) : null;
+}
+function stemOfWall(wall) {
+  const d = new Date(wall);
+  return "WoWScrnShot_" + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + pad(d.getUTCFullYear() % 100) + "_" +
+    pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds());
+}
 function addShot(name, getFile, size) {
   if (/^WoWScrnShot_.*\.tga$/i.test(name)) state.tgaSeen = true;
   const m = SHOT_RE.exec(name);
   if (!m) return false;
-  const when = new Date(2000 + +m[3], +m[1] - 1, +m[2], +m[4], +m[5], +m[6]).getTime();
-  if (state.shots.some(s => s.name === name)) return false;
-  state.shots.push({ name, when, size, getFile });
+  const stem = m[1];
+  if (state.byStem.has(stem.toLowerCase())) return false;
+  const f = { name, stem, wall: wallOfStem(stem), size, getFile };
+  state.shots.push(f);
+  state.byStem.set(stem.toLowerCase(), f);
   return true;
 }
 
@@ -274,24 +322,56 @@ function readSavedVariables(text) {
 // ---------- stories from the saved data ----------
 function buildItems() {
   const items = [];
+  state.shotIndex = {};
+  offsetCache = null;
   for (const save of state.saves) {
     const db = save.db;
     const runs = [];
     if (db.activeRun) runs.push(db.activeRun);
     for (const r of vals(db.adventures)) runs.push(r);
-    const byId = {};
-    runs.forEach(r => { if (r && r.id) byId[r.id] = r; });
+    // every recorded shot, by its run-qualified ID
+    for (const r of runs) if (r) indexShots(runCode(r), vals(r.shots).filter(s => s && s.at).map((s, i) => ({ n: s.n || i + 1, at: s.at, file: s.file ? String(s.file) : "", caption: String(s.description || "") })));
     const used = {};
+    const runOf = id => runs.find(r => r && r.id && r.id === id);
     for (const st of vals(db.stories)) {
       if (!st || !st.story) continue;
       if (st.runId) used[st.runId] = true;
-      items.push(makeItem(st, st.story, save.account));
+      const it = makeItem(st, st.story, save.account);
+      it.marks = marksOf(runOf(st.runId));
+      items.push(it);
     }
     // stories saved inside a run (before 0.5.0)
-    for (const r of runs) if (r && r.story && !(r.id && used[r.id])) items.push(makeItem(r, r.story, save.account));
+    for (const r of runs) if (r && r.story && !(r.id && used[r.id])) { const it = makeItem(r, r.story, save.account); it.marks = marksOf(r); items.push(it); }
   }
+  for (const it of items) indexShots(it.code, it.shots);
   items.sort((a, b) => (b.start || 0) - (a.start || 0));
   return items;
+}
+// 0.6.3: the key moments of a run for the timeline, the same lines the
+// game's ns.TimelineMarks picks: "HH:MM:SS [TAG] text"
+const MARK_TAGS = ["BOSS ENGAGED", "BOSS KILL", "BOSS RESET", "WIPE", "DEATH", "FIGHT", "KILL", "SHOT", "LEVEL",
+  "QUEST", "PLACE", "NOTE", "HIGHLIGHT", "MILESTONE", "LOOT"];
+function marksOf(run) {
+  const out = [];
+  if (!run) return out;
+  for (const line of vals(run.fullTimeline)) {
+    const m = /^\[(\d\d:\d\d:\d\d)\]\s*(\[([A-Z ]+?)(?:\s+[#A-Z0-9-]*\d[A-Z0-9-]*)?\].*)$/.exec(String(line));
+    if (!m) continue;
+    const tag = m[3];
+    if (!MARK_TAGS.some(t => tag === t || tag.startsWith(t + " "))) continue;
+    out.push(m[1] + " " + plain(m[2]).slice(0, 160));
+    if (out.length >= 300) break;
+  }
+  return out;
+}
+// The Run ID, as RP Chronicler makes it: the start time in base 36
+function runCode(meta) {
+  if (meta && meta.code) return String(meta.code).toUpperCase();
+  return meta && meta.startTime ? Math.floor(meta.startTime).toString(36).toUpperCase() : "";
+}
+function indexShots(code, shots) {
+  if (!code) return;
+  for (const s of shots) state.shotIndex[code + "-" + s.n] = s;
 }
 function makeItem(meta, story, account) {
   const book = meta.book || {};
@@ -309,8 +389,11 @@ function makeItem(meta, story, account) {
     start: meta.startTime || null,
     end: end || null,
     duration: meta.duration || 0,
-    shots: vals(meta.shots).filter(s => s && s.at).map((s, i) => ({ n: s.n || i + 1, at: s.at, caption: String(s.description || "") })),
+    code: runCode(meta),
+    shots: vals(meta.shots).filter(s => s && s.at).map((s, i) => ({ n: s.n || i + 1, at: s.at, file: s.file ? String(s.file) : "", caption: String(s.description || "") })),
     bosses: kinds,
+    marks: [],
+    version: String(meta.importedWith || meta.addonVersion || ""),
     story: String(story)
   };
 }
@@ -321,7 +404,7 @@ function parsePasted(text) {
   const at = text.indexOf("@story\n");
   if (!/RP Chronicler story/i.test(text.slice(0, 200)) || at < 0) return null;
   const head = text.slice(0, at).split("\n");
-  const it = { account: "Pasted", title: "Adventure", zone: "", date: "", start: null, end: null, duration: 0, shots: [], bosses: {}, story: text.slice(at + 7) };
+  const it = { account: "Pasted", title: "Adventure", zone: "", date: "", start: null, end: null, duration: 0, code: "", shots: [], bosses: {}, marks: [], version: "", story: text.slice(at + 7) };
   for (const line of head) {
     const m = /^@(\w+)\s?(.*)$/.exec(line.trim());
     if (!m) continue;
@@ -332,10 +415,20 @@ function parsePasted(text) {
     else if (k === "start") it.start = +v || null;
     else if (k === "end") it.end = +v || null;
     else if (k === "duration") it.duration = +v || 0;
-    else if (k === "shot") { const p = /^(\d+)\s+(\d+)\s?(.*)$/.exec(v); if (p) it.shots.push({ n: +p[1], at: +p[2], caption: p[3] }); }
+    else if (k === "run") it.code = v.trim().toUpperCase();
+    else if (k === "shot") {
+      // 0.6.3: "@shot TPX8OK-2 1795616468 WoWScrnShot_112526_162108 caption"; before: "@shot 2 1795616468 caption"
+      let p = /^(?:([A-Za-z0-9]+)-)?(\d+)\s+(\d+)\s+(WoWScrnShot_\d{6}_\d{6}|-)(?:\s(.*))?$/.exec(v);
+      if (p) it.shots.push({ n: +p[2], at: +p[3], file: p[4] === "-" ? "" : p[4], caption: p[5] || "" });
+      else if ((p = /^(\d+)\s+(\d+)\s?(.*)$/.exec(v))) it.shots.push({ n: +p[1], at: +p[2], file: "", caption: p[3] });
+    }
+    else if (k === "mark") { if (/^\d\d:\d\d:\d\d /.test(v)) it.marks.push(plain(v)); }
+    else if (k === "version") it.version = v.trim();
     else if (k === "boss") { const p = /^(\w+)\s+(.+)$/.exec(v); if (p) it.bosses[p[2]] = p[1]; }
   }
   if (!it.end && it.start && it.duration) it.end = it.start + it.duration;
+  if (!it.code && it.start) it.code = Math.floor(it.start).toString(36).toUpperCase();
+  indexShots(it.code, it.shots);
   return it;
 }
 
@@ -361,25 +454,26 @@ function repairHeader(s) {
   return lines.join("\n");
 }
 // The "Title:" line names the story; the page shows it as the heading instead
-function dropTitleLine(s) {
+function dropTitleLine(s, title) {
+  const tt = title ? plain(title).trim().toLowerCase() : "";
   const lines = s.split("\n");
   let n = 0;
   for (let i = 0; i < lines.length && n < 3; i++) {
     const p = plain(lines[i]).trim();
     if (!p) continue;
     n++;
-    if (/^#*\s*title:/i.test(p)) { lines.splice(i, 1); while (lines.length && !plain(lines[0]).trim()) lines.shift(); break; }
+    if (/^#*\s*title:/i.test(p) || (tt && n === 1 && p.replace(/^#+\s*/, "").toLowerCase() === tt)) { lines.splice(i, 1); while (lines.length && !plain(lines[0]).trim()) lines.shift(); break; }
   }
   return lines.join("\n");
 }
 function storyHtml(s) {
   s = esc(cleanWow(s));
   let out = "", stack = [];
-  for (const p of s.split(/(\|c[0-9a-fA-F]{8}|\|r|\[[Ss]hot\s*\d+\])/)) {
+  for (const p of s.split(MARK_SPLIT)) {
     let m;
     if ((m = /^\|c[0-9a-fA-F]{2}([0-9a-fA-F]{6})$/.exec(p))) { out += '<span style="color:#' + m[1] + '">'; stack.push(m[1]); }
     else if (p === "|r") { if (stack.length) { out += "</span>"; stack.pop(); } }
-    else if (/^\[[Ss]hot\s*\d+\]$/.test(p)) { out += "</span>".repeat(stack.length) + p + stack.map(c => '<span style="color:#' + c + '">').join(""); }
+    else if (MARK_ONE.test(p)) { out += "</span>".repeat(stack.length) + p + stack.map(c => '<span style="color:#' + c + '">').join(""); }
     else out += p;
   }
   out += "</span>".repeat(stack.length);
@@ -400,47 +494,115 @@ function bossIcons(html, kinds) {
 }
 
 // ---------- screenshots ----------
-// WoW names shots WoWScrnShot_MMDDYY_HHMMSS.jpg in local time. A story's shots
-// are the files from its start (minus 30s) to its end (plus 2 minutes); the
-// ones RP Chronicler recorded carry a number and a caption.
+// WoW names shots WoWScrnShot_MMDDYY_HHMMSS.jpg in the computer's local
+// time. Since 0.6.3 RP Chronicler saves that name with each shot, so the
+// page finds the file by name. For older shots it works out the time zone
+// from the files themselves: the offset that lines up the most recorded
+// shots with files wins (the browser's own time zone breaks a tie).
 function pad(n) { return String(n).padStart(2, "0"); }
-function shotName(at) {
-  const d = new Date(at * 1000);
-  return "WoWScrnShot_" + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getFullYear() % 100) + "_" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + ".jpg";
+function browserOffset(at) { return -new Date(at * 1000).getTimezoneOffset() * 60000; }
+function nearFile(wall) {
+  for (const d of [0, 1000, -1000, 2000, 3000, -2000, -3000]) {
+    const f = state.byStem.get(stemOfWall(wall + d).toLowerCase());
+    if (f) return f;
+  }
+  return null;
 }
-function storyShots(it) {
-  if (!it.start) return [];
-  const from = it.start * 1000 - 30000;
-  const to = (it.end ? it.end * 1000 : it.start * 1000 + 6 * 3600000) + 120000;
-  const recorded = it.shots.map(s => ({ ...s, used: false }));
-  const out = [];
-  if (state.shots.length) {
-    for (const f of state.shots.filter(f => f.when >= from && f.when <= to).sort((a, b) => a.when - b.when)) {
-      const r = recorded.find(r => !r.used && Math.abs(r.at * 1000 - f.when) <= 3000);
-      if (r) r.used = true;
-      out.push({ n: r ? r.n : null, when: f.when, caption: r ? r.caption : "", file: f });
+let offsetCache = null;
+function guessOffset(sample) {
+  if (offsetCache !== null && !sample) return offsetCache;
+  const recorded = [];
+  if (sample) recorded.push(...sample);
+  else for (const k in state.shotIndex) recorded.push(state.shotIndex[k]);
+  // a shot that knows its file name gives the offset straight away
+  for (const r of recorded) {
+    const w = r.file && wallOfStem(r.file);
+    if (w && r.at) return (sample ? w - r.at * 1000 : (offsetCache = w - r.at * 1000));
+  }
+  const own = recorded.length ? browserOffset(recorded[0].at) : browserOffset(Date.now() / 1000);
+  let best = own, bestHits = 0;
+  if (state.shots.length && recorded.length) {
+    const hits = off => recorded.reduce((n, r) => n + (nearFile(r.at * 1000 + off) ? 1 : 0), 0);
+    bestHits = hits(own);
+    for (let off = -14 * 3600000; off <= 14 * 3600000; off += 900000) {
+      const h = hits(off);
+      if (h > bestHits) { best = off; bestHits = h; }
     }
-  } else {
-    // No folder chosen: the page sits in _forever_\Interface\AddOns\RPChronicler,
-    // so it can still show the shots the addon recorded by their names
-    for (const r of recorded) out.push({ n: r.n, when: r.at * 1000, caption: r.caption, guess: r.at });
+  }
+  if (!sample) offsetCache = best;
+  return best;
+}
+// The file for a recorded shot, or null
+function fileFor(r, off) {
+  if (!state.shots.length) return null;
+  const w = r.file ? wallOfStem(r.file) : r.at * 1000 + off;
+  return w ? nearFile(w) : null;
+}
+// The shots of a story: every recorded one (found or not), plus other files
+// taken during the story (start minus 30s to end plus 2 minutes)
+function storyShots(it) {
+  let off = guessOffset(it.shots.length ? it.shots : null);
+  if (!it.shots.length) off = guessOffset();
+  const out = it.shots.map(r => {
+    const f = fileFor(r, off);
+    return { n: r.n, id: (it.code ? it.code + "-" : "") + r.n, at: r.at, caption: r.caption, file: f,
+      stem: r.file || stemOfWall(r.at * 1000 + off), recorded: true };
+  });
+  if (state.shots.length && it.start) {
+    const used = new Set(out.map(s => s.file).filter(Boolean));
+    const from = it.start * 1000 + off - 30000;
+    const to = (it.end ? it.end * 1000 : it.start * 1000 + 6 * 3600000) + off + 120000;
+    for (const f of state.shots.filter(f => f.wall >= from && f.wall <= to && !used.has(f)).sort((a, b) => a.wall - b.wall)) {
+      out.push({ n: null, id: "", at: (f.wall - off) / 1000, caption: "", file: f, stem: f.stem, recorded: false });
+    }
   }
   return out;
 }
+// A marker from another run ([Shot X-2] where X is not this story's run)
+function foreignShot(code, n) {
+  const r = state.shotIndex[code + "-" + n];
+  if (!r) return null;
+  const off = guessOffset([r]);
+  return { n: +n, id: code + "-" + n, at: r.at, caption: r.caption, file: fileFor(r, off), stem: r.file || stemOfWall(r.at * 1000 + off), recorded: true };
+}
 function figure(s, src) {
   const cap = s.caption ? "<figcaption>" + esc(s.caption) + "</figcaption>" : "";
-  const g = s.guess ? ' data-guess="' + s.guess + '"' : "";
-  return '<figure class="shot"><img src="' + src + '"' + g + ' alt="screenshot" loading="lazy">' + cap + "</figure>";
+  if (!src) return missingFigure(s);
+  // a guessed file loads right away, so a missing one turns into a note
+  const g = s.guess ? ' data-stem="' + esc(s.stem) + '"' : ' loading="lazy"';
+  return '<figure class="shot"><img src="' + src + '"' + g + ' alt="screenshot">' + cap + "</figure>";
+}
+function missingFigure(s, why) {
+  const name = s && s.stem ? s.stem + ".jpg" : "";
+  const text = why || (state.shots.length
+    ? "This screenshot isn't in the folder you chose" + (name ? " (" + name + ")" : "") + "."
+    : "Choose your Screenshots folder to see this picture" + (name ? " (" + name + ")" : "") + ".");
+  const cap = s && s.caption ? "<figcaption>" + esc(s.caption) + "</figcaption>" : "";
+  return '<figure class="shot missing"><div class="ph">' + esc(text) + "</div>" + cap + "</figure>";
 }
 function placeShots(html, shots, it, srcOf) {
-  const byN = {};
-  shots.forEach(s => { if (s.n) byN[s.n] = s; });
-  html = html.replace(/\[[Ss]hot\s*(\d+)\]/g, (m, n) => {
-    const s = byN[n];
-    if (s && !s.placed) { s.placed = true; return figure(s, srcOf(s)); }
-    return "";
+  const byId = {}, byN = {};
+  shots.forEach(s => {
+    if (!s.recorded) return;
+    if (s.id) byId[s.id.toUpperCase()] = s;
+    if (!s.id || !it.code || s.id.toUpperCase().startsWith(it.code + "-")) byN[s.n] = byN[s.n] || s;
   });
-  const left = shots.filter(s => !s.placed);
+  let marked = false;
+  html = html.replace(MARK_RE, (m, code, n) => {
+    marked = true;
+    code = code ? code.toUpperCase() : "";
+    let s = code ? byId[code + "-" + n] : byN[n];
+    // a story with no Run ID of its own: go by the number
+    if (!s && code && !it.code) s = byN[n] || null;
+    if (!s) return missingFigure({ stem: "", caption: "" }, "Screenshot " + (code ? code + "-" : "") + n + " is not in this story's recording.");
+    if (s.placed) return "";
+    s.placed = true;
+    return figure(s, srcOf(s));
+  });
+  // 0.6.3: the AI picks the pictures; with markers in the story, the rest
+  // stay out. A story without markers gets its found pictures spread out.
+  if (marked) return html;
+  const left = shots.filter(s => !s.placed && s.file);
   if (!left.length) return html;
   const lines = html.split("<br>\n");
   const chapters = [];
@@ -458,7 +620,7 @@ function placeShots(html, shots, it, srcOf) {
       }
     }
     if (!target && chapters.length && it.start && span > 0) {
-      const frac = Math.max(0, Math.min(0.999, (s.when / 1000 - it.start) / span));
+      const frac = Math.max(0, Math.min(0.999, (s.at - it.start) / span));
       target = chapters[Math.floor(frac * chapters.length)];
     }
     if (target) target.extra.push(s); else gallery.push(s);
@@ -488,31 +650,56 @@ async function previewDataUrl(file) {
 // ---------- rendering ----------
 async function renderStory(it, forSave) {
   const shots = storyShots(it);
+  // A marker can point at another run's shot ([Shot X-2], X not this run)
+  const have = new Set(shots.filter(s => s.id).map(s => s.id.toUpperCase()));
+  for (const m of it.story.matchAll(MARK_RE)) {
+    const code = (m[1] || "").toUpperCase();
+    if (!code || code === it.code || have.has(code + "-" + m[2])) continue;
+    const f = foreignShot(code, m[2]);
+    if (f) { shots.push(f); have.add(f.id); }
+  }
   const src = new Map();
   for (const s of shots) {
-    if (s.guess) { src.set(s, "../../../Screenshots/" + shotName(s.guess)); continue; }
+    if (!s.file) continue;
     const f = await s.file.getFile();
     if (forSave) src.set(s, await previewDataUrl(f));
     else { const u = URL.createObjectURL(f); state.urls.push(u); src.set(s, u); }
   }
-  let story = dropTitleLine(repairHeader(it.story.replace(/\r/g, "")));
+  const srcOf = s => {
+    if (src.has(s)) return src.get(s);
+    // No folder chosen: the page sits in _forever_\Interface\AddOns\RPChronicler,
+    // so it can still try the game's Screenshots folder by file name
+    if (!forSave && !state.shots.length && s.stem) { s.guess = true; return "../../../Screenshots/" + s.stem + ".jpg"; }
+    return null;
+  };
+  let story = dropTitleLine(repairHeader(it.story.replace(/\r/g, "")), it.title);
   let html = bossIcons(storyHtml(story), it.bosses);
-  if (shots.length) html = placeShots(html, shots, it, s => src.get(s));
-  html = html.replace(/\[[Ss]hot\s*\d+\]/g, "");
+  html = placeShots(html, shots, it, srcOf);
+  html = html.replace(MARK_RE, "");
   const meta = [it.zone, it.date].filter(Boolean).map(esc).join(" - ");
-  return { html, meta, guessed: shots.some(s => s.guess), count: shots.length };
+  const missing = (html.match(/class="shot missing"/g) || []).length;
+  const shown = (html.match(/<figure class="shot"><img/g) || []).length;
+  const shotSrc = {};
+  for (const sh of shots) { const u = srcOf(sh); if (u && sh.recorded) { if (sh.id) shotSrc[sh.id.toUpperCase()] = u; if (sh.n) shotSrc[String(sh.n)] = shotSrc[String(sh.n)] || u; } }
+  return { html, meta, count: shown, missing, shotSrc };
 }
 
-// When the page guessed a recorded shot's file name, try a few seconds later
-// (the game saves the file a moment after the addon asks for it)
+// When the page guessed a shot's file name, try a few seconds either side
+// (the game saves the file a moment after the addon asks for it); if none
+// loads, show a placeholder instead of nothing
 function fixGuesses(root) {
-  root.querySelectorAll("img[data-guess]").forEach(img => {
-    const at = +img.dataset.guess;
+  root.querySelectorAll("img[data-stem]").forEach(img => {
+    const wall = wallOfStem(img.dataset.stem);
     let step = 0;
-    const tries = [1, 2, 3, -1];
+    const tries = [1000, 2000, -1000, 3000];
     img.onerror = () => {
-      if (step < tries.length) img.src = "../../../Screenshots/" + shotName(at + tries[step++]);
-      else img.closest("figure").remove();
+      if (wall && step < tries.length) { img.src = "../../../Screenshots/" + stemOfWall(wall + tries[step++]) + ".jpg"; return; }
+      const fig = img.closest("figure");
+      const ph = document.createElement("div");
+      ph.className = "ph";
+      ph.textContent = "Choose your Screenshots folder to see this picture (" + img.dataset.stem + ".jpg).";
+      fig.classList.add("missing");
+      img.replaceWith(ph);
     };
   });
 }
@@ -523,10 +710,84 @@ async function show(it) {
   state.urls = [];
   document.querySelectorAll("#list li").forEach(li => li.classList.toggle("on", li._it === it));
   const r = await renderStory(it, false);
+  const ver = it.version ? ' <span class="muted">(RP Chronicler ' + esc(it.version) + ")</span>" : "";
   $("reader").innerHTML = '<div class="row" style="justify-content:space-between"><h1>' + esc(it.title) + '</h1><button id="save">Save story</button></div>' +
-    '<p class="meta">' + r.meta + "</p>" + '<div class="story">' + r.html + "</div>";
+    '<p class="meta">' + r.meta + ver + "</p>" + '<div id="tl"></div><div class="story">' + r.html + "</div>";
+  // replay the fade on every story
+  const rd = $("reader"); rd.style.animation = "none"; void rd.offsetWidth; rd.style.animation = "";
   fixGuesses($("reader"));
+  buildTimeline($("tl"), it, r.shotSrc || {});
   $("save").onclick = () => saveStory(it);
+  if (r.missing && !state.shots.length) say("Some screenshots need your Screenshots folder: click Choose files, then Choose Screenshots folder.");
+  else if (r.missing) say(r.missing + " screenshot(s) of this story are not in the folder you chose.");
+}
+
+// ---------- timeline with Play (0.6.3) ----------
+function markKind(text) {
+  const t = (/^\[([A-Z ]+)/.exec(text) || [])[1] || "";
+  if (t.startsWith("BOSS")) return "boss";
+  if (t.startsWith("WIPE") || t.startsWith("DEATH")) return "bad";
+  if (t.startsWith("SHOT")) return "shot";
+  if (t.startsWith("NOTE") || t.startsWith("HIGHLIGHT")) return "note";
+  if (t.startsWith("LOOT")) return "loot";
+  if (t.startsWith("QUEST") || t.startsWith("LEVEL") || t.startsWith("MILESTONE") || t.startsWith("PLACE")) return "prog";
+  return "";
+}
+let tlTimer = null;
+function buildTimeline(box, it, shotSrc) {
+  if (tlTimer) { clearInterval(tlTimer); tlTimer = null; }
+  const marks = [];
+  let last = -1, day = 0;
+  for (const raw of it.marks || []) {
+    const m = /^(\d\d):(\d\d):(\d\d) (.*)$/.exec(raw);
+    if (!m) continue;
+    let sec = +m[1] * 3600 + +m[2] * 60 + +m[3] + day;
+    if (last >= 0 && sec < last - 60) { day += 86400; sec += 86400; } // past midnight
+    last = sec;
+    marks.push({ clock: m[1] + ":" + m[2] + ":" + m[3], sec, text: m[4], kind: markKind(m[4]) });
+  }
+  if (marks.length < 2) { box.innerHTML = ""; return; }
+  const t0 = marks[0].sec, span = Math.max(1, marks[marks.length - 1].sec - t0);
+  const pos = k => ((marks[k].sec - t0) / span * 100).toFixed(2) + "%";
+  box.innerHTML = '<div class="timeline"><div class="tl-head">Timeline <button id="tlPlay">Play</button>' +
+    '<span class="muted" style="font-family:inherit;font-size:12px">' + marks.length + " moments, " + Math.round(span / 60) + " min</span></div>" +
+    '<div class="tl-bar" id="tlBar">' + marks.map((mk, k) => '<span class="tl-tick ' + mk.kind + '" style="left:' + pos(k) + '" title="' + esc(mk.clock + " " + mk.text) + '"></span>').join("") +
+    '<span class="tl-now" id="tlNow"></span></div>' +
+    '<input type="range" class="tl-range" id="tlRange" min="0" max="' + (marks.length - 1) + '" value="0" aria-label="Timeline position">' +
+    '<div class="tl-line" id="tlLine"></div><div class="tl-shot" id="tlShot"></div></div>';
+  const go = k => {
+    k = Math.max(0, Math.min(marks.length - 1, k));
+    $("tlRange").value = k;
+    $("tlNow").style.left = pos(k);
+    $("tlLine").innerHTML = '<span class="tm">' + esc(marks[k].clock) + "</span>" + esc(marks[k].text);
+    const id = (/^\[SHOT\s+([A-Za-z0-9]+-)?(\d+)\]/i.exec(marks[k].text) || []);
+    const src = id[2] ? (shotSrc[((id[1] || (it.code ? it.code + "-" : "")) + id[2]).toUpperCase()] || shotSrc[id[2]]) : null;
+    $("tlShot").innerHTML = src ? '<img src="' + src + '" alt="screenshot">' : "";
+    return k;
+  };
+  const stop = () => { if (tlTimer) clearInterval(tlTimer); tlTimer = null; const b = $("tlPlay"); if (b) b.textContent = "Play"; };
+  $("tlRange").oninput = e => { stop(); go(+e.target.value); };
+  $("tlBar").onclick = e => {
+    stop();
+    const r = e.currentTarget.getBoundingClientRect();
+    const at = t0 + (e.clientX - r.left) / r.width * span;
+    let best = 0;
+    marks.forEach((mk, k) => { if (Math.abs(mk.sec - at) < Math.abs(marks[best].sec - at)) best = k; });
+    go(best);
+  };
+  $("tlPlay").onclick = () => {
+    if (tlTimer) { stop(); return; }
+    let k = +$("tlRange").value;
+    if (k >= marks.length - 1) k = -1;
+    $("tlPlay").textContent = "Pause";
+    go(++k);
+    tlTimer = setInterval(() => {
+      if (!document.body.contains($("tlRange") || document.body)) { stop(); return; }
+      if (k >= marks.length - 1) { stop(); return; }
+      go(++k);
+    }, 1600);
+  };
+  go(0);
 }
 
 function safeName(s) {
@@ -595,7 +856,8 @@ function report(found) {
 }
 
 // ---------- the buttons ----------
-function resetData() { state.saves = []; state.shots = []; state.tgaSeen = false; }
+function resetData() { state.saves = []; resetShots(); state.tgaSeen = false; }
+function resetShots() { state.shots = []; state.byStem = new Map(); offsetCache = null; }
 
 async function loadRoot(handle) {
   resetData();
@@ -616,18 +878,19 @@ async function pickFolder() {
   try {
     h = await window.showDirectoryPicker({ id: "rpchronicler-wow", mode: "read" });
   } catch (e) {
-    if (e && e.name === "AbortError") say("No folder chosen. If the browser refused it, use Choose RPChronicler.lua below.");
+    if (e && e.name === "AbortError") { say("No folder chosen. If the browser refused it, use Other ways below."); $("otherWays").open = true; }
     else say("This browser can't open that folder: " + (e && e.message), true);
     return;
   }
   state.rootHandle = h;
   await kvSet("root", h);
+  await kvSet("lua", null);
   await loadRoot(h);
 }
 
 async function refresh() {
   const h = state.rootHandle;
-  if (!h) return;
+  if (!h) { await loadRemembered(true); return; }
   try {
     let p = await h.queryPermission({ mode: "read" });
     if (p !== "granted") p = await h.requestPermission({ mode: "read" });
@@ -636,12 +899,76 @@ async function refresh() {
   await loadRoot(h);
 }
 
+// ---------- this page's address, for the game's Viewer path ----------
+$("addr").value = String(location.href).split("#")[0];
+$("copyAddr").onclick = async () => {
+  const v = $("addr").value;
+  let ok = false;
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(v); ok = true; } } catch (e) { /* fall back */ }
+  if (!ok) { try { $("addr").select(); ok = document.execCommand("copy"); } catch (e) { ok = false; } }
+  $("copyAddr").textContent = ok ? "Copied" : "Select and copy";
+  if (!ok) $("addr").select();
+  setTimeout(() => { $("copyAddr").textContent = "Copy"; }, 2000);
+};
+
+// ---------- RPChronicler.lua and the Screenshots folder, remembered (Chrome / Edge) ----------
+const HAS_OPEN = typeof window.showOpenFilePicker === "function";
+async function allowed(h, ask) {
+  try {
+    let p = await h.queryPermission({ mode: "read" });
+    if (p !== "granted" && ask) p = await h.requestPermission({ mode: "read" });
+    return p === "granted";
+  } catch (e) { return false; }
+}
+async function loadLuaHandle(h) {
+  state.saves = [];
+  const ok = await addSave(await h.getFile(), "");
+  if (!ok) { say("That file has no RP Chronicler data. Pick RPChronicler.lua from your SavedVariables folder.", true); return false; }
+  return true;
+}
+async function loadShotsHandle(h) {
+  resetShots();
+  for (const k of await fromHandle(h).list()) if (!k.isDir) addShot(k.name, () => k.file());
+}
+async function loadRemembered(ask) {
+  const lua = await kvGet("lua"), shots = await kvGet("shots");
+  if (!lua && !shots) return false;
+  if (lua && await allowed(lua, ask)) { if (!(await loadLuaHandle(lua))) return true; }
+  else if (lua) { say("Click Refresh to read your stories again (the browser asks once)."); $("refresh").classList.remove("hide"); return true; }
+  if (shots && await allowed(shots, ask)) await loadShotsHandle(shots);
+  $("where").textContent = "File: " + (lua ? lua.name : "") + (shots ? (lua ? ", " : "") + "folder: " + shots.name : "");
+  $("refresh").classList.remove("hide");
+  report();
+  return true;
+}
+$("pickLua").onclick = async () => {
+  if (!HAS_OPEN) { $("luaInput").click(); return; }
+  let h;
+  try { [h] = await window.showOpenFilePicker({ id: "rpchronicler-lua", types: [{ description: "RP Chronicler saved data", accept: { "text/plain": [".lua"] } }] }); }
+  catch (e) { if (!e || e.name !== "AbortError") $("luaInput").click(); return; }
+  if (!(await loadLuaHandle(h))) return;
+  await kvSet("lua", h);
+  state.rootHandle = null;
+  $("where").textContent = "File: " + h.name;
+  $("refresh").classList.remove("hide");
+  report();
+};
+$("pickShots").onclick = async () => {
+  if (!HAS_FSA) { $("shotInput").click(); return; }
+  let h;
+  try { h = await window.showDirectoryPicker({ id: "rpchronicler-shots", mode: "read" }); }
+  catch (e) { if (!e || e.name !== "AbortError") $("shotInput").click(); return; }
+  await loadShotsHandle(h);
+  await kvSet("shots", h);
+  report();
+};
+$("remNote").textContent = HAS_OPEN ? "This browser remembers the file and folder you pick here: next time just click Refresh." : "";
+
 $("pick").onclick = pickFolder;
 $("change").onclick = () => { $("setup").classList.toggle("hide"); };
 $("refresh").onclick = refresh;
-$("pickLua").onclick = () => $("luaInput").click();
-$("pickShots").onclick = () => $("shotInput").click();
 $("luaInput").onchange = async e => {
+  kvSet("lua", null);
   const files = [...e.target.files];
   e.target.value = "";
   state.saves = [];
@@ -653,19 +980,20 @@ $("luaInput").onchange = async e => {
 $("shotInput").onchange = async e => {
   const files = [...e.target.files];
   e.target.value = "";
-  state.shots = [];
+  resetShots();
   for (const f of files) addShot(f.name, async () => f, f.size);
   report();
 };
 $("showPaste").onclick = () => {
+  offsetCache = null;
   const it = parsePasted($("paste").value);
   if (!it) { say("That doesn't look like Copy for viewer text. In the Story Book click Copy for viewer, then Ctrl+C, then paste here.", true); return; }
   $("app").classList.remove("hide");
   $("setup").classList.add("hide");
   $("change").classList.remove("hide");
   $("list").querySelectorAll("li").forEach(li => li.classList.remove("on"));
-  show(it);
   say("Showing the pasted story.");
+  show(it);
 };
 
 // Drag and drop: the _forever_ folder, a Screenshots folder, or RPChronicler.lua
@@ -688,9 +1016,14 @@ document.addEventListener("drop", async e => {
 
 // ---------- start ----------
 (async function start() {
-  if (!HAS_FSA) $("fsaWay").classList.add("hide");
+  if (!HAS_FSA) {
+    $("fsaWay").classList.add("hide");
+    $("otherWays").open = true;
+    $("otherSum").classList.add("hide");
+    $("ffNote").classList.remove("hide");
+  }
   const h = HAS_FSA ? await kvGet("root") : null;
-  if (!h) return;
+  if (!h) { if (HAS_FSA) await loadRemembered(false); return; }
   state.rootHandle = h;
   $("where").textContent = "Folder: " + h.name;
   $("refresh").classList.remove("hide");
@@ -701,7 +1034,7 @@ document.addEventListener("drop", async e => {
 })();
 
 // for tests
-window.RPCViewer = { readSavedVariables, parsePasted, state, scanFolder, fromFiles, report, show, renderStory };
+window.RPCViewer = { readSavedVariables, parsePasted, state, scanFolder, fromFiles, report, show, renderStory, marksOf, buildTimeline };
 })();
 </script>
 </body>

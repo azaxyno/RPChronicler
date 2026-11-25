@@ -65,11 +65,47 @@ function ns.SpellName(id)
         local ok, n = pcall(C_Spell.GetSpellName, id)
         if ok and ns.SafeStr(n) then return ns.SafeStr(n) end
     end
-    if GetSpellInfo then
-        local ok, n = pcall(GetSpellInfo, id)
-        if ok and ns.SafeStr(n) then return ns.SafeStr(n) end
-    end
     return nil
+end
+
+-- The client's version and build, for the version stamp on runs and
+-- stories ("1.60.1 (12345)"), or nil
+function ns.ClientBuild()
+    if not GetBuildInfo then return nil end
+    local ok, ver, build = pcall(GetBuildInfo)
+    if not ok then return nil end
+    return tostring(ver or "?") .. " (" .. tostring(build or "?") .. ")"
+end
+
+-- An item link's quality (0 gray .. 5 legendary) and name. Links are
+-- "|cffRRGGBB|Hitem:...|h[Name]|h|r" or, on newer clients, "|cnIQ3:...".
+local QUALITY_HEX = { ["9d9d9d"] = 0, ["ffffff"] = 1, ["1eff00"] = 2, ["0070dd"] = 3, ["a335ee"] = 4, ["ff8000"] = 5 }
+function ns.ItemQuality(link)
+    if type(link) ~= "string" then return nil end
+    local iq = link:match("|cnIQ(%d):")
+    if iq then return tonumber(iq) end
+    local hex = link:match("|c%x%x(%x%x%x%x%x%x)")
+    return hex and QUALITY_HEX[hex:lower()] or nil
+end
+function ns.ItemName(link)
+    return type(link) == "string" and link:match("|h%[(.-)%]|h") or nil
+end
+
+-- 0.6.3: what you wear right now, for the story cover (the model tries
+-- it on) and the Full Log: { { slot, link, name, q }, ... }. Shirt and
+-- tabard are kept for the cover; only green and better go in the log.
+local GEAR_SLOTS = { 1, 2, 3, 15, 5, 4, 19, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17, 18 }
+function ns.EquippedGear()
+    local out = {}
+    if not GetInventoryItemLink then return out end
+    for _, slot in ipairs(GEAR_SLOTS) do
+        local ok, link = pcall(GetInventoryItemLink, "player", slot)
+        link = ok and ns.SafeStr(link) or nil
+        if link and link:find("item:", 1, true) then
+            table.insert(out, { slot = slot, link = link, name = ns.ItemName(link), q = ns.ItemQuality(link) })
+        end
+    end
+    return out
 end
 
 -- =========================================================

@@ -146,13 +146,13 @@ function ConvertTo-StoryHtml([string]$s) {
     $stack = New-Object System.Collections.ArrayList
     # [Shot N] markers become pictures later: close the open colors around
     # them and reopen them after, so a picture never breaks the coloring
-    $parts = [regex]::Split($s, '(\|c[0-9a-fA-F]{8}|\|r|\[[Ss]hot\s*\d+\])')
+    $parts = [regex]::Split($s, '(\|c[0-9a-fA-F]{8}|\|r|\[[Ss]hot\s*(?:[A-Za-z0-9]+-)?\d+\])')
     foreach ($p in $parts) {
         if ($p -match '^\|c[0-9a-fA-F]{2}([0-9a-fA-F]{6})$') {
             [void]$sb.Append('<span style="color:#' + $Matches[1] + '">'); $open++; [void]$stack.Add($Matches[1])
         } elseif ($p -eq '|r') {
             if ($open -gt 0) { [void]$sb.Append('</span>'); $open--; $stack.RemoveAt($stack.Count - 1) }
-        } elseif ($p -match '^\[[Ss]hot\s*\d+\]$') {
+        } elseif ($p -match '^\[[Ss]hot\s*(?:[A-Za-z0-9]+-)?\d+\]$') {
             for ($k = 0; $k -lt $open; $k++) { [void]$sb.Append('</span>') }
             [void]$sb.Append($p)
             foreach ($c in $stack) { [void]$sb.Append('<span style="color:#' + $c + '">') }
@@ -320,12 +320,16 @@ function Get-StoryShots($st, $files, [string]$imgRoot, [string]$base, [string]$p
 function Add-StoryShots([string]$html, $shots, $st) {
     $script:shotByN = @{}
     foreach ($s in $shots) { if ($s.N) { $script:shotByN[[string]$s.N] = $s } }
-    $html = [regex]::Replace($html, '\[[Ss]hot\s*(\d+)\]', {
+    # 0.6.3: [Shot TPX8OK-2] (run ID and number) or [Shot 2]; with markers
+    # in the story the AI picked the pictures, so the rest stay out
+    $script:hadMarkers = [regex]::IsMatch($html, '\[[Ss]hot\s*(?:[A-Za-z0-9]+-)?\d+\]')
+    $html = [regex]::Replace($html, '\[[Ss]hot\s*(?:[A-Za-z0-9]+-)?(\d+)\]', {
         param($m)
         $s = $script:shotByN[$m.Groups[1].Value]
         if ($s -and -not $s.Placed) { $s.Placed = $true; return (Get-Figure $s) }
         return ''
     })
+    if ($script:hadMarkers) { return $html }
     $left = @($shots | Where-Object { -not $_.Placed })
     if ($left.Count -eq 0) { return $html }
     $lines = New-Object System.Collections.ArrayList

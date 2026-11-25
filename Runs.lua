@@ -88,11 +88,53 @@ function ns.GetRunDuration(adv)
     return 0
 end
 
+-- Keeps the 40 newest runs. 0.6.3: says so in chat when a run goes,
+-- naming it, so a run with no story yet is never lost without a word
+-- (its story, if imported, stays in the Story Book).
+local RUN_CAP = 40
+function ns.TrimRuns()
+    local list = RPChroniclerDB and RPChroniclerDB.adventures
+    if type(list) ~= "table" then return end
+    while #list > RUN_CAP do
+        local old = table.remove(list)
+        local hasStory = false
+        for _, st in pairs(RPChroniclerDB.stories or {}) do
+            if type(st) == "table" and old and st.runId == old.id then hasStory = true break end
+        end
+        if old and not hasStory and not old.story then
+            print(string.format("|cffffd100RP Chronicler|r Your oldest run (%s, %s) had no story and was removed to keep the newest %d.",
+                tostring(old.title or "Adventure"), tostring(old.startDate or "?"), RUN_CAP))
+        end
+        ns.Debug("run", "run cap: removed " .. tostring(old and old.title))
+    end
+end
+
 local RUN_KIND_LABEL = { dungeon = "Dungeon", raid = "Raid", world = "Open world adventure" }
 function ns.GetRunKindLabel(adv)
     return RUN_KIND_LABEL[(adv and adv.kind) or "world"] or "Adventure"
 end
 
+
+-- 0.6.3: story lines a full timeline never drops (bosses, wipes, deaths,
+-- quests, levels, places, shots, notes, highlights, pauses, and the run's
+-- first and last lines). Over the cap, the oldest other line goes instead
+-- (chat, fight details, loot, HP warnings), so a chatty run keeps its
+-- beginning.
+local KEEP_TAGS = { "BOSS ENGAGED", "BOSS KILL", "BOSS RESET", "WIPE", "DEATH", "QUEST", "LEVEL", "PLACE",
+    "SHOT", "NOTE", "HIGHLIGHT", "MILESTONE", "PAUSED", "RESUMED", "RELOAD" }
+local function KeepLine(line)
+    local body = tostring(line):gsub("^%[[^%]]*%]%s*", "")
+    if body:find("^Adventure began") or body:find("^Adventure ended") then return true end
+    local tag = body:match("^%[([%u ]+)")
+    if not tag then return false end
+    for _, t in ipairs(KEEP_TAGS) do
+        if tag == t or tag:sub(1, #t + 1) == t .. " " or tag:find("^" .. t .. " #") then return true end
+    end
+    return false
+end
+-- The line each live handle points at (this session only), so a handle
+-- still finds its line after a line before or after it was dropped
+local handleLine = setmetatable({}, { __mode = "k" })
 
 local function PushTimeline(adv, stamp, entryText, force)
     if not adv then return end
@@ -100,15 +142,24 @@ local function PushTimeline(adv, stamp, entryText, force)
     if adv.paused and not force then return end
     adv.lastSeen = time()
     adv.fullTimeline = adv.fullTimeline or {}
+    local tl = adv.fullTimeline
     local line = string.format("[%s] %s", stamp or PreciseStamp(), entryText)
-    table.insert(adv.fullTimeline, line)
+    table.insert(tl, line)
     local cap = ns.Limit("timelineMax")
-    while #adv.fullTimeline > cap do
-        table.remove(adv.fullTimeline, 1)
+    while #tl > cap do
+        local drop
+        for i = 1, #tl - 1 do
+            if not KeepLine(tl[i]) then drop = i break end
+        end
+        -- every line is a story line: drop the oldest after the first
+        table.remove(tl, drop or 2)
         adv.tlRemoved = (adv.tlRemoved or 0) + 1
     end
     -- A handle that survives trimming: the line's absolute position
-    return (adv.tlRemoved or 0) + #adv.fullTimeline
+    local handle = (adv.tlRemoved or 0) + #tl
+    handleLine[adv] = handleLine[adv] or {}
+    handleLine[adv][handle] = line
+    return handle
 end
 
 -- 0.5.0: rewrites a timeline line in place (trash streaks, repeated loot).
@@ -116,10 +167,20 @@ end
 local function UpdateTimeline(adv, handle, entryText)
     if not adv or not handle or not adv.fullTimeline then return false end
     local idx = handle - (adv.tlRemoved or 0)
-    local old = adv.fullTimeline[idx]
+    local want = handleLine[adv] and handleLine[adv][handle]
+    if want and adv.fullTimeline[idx] ~= want then
+        -- a line was dropped after this one: look a little further on
+        idx = nil
+        for i = math.max(1, handle - (adv.tlRemoved or 0)), #adv.fullTimeline do
+            if adv.fullTimeline[i] == want then idx = i break end
+        end
+        if not idx then handleLine[adv][handle] = nil return false end
+    end
+    local old = idx and adv.fullTimeline[idx]
     if not old then return false end
     local stamp = old:match("^(%[[^%]]*%])") or ("[" .. PreciseStamp() .. "]")
     adv.fullTimeline[idx] = stamp .. " " .. entryText
+    if handleLine[adv] then handleLine[adv][handle] = adv.fullTimeline[idx] end
     adv.lastSeen = time()
     return true
 end
@@ -154,7 +215,7 @@ function ns.SyncAdventureRoster()
             comp = pKey and RPChroniclerDB.players[pKey]
             if comp and (comp.note or "") ~= "" then note = comp.note end
         end
-        -- Pet: name plus species ("Snips (Crab, hunter pet)")
+        -- Pet: "Name (Family)", e.g. "Snips (Crab)"
         local petUnit = (unit == "player" and "pet") or (unit:match("^party%d$") and ("partypet" .. unit:sub(6))) or (unit:match("^raid%d+$") and ("raidpet" .. unit:sub(5))) or nil
         local petDesc = petUnit and UnitExists(petUnit) and ns.GetPetDescriptor(petUnit) or nil
 
@@ -229,6 +290,7 @@ function ns.StartAdventure(customTitle, isAuto)
 
     activeRun = {
         id = tostring(time()) .. "_" .. tostring(math.random(100, 999)),
+        code = ns.MakeRunCode(time()),   -- 0.6.3: the Run ID the story carries back
         title = title,
         zone = zone,
         isAuto = isAuto and true or false,
@@ -263,6 +325,12 @@ function ns.StartAdventure(customTitle, isAuto)
         milestones = {},
         pvpKills = 0,
         pvpDeaths = 0,
+        -- 0.6.3: who recorded it, what they wore (story cover and Full
+        -- Log) and which addon and client made it (version stamp)
+        char = ns.PlayerName(),
+        gear = ns.EquippedGear(),
+        addonVersion = ns.VERSION,
+        clientBuild = ns.ClientBuild(),
     }
     -- Persist the live run in SavedVariables so /reload or a disconnect can't lose it
     RPChroniclerDB.activeRun = activeRun
@@ -308,9 +376,7 @@ function ns.EndAdventure(reason, endTime)
     activeRun.exportText = ns.BuildAdventureFullLog(activeRun)
 
     table.insert(RPChroniclerDB.adventures, 1, activeRun)
-    while #RPChroniclerDB.adventures > 40 do
-        table.remove(RPChroniclerDB.adventures)
-    end
+    ns.TrimRuns()
 
     local saved = activeRun
     activeRun = nil
@@ -387,7 +453,7 @@ function ns.RestoreSavedAdventure()
     PushTimeline(saved, PreciseStamp(), "Adventure ended (interrupted by a logout or disconnect)", true)
     saved.exportText = ns.BuildAdventureFullLog(saved)
     table.insert(RPChroniclerDB.adventures, 1, saved)
-    while #RPChroniclerDB.adventures > 40 do table.remove(RPChroniclerDB.adventures) end
+    ns.TrimRuns()
     ns.Debug("run", "closed an interrupted run: " .. tostring(saved.title))
     return "interrupted", saved
 end
@@ -818,7 +884,58 @@ function ns.RecordAdventureChat(channelLabel, speaker, cleanMsg, isEmote)
     PushTimeline(activeRun, PreciseStamp(), entry)
 end
 
+-- =========================================================
+-- Run IDs (0.6.3): every recording has a short, stable ID (its start
+-- time in base 36, e.g. "TPX8OK"). The Full Log header shows it, the AI
+-- copies it into the story's last line, and import links the story to
+-- its recording by it. Shots get run-qualified IDs ("TPX8OK-2"), so a
+-- marker always points at the right run's picture.
+-- =========================================================
+local B36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+function ns.MakeRunCode(t)
+    t = math.floor(tonumber(t) or time())
+    local s = ""
+    repeat
+        local d = t % 36
+        s = B36:sub(d + 1, d + 1) .. s
+        t = math.floor(t / 36)
+    until t <= 0
+    return s
+end
+
+-- The run's ID; older runs get the same one from their start time
+function ns.RunCode(adv)
+    if type(adv) ~= "table" then return nil end
+    if type(adv.code) == "string" and adv.code ~= "" then return adv.code end
+    if tonumber(adv.startTime) then return ns.MakeRunCode(adv.startTime) end
+    return nil
+end
+
+function ns.ShotId(adv, sh, i)
+    return (ns.RunCode(adv) or "RUN") .. "-" .. tostring((type(sh) == "table" and sh.n) or i or 1)
+end
+
+-- The game's own file name for a shot taken at this time, without the
+-- extension: WoWScrnShot_MMDDYY_HHMMSS in the computer's local time
+function ns.ShotFileStem(at)
+    if not date or not at then return nil end
+    local ok, s = pcall(date, "%m%d%y_%H%M%S", math.floor(at))
+    return ok and s and ("WoWScrnShot_" .. s) or nil
+end
+
+-- The live or saved run with this Run ID (any case)
+function ns.FindAdventureByCode(code)
+    if type(code) ~= "string" or code == "" then return nil end
+    code = code:upper()
+    if activeRun and ns.RunCode(activeRun) == code then return activeRun end
+    for _, adv in ipairs((RPChroniclerDB and RPChroniclerDB.adventures) or {}) do
+        if ns.RunCode(adv) == code then return adv end
+    end
+    return nil
+end
+
 -- 0.5.0: one shape for every shot { n, at, kind, description, zone }.
+-- 0.6.3: plus file, the game's file name for it.
 -- Returns false when the run's shot cap is reached (new shots stop).
 function ns.RecordAdventureScreenshot(kind, description)
     if not activeRun or activeRun.paused then return false end
@@ -827,9 +944,21 @@ function ns.RecordAdventureScreenshot(kind, description)
     if #activeRun.shots >= cap then return false end
     local n = #activeRun.shots + 1
     local desc = ns.SafeStr(description) or "Captured moment"
-    table.insert(activeRun.shots, { n = n, at = time(), kind = kind or "manual", description = desc, zone = ns.GetCurrentWhere() })
-    PushTimeline(activeRun, PreciseStamp(), string.format("[SHOT %d] %s", n, desc))
+    local now = time()
+    local sh = { n = n, at = now, file = ns.ShotFileStem(now), kind = kind or "manual", description = desc, zone = ns.GetCurrentWhere() }
+    table.insert(activeRun.shots, sh)
+    PushTimeline(activeRun, PreciseStamp(), string.format("[SHOT %s] %s", ns.ShotId(activeRun, sh), desc))
     return true
+end
+
+-- The game saved the shot RP Chronicler asked for: keep the time it was
+-- really written, so the file name matches exactly
+function ns.ConfirmLastShot()
+    local list = activeRun and activeRun.shots
+    local sh = list and list[#list]
+    if not sh or not sh.at or (time() - sh.at) > 6 then return end
+    sh.at = time()
+    sh.file = ns.ShotFileStem(sh.at)
 end
 
 function ns.MarkAdventureHighlight(customNote)
@@ -845,6 +974,134 @@ function ns.MarkAdventureHighlight(customNote)
     table.insert(activeRun.highlights, stamped)
     PushTimeline(activeRun, PreciseStamp(), "[HIGHLIGHT] " .. text)
     return true, "Bookmarked moment: " .. text
+end
+
+-- 0.6.3: /rp note: the character's own thought, at this moment, as one
+-- [NOTE] line (the story AI reads it as their inner voice)
+function ns.RecordRunNote(text)
+    text = tostring(text or ""):gsub("||", "|"):gsub("[\r\n]+", " "):match("^%s*(.-)%s*$")
+    text = ns.StripColors(text)
+    if text == "" then return false, "Type the thought too: /rp note I can still hear her warning." end
+    if not activeRun then return false, "No adventure is recording, so there is nowhere to put the note." end
+    if activeRun.paused then return false, "Recording is paused. Resume it first." end
+    if not ns.LogOn("notes") then return false, "Notes are off in Options > Recording (Your notes)." end
+    if #text > 300 then text = text:sub(1, 300) end
+    PushTimeline(activeRun, PreciseStamp(), "[NOTE] " .. text)
+    activeRun.noteCount = (activeRun.noteCount or 0) + 1
+    return true, "Note added to the story log: " .. text
+end
+
+-- =========================================================
+-- Fixing a run (0.6.3): replace a wrong name (a player, boss, foe,
+-- companion or pet) before writing the story. The recording itself is
+-- never changed: the fixes are a list applied to the Summary, the Full
+-- Log and the story's copy of the run, so every fix can be undone.
+-- =========================================================
+local function EscapePattern(str)
+    return (str:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%0"))
+end
+
+-- One fixed name pattern: whole words only, so "Rat" never changes "Pirate"
+local function FixPattern(from)
+    local p = EscapePattern(from)
+    if from:sub(1, 1):match("%w") then p = "%f[%w]" .. p end
+    if from:sub(-1):match("%w") then p = p .. "%f[%W]" end
+    return p
+end
+
+function ns.ApplyRunFixes(adv, text)
+    if type(text) ~= "string" or type(adv) ~= "table" or type(adv.fixes) ~= "table" then return text end
+    for _, fx in ipairs(adv.fixes) do
+        if type(fx) == "table" and type(fx.from) == "string" and fx.from ~= "" and type(fx.to) == "string" then
+            text = text:gsub(FixPattern(fx.from), (fx.to:gsub("%%", "%%%%")))
+        end
+    end
+    return text
+end
+
+-- A single name with the run's fixes applied
+function ns.FixedName(adv, name)
+    if type(name) ~= "string" then return name end
+    return ns.ApplyRunFixes(adv, name)
+end
+
+-- Adds a fix. Returns true, or false and why.
+function ns.AddRunFix(advId, from, to)
+    local adv = ns.FindAdventure(advId)
+    if not adv then return false, "Pick a recording first." end
+    from = tostring(from or ""):gsub("||", "|"):match("^%s*(.-)%s*$")
+    to = tostring(to or ""):gsub("||", "|"):match("^%s*(.-)%s*$")
+    from, to = ns.StripColors(from), ns.StripColors(to)
+    if from == "" or to == "" then return false, "Type the wrong name and the right one." end
+    if from == to then return false, "The new name is the same as the old one." end
+    adv.fixes = type(adv.fixes) == "table" and adv.fixes or {}
+    for _, fx in ipairs(adv.fixes) do
+        if fx.from == from then
+            fx.to = to
+            ns.Notify("runChanged", adv)
+            return true
+        end
+    end
+    if #adv.fixes >= 30 then return false, "A run keeps at most 30 fixes." end
+    table.insert(adv.fixes, { from = from, to = to })
+    if adv.exportText then adv.exportText = ns.BuildAdventureFullLog(adv) end
+    ns.Notify("runChanged", adv)
+    return true
+end
+
+-- Undoes a fix: the recorded name comes back
+function ns.RemoveRunFix(advId, idx)
+    local adv = ns.FindAdventure(advId)
+    if not adv or type(adv.fixes) ~= "table" or not adv.fixes[idx] then return false end
+    table.remove(adv.fixes, idx)
+    if adv.exportText then adv.exportText = ns.BuildAdventureFullLog(adv) end
+    ns.Notify("runChanged", adv)
+    return true
+end
+
+-- The names in a run that may need a fix: party, pets, bosses, named
+-- foes and companions met, most important first (no duplicates)
+function ns.RunNames(adv)
+    local out, seen = {}, {}
+    local function Add(n)
+        n = type(n) == "string" and n:match("^%s*(.-)%s*$") or nil
+        if n and n ~= "" and not seen[n:lower()] and #out < 24 then
+            seen[n:lower()] = true
+            table.insert(out, n)
+        end
+    end
+    if type(adv) ~= "table" then return out end
+    for _, p in ipairs(adv.participants or {}) do
+        Add(p.name)
+        if type(p.pet) == "string" then Add(p.pet:match("^(.-)%s*%(") or p.pet) end
+    end
+    for _, b in ipairs(adv.bossKills or {}) do Add(b) end
+    for _, k in ipairs(adv.kills or {}) do Add(k) end
+    local met = {}
+    for k in pairs(type(adv.metCompanions) == "table" and adv.metCompanions or {}) do table.insert(met, k) end
+    table.sort(met)
+    for _, k in ipairs(met) do Add(k) end
+    local foes = {}
+    for k, n in pairs(type(adv.killCounts) == "table" and adv.killCounts or {}) do table.insert(foes, { k = k, n = n }) end
+    table.sort(foes, function(x, y) if x.n ~= y.n then return x.n > y.n end return x.k < y.k end)
+    for _, f in ipairs(foes) do Add(f.k) end
+    return out
+end
+
+-- A story keeps its own copy of the run: give that copy the fixed names
+-- (boss icons and the party line read them)
+function ns.FixRunCopy(st)
+    if type(st) ~= "table" or type(st.fixes) ~= "table" or #st.fixes == 0 then return end
+    local function F(n) return ns.ApplyRunFixes(st, n) end
+    for _, p in ipairs(st.participants or {}) do p.name = F(p.name); if p.pet then p.pet = F(p.pet) end end
+    for i, b in ipairs(st.bossKills or {}) do st.bossKills[i] = F(b) end
+    for i, k in ipairs(st.kills or {}) do st.kills[i] = F(k) end
+    if type(st.bossInfo) == "table" then
+        local info = {}
+        for k, v in pairs(st.bossInfo) do info[F(k)] = v end
+        st.bossInfo = info
+    end
+    st.title = F(st.title)
 end
 
 function RPChronicler_MarkMoment()

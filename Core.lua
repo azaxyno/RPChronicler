@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.0"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.1"
 
 BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
 BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
@@ -22,12 +22,38 @@ ns.DEFAULT_TRIGGER = "use aloria"
 -- templates in UI_Options.lua). The Full Log's first line is "use <name>".
 ns.STORY_SKILLS = { dungeon = "wow-dungeon-raid-story", world = "wow-open-world-story" }
 
--- Section flags of a slice tab. Every tab can turn each one on or off in
--- Options > Slice Tabs. Chat sources are merged into one time-ordered timeline.
-ns.TAB_FLAGS = {
-    "incDirect", "incTarget", "incParty", "incStatus", "incQuest",
-    "incSocial", "incPartySay", "incPartyChat", "incNpc", "incLoot", "incOoc", "incWorld", "incGuild",
+-- What a slice tab can hold (0.6.1: one list for the snapshot and the
+-- Slice Tabs page). Every tab can turn each one on or off in
+-- Options > Slice Tabs.
+-- Sections: lines of their own at the top of the snapshot.
+ns.TAB_SECTIONS = {
+    { key = "incDirect", short = "Line to you", label = "Last whisper / say to you" },
+    { key = "incTarget", short = "Target", label = "Target info" },
+    { key = "incParty",  short = "Party roster", label = "Party roster" },
+    { key = "incStatus", short = "Status", label = "Status, pet, deaths",
+      tip = "Your level, HP, mana, combat state, pet, and deaths or level ups from the last 15 minutes." },
+    { key = "incQuest",  short = "Quest", label = "Active quest" },
 }
+-- Chat sources: merged into one time-ordered timeline. buffer: the ns.logs
+-- buffer it reads; filter: an optional filter in Snapshot.lua; unless: a
+-- flag that already includes this source.
+ns.CHAT_SOURCES = {
+    { key = "incSocial",    buffer = "social", short = "Say / whisper", label = "Say / yell / whispers",
+      tip = "Say, yell, emotes and whispers from everyone nearby." },
+    { key = "incPartySay",  buffer = "social", short = "Party's say", label = "Party members' say", filter = "partySay", unless = "incSocial",
+      tip = "Say, yell and emotes, but only from you and your party members." },
+    { key = "incPartyChat", buffer = "party",  short = "Party chat", label = "Party / raid chat" },
+    { key = "incNpc",       buffer = "npc",    short = "NPC lines", label = "NPC dialogue" },
+    { key = "incLoot",      buffer = "loot",   short = "Loot", label = "Loot (green and up)",
+      tip = "Green and better items, your own coin summed into one line. No gray items or roll spam." },
+    { key = "incOoc",       buffer = "ooc",    short = "OOC channel", label = "OOC channel" },
+    { key = "incWorld",     buffer = "world",  short = "World chat", label = "World channels",
+      tip = "General, Trade, LFG and other numbered channels. The OOC channel has its own switch." },
+    { key = "incGuild",     buffer = "guild",  short = "Guild chat", label = "Guild & officer chat", tip = "Guild chat and officer chat." },
+}
+ns.TAB_FLAGS = {}
+for _, d in ipairs(ns.TAB_SECTIONS) do table.insert(ns.TAB_FLAGS, d.key) end
+for _, d in ipairs(ns.CHAT_SOURCES) do table.insert(ns.TAB_FLAGS, d.key) end
 
 local function Tab(id, label, on)
     local t = { id = id, label = label, prefix = ns.DEFAULT_TRIGGER }
@@ -49,89 +75,167 @@ ns.DEFAULT_TABS = {
     Tab("LOOT", "Loot", { incParty = true, incStatus = true, incLoot = true }),
 }
 
--- Full Log categories. Each one has its own switch in Options > Full Log.
-ns.LOG_CATEGORIES = {
-    { key = "fights",      label = "Fights (one line each)" },
-    { key = "fightStreaks", label = "Fold repeated trash fights" },
-    { key = "kills",       label = "Kills of elites, rares, bosses" },
-    { key = "aggro",       label = "Aggro swaps" },
-    { key = "danger",      label = "Near deaths and saves" },
-    { key = "spells",      label = "Party spells" },
-    { key = "bossCasts",   label = "Boss casts" },
-    { key = "cc",          label = "Crowd control" },
-    { key = "pets",        label = "Pets" },
-    { key = "quests",      label = "Quests accepted and done" },
-    { key = "questObjectives", label = "Quest objectives done" },
-    { key = "npcDialogue", label = "NPC and quest dialogue" },
-    { key = "levels",      label = "Level ups" },
-    { key = "places",      label = "Subzone changes" },
-    { key = "skills",      label = "Profession skill-ups" },
-    { key = "milestones",  label = "Milestones" },
-    { key = "loot",        label = "Loot and coin" },
-    { key = "lootSource",  label = "Where loot came from" },
-    { key = "atmosphere",  label = "Atmosphere (time of day)" },
-    { key = "guildmates",  label = "Guildmates in the party" },
-    { key = "chat",        label = "Party and say chat" },
-    { key = "screenshots", label = "Screenshot list (for export)" },
+-- =========================================================
+-- Full Log groups (0.6.1): each line kind ("category") belongs to one of
+-- six groups, and each group has one switch in Options > Recording.
+-- Line kinds that are not in any group are never written.
+-- =========================================================
+ns.LOG_GROUPS = {
+    { key = "combat", label = "Fights and kills", cats = { "fights", "fightStreaks", "kills", "aggro", "spells", "cc", "pets" },
+      tip = "One line per fight (easy trash fights folded into one), elite and named kills, aggro swaps, big spells, crowd control and pets." },
+    { key = "bosses", label = "Bosses and danger", cats = { "bossCasts", "danger" },
+      tip = "What bosses cast and at whom, near deaths and saves. Boss pulls, kills and wipes are always kept." },
+    { key = "quests", label = "Quests and NPCs", cats = { "quests", "questObjectives", "npcDialogue" },
+      tip = "Quests accepted and done, objectives, and what quest givers, bosses and named NPCs say." },
+    { key = "travel", label = "Travel and progress", cats = { "levels", "places", "milestones" },
+      tip = "Level ups, new places, and milestones: new spells, pets, mounts, achievements and reputation." },
+    { key = "loot", label = "Loot", cats = { "loot", "lootSource" },
+      tip = "Green and better items, who got them and where they came from." },
+    { key = "chat", label = "Group chat", cats = { "chat", "guildmates" },
+      tip = "Say, yell, emotes, whispers and group chat, and which party members are your guildmates. Guild and world channels and OOC never go in." },
+}
+ns.LOG_CAT_GROUP = {}
+for _, g in ipairs(ns.LOG_GROUPS) do
+    for _, c in ipairs(g.cats) do ns.LOG_CAT_GROUP[c] = g.key end
+end
+
+-- The Full Log's tags, with the meaning the story templates give the AI.
+-- The templates' tag list is built from this table (Templates.lua), so a
+-- tag added here is explained to the AI too.
+ns.LOG_TAGS = {
+    { tag = "[FIGHT]", text = "one line per fight: the foes, how long it took, the abilities used (\"used Arcane Shot; Snips: Claw\"), who fled, who took aggro from whom, who got low, who fell, and how it ended." },
+    { tag = "[FIGHTS]", text = "a streak of easy fights against the same foe folded into one line (\"14x Windsong Crawler\"): give it a sentence of travel color, not a scene each." },
+    { tag = "[KILL]", text = "an elite, rare or named foe defeated. Foes defeated: N in the header counts all foes, trash included." },
+    { tag = "[BOSS ENGAGED] [BOSS KILL] [BOSS RESET] [WIPE #N]", text = "boss fights and wipes." },
+    { tag = "[BOSS CAST]", text = "what a boss cast and at whom." },
+    { tag = "[SPELL]", text = "a big cooldown or crowd control cast." },
+    { tag = "[CC]", text = "mind control, fear, stun, polymorph." },
+    { tag = "[AGGRO]", text = "a foe turning on someone else." },
+    { tag = "[DANGER] [SAVED] [DEATH] [REZ]", text = "near death, pulled back from the brink, a death with what they were fighting, a resurrection." },
+    { tag = "[PET] [PET DEATH]", text = "the party's pets. Pets show as \"Name (Species, owner's hunter pet)\", e.g. \"Snips (Crab, ...)\": Snips is the pet's own name and a crab is what it is. Always call the pet by its name and write it as the creature it is (\"Snips, her crab\"). A pet named after its species shows as \"Crab (hunter pet)\": it is simply named Crab." },
+    { tag = "[MILESTONE]", text = "a new spell, pet, mount, achievement or reputation standing." },
+    { tag = "[QUEST]", text = "quests accepted and completed." },
+    { tag = "[QUEST TEXT]", text = "the quest giver's own words (quote them sparingly)." },
+    { tag = "[NPC] [NPC Emote]", text = "lines spoken by bosses and named NPCs." },
+    { tag = "[LEVEL]", text = "a level up." },
+    { tag = "[PLACE]", text = "a new place reached." },
+    { tag = "[LOOT]", text = "an item with who got it and where it came from (crafted, from a foe, quest reward, bought, traded, mail, gathered)." },
+    { tag = "[HIGHLIGHT]", text = "a moment the player marked: give it a scene." },
+    { tag = "[SHOT N]", text = "a screenshot taken at that moment; the \"Screenshots\" list in the header numbers them. Put the marker [Shot N] on its own line in the story where that picture fits best (each number once, in order), plain and outside any color code: close every |c...|r before it. A marker changes nothing else: after it, keep coloring every name exactly as before. RP Chronicler hides the markers in game and the exporter shows the pictures there." },
+    { tag = "[Party] [Say] [Emote] [Whisper]", text = "real chat quotes: weave them in verbatim." },
 }
 
--- Editable limits (Options > Full Log)
-ns.LOG_LIMITS = {
-    { key = "minFightSec", label = "Shortest fight to log (sec)", default = 4, min = 0, max = 60 },
-    { key = "spellCap",    label = "Spell lines per run",         default = 120, min = 0, max = 400 },
-    { key = "npcCap",      label = "NPC dialogue lines per run",  default = 60, min = 0, max = 300 },
-    { key = "timelineMax", label = "Timeline lines kept per run",  default = 500, min = 100, max = 1500 },
-    { key = "shotCap",     label = "Screenshots kept per run",     default = 40, min = 0, max = 200 },
+-- Log detail (0.6.1): one picker sets every Full Log limit
+ns.LOG_DETAIL = {
+    SHORT  = { minFightSec = 8, spellCap = 40,  npcCap = 20,  timelineMax = 250,  shotCap = 20 },
+    NORMAL = { minFightSec = 4, spellCap = 120, npcCap = 60,  timelineMax = 500,  shotCap = 40 },
+    RICH   = { minFightSec = 2, spellCap = 250, npcCap = 150, timelineMax = 1000, shotCap = 80 },
 }
 
--- AI picker for the Full Log size meter: a comfortable paste size in
--- characters (about 4 characters per token). Each leaves room for the
--- skill's instructions and the story it writes. Checked November 2026:
--- free Gemini has a 32K token context, free ChatGPT about 27K, paid
--- ChatGPT about 54K, paid Gemini and Claude up to 1M.
-ns.AI_MODELS = {
-    { key = "GEMINI_FREE",  label = "Gemini (free)",       chars = 80000 },
-    { key = "GEMINI_PAID",  label = "Gemini (paid)",       chars = 300000 },
-    { key = "CHATGPT_FREE", label = "ChatGPT (free)",      chars = 50000 },
-    { key = "CHATGPT_PAID", label = "ChatGPT (paid)",      chars = 150000 },
-    { key = "CLAUDE_FREE",  label = "Claude (free)",       chars = 100000 },
-    { key = "CLAUDE_PAID",  label = "Claude (paid)",       chars = 400000 },
-    { key = "CUSTOM",       label = "Custom limit",        chars = nil },
+-- [Known Player] blocks: at most this many per copy, notes cut to this length
+ns.KNOWN_PLAYER_MAX = 3
+ns.KNOWN_NOTE_MAX = 300
+
+-- =========================================================
+-- Settings (0.6.1): every saved setting is defined once, here. EnsureDB
+-- fills in defaults and clamps values from this list, Options builds its
+-- rows from it, and code reads and writes through ns.Get / ns.Set.
+-- A setting exists only if it is a privacy or recording choice, players
+-- genuinely want different things, or it works around a client problem.
+--   bool: default true/false; num: min, max; choice: choices
+-- =========================================================
+ns.SETTINGS = {
+    { key = "rpCopy",            default = true,       label = "RP Copy (live scene copy)" },
+    { key = "quickCtrlC",        default = true,       label = "Ctrl+C copies the scene" },
+    { key = "copyMode",          default = "INSTANT",  choices = { "INSTANT", "BOX" } },
+    { key = "messages",          default = 3,          min = 1, max = 10 },
+    { key = "autoRecord",        default = true,       label = "Auto-record dungeons and raids" },
+    { key = "promptOnGroup",     default = true,       label = "Ask to record on group join" },
+    { key = "autoShots",         default = "INSTANCE", choices = { "OFF", "INSTANCE", "ALL" } },
+    { key = "logDetail",         default = "NORMAL",   choices = { "SHORT", "NORMAL", "RICH" } },
+    { key = "logWarnChars",      default = 80000,      min = 10000, max = 2000000 },
+    { key = "knownPlayerBlocks", default = true,       label = "[Known Player] blocks" },
+    { key = "autoUpdateKnown",   default = true,       label = "Update companions from chat" },
+    { key = "companionMenu",     default = true,       label = "Add as companion (right-click)" },
+    { key = "runCompanions",     default = true,       label = "Companions in the Full Log" },
+    { key = "rpReplyLength",     default = "SHORT",    choices = { "SHORT", "MEDIUM", "LONG" } },
+    -- Not a switch: the Story Book export tip, hidden once you close it
+    { key = "exportTip",         default = true },
+}
+ns.SETTING = {}
+for _, d in ipairs(ns.SETTINGS) do ns.SETTING[d.key] = d end
+
+-- Settings removed in 0.6.1 (the slim-down). They are cleared once, so
+-- anyone who changed them gets the default behavior back.
+ns.REMOVED_SETTINGS = {
+    "quickCopyKey", "quickCapture", "captureTargetKey", "markMomentKey", "openWindowKey",
+    "runStartKey", "runPauseKey", "runEndKey", "instantInCombat", "defaultMessages", "expandMessages",
+    "promptOnLogin", "resumeAfterReload", "iconState", "sizeMeter", "debugVerbose", "debugEnabled",
+    "recordManualShots", "autoColorStory", "knownPlayerMax", "knownNoteMax", "nearbyChip",
+    "exportImageDir", "exportShotsDir", "aiModel", "aiCustomLimit", "summaryStats", "logCats", "limits",
+    "autoScreenshots", "worldAutoShots",
 }
 
--- Run Summary stats (Recordings > Summary and the top bar). Each one has a
--- switch in Options > Summary. kinds: which run types show it.
-ns.SUMMARY_STATS = {
-    { key = "roster",     label = "Party roster",            kinds = "all" },
-    { key = "bosses",     label = "Boss kills",              kinds = "instance" },
-    { key = "wipes",      label = "Wipes",                   kinds = "instance" },
-    { key = "deaths",     label = "Deaths",                  kinds = "all" },
-    { key = "levels",     label = "Levels gained",           kinds = "all" },
-    { key = "foes",       label = "Foes defeated",           kinds = "all" },
-    { key = "notable",    label = "Named, elite, rare kills", kinds = "all" },
-    { key = "pvp",        label = "PvP kills and deaths",    kinds = "all" },
-    { key = "quests",     label = "Quests completed",        kinds = "all" },
-    { key = "places",     label = "Zones and places visited", kinds = "world" },
-    { key = "skills",     label = "Skill-ups",               kinds = "all" },
-    { key = "milestones", label = "Milestones",              kinds = "all" },
-    { key = "loot",       label = "Notable loot",            kinds = "all" },
-    { key = "coin",       label = "Coin earned",             kinds = "all" },
-    { key = "shots",      label = "Screenshots",             kinds = "all" },
-    { key = "highlights", label = "Highlights",              kinds = "all" },
-}
+local function Coerce(d, v)
+    if d.choices then
+        for _, c in ipairs(d.choices) do if c == v then return v end end
+        return d.default
+    elseif d.min then
+        v = tonumber(v)
+        if not v then return d.default end
+        return math.max(d.min, math.min(d.max, math.floor(v)))
+    end
+    if v == nil then return d.default end
+    return v and true or false
+end
 
-function ns.SummaryOn(key)
-    local c = RPChroniclerDB and RPChroniclerDB.summaryStats
-    return not c or c[key] ~= false
+function ns.Get(key)
+    local d = ns.SETTING[key]
+    local v = RPChroniclerDB and RPChroniclerDB[key]
+    if v == nil and d then return d.default end
+    return v
+end
+
+-- Listeners (0.6.1): data code says "something changed", the UI listens,
+-- so recorder code never calls the UI itself
+ns.listeners = {}
+function ns.Listen(what, fn)
+    ns.listeners[what] = ns.listeners[what] or {}
+    table.insert(ns.listeners[what], fn)
+end
+function ns.Notify(what, ...)
+    for _, fn in ipairs(ns.listeners[what] or {}) do
+        local ok, err = pcall(fn, ...)
+        if not ok then ns.Debug("error", "listener " .. tostring(what) .. ": " .. tostring(err)) end
+    end
+end
+
+function ns.Set(key, v)
+    local d = ns.SETTING[key]
+    if not d or not RPChroniclerDB then return nil end
+    v = Coerce(d, v)
+    RPChroniclerDB[key] = v
+    ns.Notify("setting", key, v)
+    return v
+end
+
+-- Flips a true/false setting and returns the new value
+function ns.Toggle(key)
+    return ns.Set(key, not ns.Get(key))
+end
+
+-- The whole live RP Copy feature (Copy view, Ctrl+C, the chat it keeps)
+function ns.RpCopyOn()
+    return ns.Get("rpCopy") ~= false
 end
 
 -- Chat types RP Chronicler captures (Options > Privacy and the first-run setup)
 ns.CAPTURE_TYPES = {
     { key = "say",     label = "Say, yell and emotes" },
     { key = "whisper", label = "Whispers" },
-    { key = "group",   label = "Party, raid and instance chat" },
+    { key = "group",   label = "Party and raid chat", tip = "Party, raid and instance chat." },
     { key = "guild",   label = "Guild and officer chat" },
-    { key = "world",   label = "World channels (General, Trade, LFG)" },
+    { key = "world",   label = "World channels", tip = "General, Trade, LFG and the other numbered channels." },
     { key = "npc",     label = "NPC dialogue" },
 }
 
@@ -144,6 +248,8 @@ end
 ns.PRIVACY_TEXT =
     "|cffd8dee9RP Chronicler stores everything on your PC, in your WoW SavedVariables. It has no internet access and sends nothing anywhere. " ..
     "No account, email or real-world personal data is collected.\n" ..
+    "RP Copy (one switch) keeps recent chat in memory for the live copy. Recording (only while a run is on) keeps a Full Log with in-character chat, never OOC. " ..
+    "Screenshots go to your normal WoW Screenshots folder. Each of these can be turned off in Options.\n" ..
     "Chat and log text only leave your PC if YOU paste them into your own AI tool, and that tool's own privacy terms apply then.\n" ..
     "You can delete everything at any time with |cff69ccf0/rp wipe|cffd8dee9 (or by deleting RPChronicler.lua in your SavedVariables folder).|r"
 
@@ -153,7 +259,7 @@ function ns.WipeAllData()
         print("|cffffd100RP Chronicler|r Leave combat first, then try again.")
         return false
     end
-    if ns.DropActiveAdventure then ns.DropActiveAdventure() end
+    ns.DropActiveAdventure()
     RPChroniclerDB = {}
     ns._dbChecked = nil
     ns.EnsureDB()
@@ -163,19 +269,19 @@ function ns.WipeAllData()
     return true
 end
 
+-- Is a Full Log line kind on? Its group's switch decides; kinds in no
+-- group (cut in 0.6.1) are never written.
 function ns.LogOn(cat)
-    local c = RPChroniclerDB and RPChroniclerDB.logCats
-    return not c or c[cat] ~= false
+    local g = ns.LOG_CAT_GROUP[cat]
+    if not g then return false end
+    local groups = RPChroniclerDB and RPChroniclerDB.logGroups
+    return not groups or groups[g] ~= false
 end
 
+-- A Full Log limit from the Log detail picker
 function ns.Limit(key)
-    local l = RPChroniclerDB and RPChroniclerDB.limits
-    local v = l and tonumber(l[key])
-    if v then return v end
-    for _, d in ipairs(ns.LOG_LIMITS) do
-        if d.key == key then return d.default end
-    end
-    return 0
+    local preset = ns.LOG_DETAIL[ns.Get("logDetail")] or ns.LOG_DETAIL.NORMAL
+    return preset[key] or 0
 end
 
 local function CloneDefaultTabs()
@@ -188,22 +294,9 @@ local function CloneDefaultTabs()
     return copy
 end
 
-RPChroniclerDB = RPChroniclerDB or {
-    players = {},
-    adventures = {},
-    autoUpdateKnown = true,
-    autoScreenshots = false,
-    worldAutoShots = false, -- 0.5.1: auto shots only in dungeons and raids
-    quickCtrlC = true,
-    quickCopyKey = "CTRL-C",
-    quickCapture = true,
-    captureTargetKey = "SHIFT-C",
-    lastSliceId = "CHAT",
-    defaultMessages = 3,
-    expandMessages = 6,
-    migratedV32 = true,
-    tabs = CloneDefaultTabs(),
-}
+-- SavedVariables replace this once the game loads them; EnsureDB fills
+-- in every default from ns.SETTINGS
+RPChroniclerDB = RPChroniclerDB or {}
 
 ns.logs = {
     social = {},
@@ -665,7 +758,7 @@ function ns.GetUnitRole(unit)
     if not guess and isPlayer then guess = PlayerTalentRole(classFile) end
 
     -- Behavior: a tank-capable class that keeps holding enemies' attention
-    if not guess and CAN_TANK[classFile] and ns.GetAggroShare then
+    if not guess and CAN_TANK[classFile] then
         local share, samples = ns.GetAggroShare(ns.StripRealm(UnitName(unit)))
         if samples and samples >= 6 and share >= 0.4 then guess = "TANK" end
     end
@@ -692,6 +785,9 @@ end
 ns.logSeq = 0
 function ns.PushLog(tbl, line, author, chan)
     if not line or line == "" then return end
+    -- 0.6.1: these buffers only serve the live RP Copy; with it off,
+    -- no scene chat is kept at all
+    if not ns.RpCopyOn() then return end
     -- A "secret" value in a line would make the whole snapshot secret
     if ns.IsSecret(line) or ns.IsSecret(author) then return end
     ns.logSeq = ns.logSeq + 1
@@ -767,6 +863,64 @@ function ns.GetTabConfig(tabId)
     return RPChroniclerDB.tabs[1]
 end
 
+-- =========================================================
+-- Slice tab data (0.6.1): the Slice Tabs page changes tabs only through
+-- these. Tabs and everything in them stay fully editable.
+-- =========================================================
+local function TabIndex(tabId)
+    for idx, t in ipairs(RPChroniclerDB.tabs) do
+        if t.id == tabId then return idx, t end
+    end
+    return nil
+end
+
+-- A new custom tab (chat and the line to you, like the Chat tab). Returns its id.
+function ns.AddTab()
+    ns.EnsureDB()
+    local t = { id = "CUSTOM_" .. tostring(time()) .. "_" .. tostring(math.random(10, 99)),
+        label = "Custom " .. tostring(#RPChroniclerDB.tabs + 1), prefix = ns.DEFAULT_TRIGGER }
+    for _, k in ipairs(ns.TAB_FLAGS) do t[k] = false end
+    t.incDirect, t.incTarget, t.incSocial = true, true, true
+    table.insert(RPChroniclerDB.tabs, t)
+    return t.id
+end
+
+-- Saves a tab's name, Skill Call and flags. fields: label, prefix, and flag = true/false
+function ns.SaveTab(tabId, fields)
+    local _, t = TabIndex(tabId)
+    if not t then return nil end
+    local lbl = ((fields.label or ""):gsub("||", "|")):match("^%s*(.-)%s*$")
+    if lbl ~= "" then t.label = lbl end
+    if fields.prefix ~= nil then t.prefix = ((fields.prefix or ""):gsub("||", "|")):match("^%s*(.-)%s*$") end
+    for _, k in ipairs(ns.TAB_FLAGS) do
+        if fields[k] ~= nil then t[k] = fields[k] and true or false end
+    end
+    return t
+end
+
+-- Moves a tab up (-1) or down (+1)
+function ns.MoveTab(tabId, delta)
+    local idx = TabIndex(tabId)
+    local to = idx and idx + delta
+    local tabs = RPChroniclerDB.tabs
+    if not idx or to < 1 or to > #tabs then return false end
+    tabs[idx], tabs[to] = tabs[to], tabs[idx]
+    return true
+end
+
+-- Deletes a tab (one always stays). Returns the removed tab, or nil and why.
+function ns.DeleteTab(tabId)
+    local tabs = RPChroniclerDB.tabs
+    if #tabs <= 1 then return nil, "Keep at least one slice tab." end
+    local idx = TabIndex(tabId)
+    if not idx then return nil, "Pick a tab first." end
+    local removed = table.remove(tabs, idx)
+    if ns.state.activeFilter == removed.id then ns.state.activeFilter = tabs[1].id end
+    if RPChroniclerDB.lastSliceId == removed.id then RPChroniclerDB.lastSliceId = tabs[1].id end
+    if ns.state.selectedOptionTabId == removed.id then ns.state.selectedOptionTabId = tabs[1].id end
+    return removed
+end
+
 -- The full check runs once per RPChroniclerDB table (it also runs migrations and
 -- rebuilds old Full Logs). Later calls return at once: EnsureDB is called
 -- on every copy, and a slow copy was one lead in the 0.4.0 Ctrl+C bug.
@@ -775,29 +929,34 @@ function ns.EnsureDB()
     RPChroniclerDB = RPChroniclerDB or {}
     RPChroniclerDB.players = RPChroniclerDB.players or {}
     RPChroniclerDB.adventures = RPChroniclerDB.adventures or {}
-    if RPChroniclerDB.autoUpdateKnown == nil then
-        RPChroniclerDB.autoUpdateKnown = true
+    -- 0.6.1: the slim-down. Merged settings keep your choice; removed
+    -- ones are cleared, so their default behavior comes back.
+    if not RPChroniclerDB.migratedV061 then
+        local db = RPChroniclerDB
+        if db.defaultMessages ~= nil and db.messages == nil then db.messages = db.defaultMessages end
+        if db.copyMode == "TWOPRESS" then db.copyMode = "INSTANT" end
+        if db.autoScreenshots ~= nil and db.autoShots == nil then
+            db.autoShots = (db.autoScreenshots and (db.worldAutoShots and "ALL" or "INSTANCE")) or "OFF"
+        end
+        if type(db.logCats) == "table" and db.logGroups == nil then
+            -- a group stays on while any of its old categories was on
+            db.logGroups = {}
+            for _, g in ipairs(ns.LOG_GROUPS) do
+                local on = false
+                for _, c in ipairs(g.cats) do if db.logCats[c] ~= false then on = true end end
+                db.logGroups[g.key] = on
+            end
+        end
+        pcall(ns.MergeCompanionNotes)
+        for _, k in ipairs(ns.REMOVED_SETTINGS) do db[k] = nil end
+        db.migratedV061 = true
     end
-    if RPChroniclerDB.autoScreenshots == nil then
-        RPChroniclerDB.autoScreenshots = false
-    end
-    if RPChroniclerDB.quickCtrlC == nil then
-        RPChroniclerDB.quickCtrlC = true
-    end
-    if not RPChroniclerDB.quickCopyKey or RPChroniclerDB.quickCopyKey == "" then
-        RPChroniclerDB.quickCopyKey = "CTRL-C"
-    end
-    if RPChroniclerDB.quickCapture == nil then
-        RPChroniclerDB.quickCapture = true
-    end
-    if not RPChroniclerDB.captureTargetKey or RPChroniclerDB.captureTargetKey == "" then
-        RPChroniclerDB.captureTargetKey = "SHIFT-C"
+    for _, d in ipairs(ns.SETTINGS) do
+        RPChroniclerDB[d.key] = Coerce(d, RPChroniclerDB[d.key])
     end
     if not RPChroniclerDB.lastSliceId or RPChroniclerDB.lastSliceId == "" then
         RPChroniclerDB.lastSliceId = "CHAT"
     end
-    RPChroniclerDB.defaultMessages = math.max(1, math.min(10, tonumber(RPChroniclerDB.defaultMessages) or 3))
-    RPChroniclerDB.expandMessages = math.max(1, math.min(20, tonumber(RPChroniclerDB.expandMessages) or 6))
 
     if type(RPChroniclerDB.tabs) ~= "table" or #RPChroniclerDB.tabs == 0 then
         RPChroniclerDB.tabs = CloneDefaultTabs()
@@ -856,45 +1015,10 @@ function ns.EnsureDB()
         if t.incGuild == nil then t.incGuild = false end
     end
 
-    -- 0.4.0 settings: Full Log categories, limits, recording behaviour
-    RPChroniclerDB.logCats = type(RPChroniclerDB.logCats) == "table" and RPChroniclerDB.logCats or {}
-    for _, c in ipairs(ns.LOG_CATEGORIES) do
-        if RPChroniclerDB.logCats[c.key] == nil then RPChroniclerDB.logCats[c.key] = true end
+    RPChroniclerDB.logGroups = type(RPChroniclerDB.logGroups) == "table" and RPChroniclerDB.logGroups or {}
+    for _, g in ipairs(ns.LOG_GROUPS) do
+        if RPChroniclerDB.logGroups[g.key] == nil then RPChroniclerDB.logGroups[g.key] = true end
     end
-    RPChroniclerDB.limits = type(RPChroniclerDB.limits) == "table" and RPChroniclerDB.limits or {}
-    for _, d in ipairs(ns.LOG_LIMITS) do
-        local v = tonumber(RPChroniclerDB.limits[d.key]) or d.default
-        RPChroniclerDB.limits[d.key] = math.max(d.min, math.min(d.max, math.floor(v)))
-    end
-    local defaults = {
-        autoRecord = true,        -- dungeons and raids record by themselves
-        promptOnGroup = true,     -- open world: ask "Start recording?" when you join a group
-        promptOnLogin = false,    -- open world: ask at login
-        resumeAfterReload = true, -- a /reload continues the run without asking
-        iconState = true,         -- the [RP] button shows the recording state
-        sizeMeter = true,         -- Full Log size meter
-        debugVerbose = false,     -- extra lines in the debug log
-        -- 0.5.0
-        debugEnabled = true,      -- the debug log itself
-        recordManualShots = true, -- your own Print Screen shots join the run
-        autoColorStory = true,    -- color plain names in an imported story
-        exportTip = true,         -- the export tip in the Story Book
-        knownPlayerBlocks = true, -- [Known Player] blocks in snapshots
-        knownPlayerMax = 3,       -- at most this many blocks
-        knownNoteMax = 300,       -- characters of each note in a block
-        companionMenu = true,     -- "Add as RP Chronicler companion" in unit menus
-        nearbyChip = true,        -- "Nearby companions" chip in the Copy view
-        runCompanions = true,     -- companions who chat in a run are Known companions
-        rpReplyLength = "SHORT",  -- RP template: SHORT, MEDIUM or LONG
-        exportImageDir = "",      -- Export_Stories.bat: where images go ("" = next to the pages)
-        exportShotsDir = "",      -- Export_Stories.bat: the game's Screenshots folder ("" = auto)
-    }
-    for k, v in pairs(defaults) do
-        if RPChroniclerDB[k] == nil then RPChroniclerDB[k] = v end
-    end
-    RPChroniclerDB.knownPlayerMax = math.max(0, math.min(10, math.floor(tonumber(RPChroniclerDB.knownPlayerMax) or 3)))
-    RPChroniclerDB.knownNoteMax = math.max(40, math.min(1000, math.floor(tonumber(RPChroniclerDB.knownNoteMax) or 300)))
-    RPChroniclerDB.summaryStats = type(RPChroniclerDB.summaryStats) == "table" and RPChroniclerDB.summaryStats or {}
     RPChroniclerDB.capture = type(RPChroniclerDB.capture) == "table" and RPChroniclerDB.capture or {}
     for _, c in ipairs(ns.CAPTURE_TYPES) do
         if RPChroniclerDB.capture[c.key] == nil then RPChroniclerDB.capture[c.key] = true end
@@ -906,8 +1030,6 @@ function ns.EnsureDB()
             if t.id == "CHAT" or t.id == "WORLD" then t.incStatus = true end
         end
     end
-    if type(RPChroniclerDB.aiModel) ~= "string" then RPChroniclerDB.aiModel = "GEMINI_FREE" end
-    RPChroniclerDB.aiCustomLimit = math.max(1000, tonumber(RPChroniclerDB.aiCustomLimit) or 40000)
 
     for k, v in pairs(RPChroniclerDB.players) do
         if type(v) == "string" then
@@ -945,14 +1067,14 @@ function ns.EnsureDB()
             elseif not sh.n then sh.n = i end
         end
         adv.reloads = adv.reloads or 0
-        if (not adv.exportText or adv.exportText == "") and ns.BuildAdventureFullLog then
+        if (not adv.exportText or adv.exportText == "") then
             adv.exportText = ns.BuildAdventureFullLog(adv)
         end
     end
 
     -- 0.5.0 migrations live with their modules: companions (Companions.lua)
-    -- and stories moving out of the recordings (Adventures.lua)
-    if not RPChroniclerDB.migratedV050 and ns.MigrateCompanions and ns.MigrateStories then
+    -- and stories moving out of the recordings (Stories.lua)
+    if not RPChroniclerDB.migratedV050 then
         pcall(ns.MigrateCompanions)
         pcall(ns.MigrateStories)
         RPChroniclerDB.migratedV050 = true
@@ -968,5 +1090,5 @@ function ns.EnsureDB()
         end
         RPChroniclerDB.migratedV060 = true
     end
-    if ns.BuildAdventureFullLog and ns.MigrateStories then ns._dbChecked = RPChroniclerDB end
+    ns._dbChecked = RPChroniclerDB
 end

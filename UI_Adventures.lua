@@ -5,14 +5,16 @@ local UI = ns.UI
 -- Recording controls (buttons, keybinds and slash commands share these)
 -- =========================================================
 local function RefreshIfOpen()
-    if UI.RefreshRecordIcon then pcall(UI.RefreshRecordIcon) end
-    if UI.frame:IsShown() and ns.state.section == "ADVENTURES" and UI.RefreshAdventuresTab then
+    pcall(UI.RefreshRecordIcon)
+    if UI.frame:IsShown() and ns.state.section == "ADVENTURES" then
         UI.RefreshAdventuresTab()
-    elseif UI.frame:IsShown() and ns.state.section == "BOOK" and UI.RefreshStoryBook then
+    elseif UI.frame:IsShown() and ns.state.section == "BOOK" then
         UI.RefreshStoryBook()
     end
 end
 UI.RefreshRunViews = RefreshIfOpen
+-- 0.6.1: run code says ns.Notify("runChanged") and the views refresh
+ns.Listen("runChanged", function() RefreshIfOpen() end)
 
 local function Report(msg, kind)
     if UI.frame:IsShown() then
@@ -24,20 +26,14 @@ local function Report(msg, kind)
 end
 
 function RPChronicler_StartRun()
-    local active = ns.GetActiveAdventure()
-    if active then
-        Report("Already recording " .. (active.title or "an adventure") .. ". End it first.", "error")
+    local run, why = ns.StartRun()
+    if not run then
+        Report(why or "Could not start recording.", "error")
         return
     end
-    local run = ns.StartAdventure(nil, false)
-    if run then
-        ns.state.selectedAdventureId = run.id
-        Report("Recording adventure: " .. (run.title or "Adventure"), "good")
-    end
-    RefreshIfOpen()
+    ns.state.selectedAdventureId = run.id
+    Report("Recording adventure: " .. (run.title or "Adventure"), "good")
 end
-
-UI.StartRunFromUI = function() RPChronicler_StartRun() end
 
 -- One toggle for Start / Stop (the button, the RP icon menu, keybinds)
 function RPChronicler_ToggleRun()
@@ -45,7 +41,7 @@ function RPChronicler_ToggleRun()
 end
 
 function RPChronicler_ToggleRunPause()
-    if not ns.GetActiveAdventure() or not ns.PauseAdventure then
+    if not ns.GetActiveAdventure() then
         Report("No adventure is recording.", "error")
         return
     end
@@ -149,7 +145,7 @@ do
         end
         if ok then
             f:Hide()
-            if UI.OpenStoryBook then UI.OpenStoryBook(storyId) end
+            UI.OpenStoryBook(storyId)
             UI.SetStatus("Story saved to the Story Book.", "good")
         end
     end)
@@ -357,13 +353,13 @@ A.meterText:SetJustifyH("LEFT")
 A.meterText:SetWordWrap(false)
 A.meter:SetScript("OnEnter", function(self)
     UI.Tooltip(self, "|cffffd100Full Log size|r",
-        "How much of your AI's paste room this log uses. Pick your AI in Options > Full Log.",
-        "Too long? Turn off busy categories there, lower the limits, or use a paid plan.",
+        "The Full Log's length. It turns orange near, and red past, the warning size you set in Options > Recording.",
+        "Too long? Pick a shorter Log detail there, or turn off busy groups.",
         "README: see the Requirements section for free vs paid plans.")
 end)
 A.meter:SetScript("OnLeave", UI.HideTooltip)
 A.meter:SetScript("OnClick", function()
-    if UI.OpenOptionsPage then UI.OpenOptionsPage("FULLLOG") end
+    UI.OpenOptionsPage("RECORDING")
 end)
 A.meter:Hide()
 
@@ -586,16 +582,16 @@ function UI.RefreshAdventuresTab()
         A.fullBtn:LockHighlight()
         local text = ns.BuildAdventureFullLog(selected)
         A.editBox:SetText(text)
-        local meterOn = selected and RPChroniclerDB.sizeMeter ~= false
-        if meterOn then
-            local limit, label = ns.GetAiLimit()
+        -- 0.6.1: one warning size (Options > Recording) instead of an AI picker
+        if selected then
+            local limit = ns.Get("logWarnChars")
             local chars = #text
             local tokens = math.floor(chars / 4 + 0.5)
             local pct = math.floor(chars * 100 / math.max(1, limit) + 0.5)
             local color = (pct > 100 and "ff6b6b") or (pct > 80 and "ffb74d") or "5cb85c"
-            local warn = (pct > 100) and ("  |cffff6b6bToo long for " .. label .. ": trim it in Options > Full Log|r") or ("  |cff8f9ba8for " .. label .. "|r")
-            A.meterText:SetText(string.format("|cff8f9ba8Size:|r |cff%s%.1fk chars (~%.1fk tokens), %d%%|r%s",
-                color, chars / 1000, tokens / 1000, pct, warn))
+            local warn = (pct > 100) and "  |cffff6b6bLonger than your warning size: see Options > Recording|r" or ""
+            A.meterText:SetText(string.format("|cff8f9ba8Size:|r |cff%s%.1fk chars (~%.1fk tokens), %d%% of %dk|r%s",
+                color, chars / 1000, tokens / 1000, pct, math.floor(limit / 1000), warn))
             A.meter:Show()
             A.boxBg:SetPoint("TOPLEFT", 0, -112)
         else
@@ -627,7 +623,7 @@ end
 function UI.ShowAdventuresSub(sub, advId)
     if sub == "BOOK" then
         local st = advId and ns.StoryForRun(advId)
-        if UI.OpenStoryBook then UI.OpenStoryBook(st and st.id or nil) end
+        UI.OpenStoryBook(st and st.id or nil)
     else
         UI.OpenRecording(advId)
     end
@@ -646,7 +642,7 @@ A.storyBtn:SetScript("OnClick", function()
     if not adv then return end
     local st = ns.StoryForRun(adv.id)
     if st then
-        if UI.OpenStoryBook then UI.OpenStoryBook(st.id) end
+        UI.OpenStoryBook(st.id)
     else
         OpenStoryImportModal(adv)
     end
@@ -657,7 +653,7 @@ A.tplBtn:SetScript("OnClick", function(_, button)
     local adv = GetSelectedAdventure()
     local isWorld = not adv or adv.kind == "world"
     if button == "RightButton" then isWorld = not isWorld end
-    if UI.OpenSkillTemplateModal then UI.OpenSkillTemplateModal(isWorld and "ADVENTURE" or "STORY") end
+    UI.OpenSkillTemplateModal(isWorld and "ADVENTURE" or "STORY")
 end)
 UI.GetSelectedAdventure = GetSelectedAdventure
 
@@ -679,7 +675,7 @@ A.markBtn:SetScript("OnClick", function()
     local ok, msg = ns.MarkAdventureHighlight(nil)
     UI.SetStatus(msg, ok and "good" or "error")
     if ok then
-        if ns.RequestScreenshot then ns.RequestScreenshot("mark", "Marked moment") end
+        ns.RequestScreenshot("mark", "Marked moment")
         UI.RefreshAdventuresTab()
     end
 end)
@@ -690,7 +686,7 @@ A.delBtn:SetScript("OnClick", function(self)
         UI.SetStatus("End the live run before deleting it.", "error")
         return
     end
-    for i, adv in ipairs(RPChroniclerDB.adventures or {}) do
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do
         if adv.id == ns.state.selectedAdventureId then
             if not self.armedAt or GetTime() - self.armedAt > 4 then
                 self.armedAt = GetTime()
@@ -700,10 +696,9 @@ A.delBtn:SetScript("OnClick", function(self)
                 return
             end
             self.armedAt = nil
-            table.remove(RPChroniclerDB.adventures, i)
-            if ns.Debug then ns.Debug("run", "deleted run " .. tostring(adv.title)) end
+            local ok, why = ns.DeleteRun(adv.id)
+            if not ok then UI.SetStatus(why, "error") return end
             ns.state.selectedAdventureId = nil
-            adv.storyId = nil
             UI.SetStatus("Recording deleted.", "good")
             UI.RefreshAdventuresTab()
             return

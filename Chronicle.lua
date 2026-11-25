@@ -9,12 +9,11 @@ local ADDON_NAME, ns = ...
 --  * [QUEST]      accepted and completed, plus trimmed quest-giver text
 --  * [NPC]        boss and named NPC lines (filtered in ns.ChronicleNpc)
 --  * [LEVEL]      level ups      * [PLACE]   subzone changes
---  * [SKILL]      profession skill-ups, summarized
---  * [MILESTONE]  new spells, pets, mounts, achievements, reputation,
---                 hearthstone bind, flight paths
---  * [ATMOSPHERE] time of day at the start and on zone changes
+--  * [MILESTONE]  new spells, pets, mounts, achievements, reputation
 --  * loot sources ("crafted", "from Arugal", "quest reward", ...)
--- Each kind has its own switch in Options > Full Log (ns.LogOn).
+-- Each kind belongs to a Full Log group with a switch in Options >
+-- Recording (ns.LogOn). 0.6.1 cut skill-ups, atmosphere, coin, hearthstone
+-- and flight-path lines.
 -- =========================================================
 
 local C = {
@@ -24,8 +23,6 @@ local C = {
     ctx = {},             -- loot context: merchant, mail, trade, loot window ...
     lastSub = nil, subAt = {},
     lastZone = nil,
-    atmoAt = 0, atmoPhase = nil,
-    skillLineAt = {},
     quest = {},           -- pending quest text from the quest window
     questDone = {},       -- title -> time logged
     npcAt = {}, npcSaid = {},
@@ -36,14 +33,14 @@ local C = {
 }
 
 local function Run()
-    local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+    local run = ns.GetActiveAdventure()
     if not run or run.paused then return nil end
     return run
 end
 
 local function Line(cat, text)
     if cat and not ns.LogOn(cat) then return end
-    if ns.RecordAdventureLine then return ns.RecordAdventureLine(text) end
+    return ns.RecordAdventureLine(text)
 end
 
 local function Later(sec, fn)
@@ -56,13 +53,12 @@ end
 
 local function Me()
     local n = ns.StripRealm(UnitName("player")) or "You"
-    return (ns.ResolveCanonicalPlayerName and ns.ResolveCanonicalPlayerName(n)) or n
+    return (ns.ResolveCanonicalPlayerName(n)) or n
 end
 
 local function InInstance()
-    if not IsInInstance then return false end
-    local inside = IsInInstance()
-    return inside and true or false
+    local _, inside = ns.InstanceKind()
+    return inside
 end
 
 local function Trim(s, max)
@@ -100,7 +96,7 @@ end
 
 local function EnemyKind(u)
     local cls = ns.SafeStr(UnitClassification(u)) or "normal"
-    if ns.IsBossUnit and ns.IsBossUnit(u) then return "boss" end
+    if ns.IsBossUnit(u) then return "boss" end
     if cls == "worldboss" then return "boss" end
     if cls == "rareelite" then return "rare elite" end
     if cls == "rare" then return "rare" end
@@ -165,7 +161,7 @@ function ns.FightSeeUnit(u)
             local run = Run()
             if run then
                 run.pvpKills = (run.pvpKills or 0) + 1
-                local who = ns.GetUnitFullName and ns.GetUnitFullName(u) or ns.SafeStr(UnitName(u))
+                local who = ns.GetUnitFullName(u) or ns.SafeStr(UnitName(u))
                 if who then Line("kills", string.format("[PVP] %s defeats %s", Me(), who)) end
             end
         end
@@ -358,9 +354,9 @@ function ns.FightFlush()
             if sk.fled > 0 then table.insert(tail, sk.fled .. " fled briefly") end
             local st = SpellText(sk.spellList, sk.spellOrder)
             if st ~= "" then table.insert(tail, st) end
-            if sk.coin > 0 and ns.LogOn("loot") then table.insert(tail, "looted " .. ns.FormatCopper(sk.coin)) end
+            if sk.coin > 0 and ns.LogOn("coin") then table.insert(tail, "looted " .. ns.FormatCopper(sk.coin)) end
             local text = string.format("[FIGHTS] %dx %s (%s-%s) - %s", sk.seen, main, Clock(sk.first), Clock(now), table.concat(tail, " - "))
-            if ns.UpdateAdventureLine and ns.UpdateAdventureLine(sk.handle, text) then return end
+            if ns.UpdateAdventureLine(sk.handle, text) then return end
         end
     end
 
@@ -371,7 +367,7 @@ function ns.FightFlush()
     for _, s in ipairs(f.swaps) do table.insert(bits, s) end
     if #f.low > 0 then table.insert(bits, table.concat(f.low, ", ") .. " got low") end
     if #f.fell > 0 then table.insert(bits, table.concat(f.fell, ", ") .. " fell") end
-    if f.coin > 0 and ns.LogOn("loot") then table.insert(bits, "looted " .. ns.FormatCopper(f.coin)) end
+    if f.coin > 0 and ns.LogOn("coin") then table.insert(bits, "looted " .. ns.FormatCopper(f.coin)) end
 
     local outcome
     if f.selfDied and f.kills == 0 then
@@ -408,42 +404,7 @@ function ns.FightFlush()
 end
 
 -- =========================================================
--- Atmosphere: time of day and indoors/outdoors (no weather API exists
--- on this client, so weather is left to the storyteller)
--- =========================================================
-local function DayPhase(h)
-    if h >= 5 and h < 7 then return "Dawn" end
-    if h >= 7 and h < 11 then return "Morning" end
-    if h >= 11 and h < 14 then return "Midday" end
-    if h >= 14 and h < 18 then return "Afternoon" end
-    if h >= 18 and h < 21 then return "Dusk" end
-    return "Night"
-end
-
-function ns.RecordAtmosphere(force)
-    if not Run() or not ns.LogOn("atmosphere") then return end
-    local h, m
-    if GetGameTime then
-        local ok, gh, gm = pcall(GetGameTime)
-        if ok then h, m = ns.SafeNum(gh), ns.SafeNum(gm) end
-    end
-    if not h then return end
-    local phase = DayPhase(h)
-    local now = GetTime()
-    if not force and phase == C.atmoPhase and (now - C.atmoAt) < 1200 then return end
-    C.atmoPhase, C.atmoAt = phase, now
-    local where = ns.GetCurrentWhere()
-    local inside = ""
-    if IsIndoors then
-        local ok, v = pcall(IsIndoors)
-        if ok and v == true then inside = ", indoors" elseif ok and v == false then inside = ", under the open sky" end
-    end
-    if InInstance() then inside = "" end
-    Line(nil, string.format("[ATMOSPHERE] %s (%02d:%02d server time) in %s%s", phase, h, m or 0, where, inside))
-end
-
--- =========================================================
--- Places, levels, skills, milestones
+-- Places, levels, milestones
 -- =========================================================
 local function OnZone(newArea)
     if not Run() then return end
@@ -455,9 +416,8 @@ local function OnZone(newArea)
         C.lastZone = zone
         C.lastSub = sub
         if not first then
-            if ns.NoteRunPlace then ns.NoteRunPlace(zone) end
+            ns.NoteRunPlace(zone)
             Line("places", "[PLACE] Travelled to " .. zone)
-            ns.RecordAtmosphere(false)
         end
         return
     end
@@ -474,7 +434,7 @@ local function OnZone(newArea)
             local t = GetTime()
             if (t - (C.subAt[sub] or -9999)) < 600 then return end
             C.subAt[sub] = t
-            if ns.NoteRunPlace then ns.NoteRunPlace(sub) end
+            ns.NoteRunPlace(sub)
             Line("places", string.format("[PLACE] Entered %s (%s)", sub, zone or "?"))
         end)
     elseif sub == "" or sub == zone then
@@ -482,37 +442,10 @@ local function OnZone(newArea)
     end
 end
 
-local function OnSkill(msg)
-    local run = Run()
-    if not run then return end
-    local pat = Pattern("SKILL_RANK_UP")
-    local skill, rank
-    if pat then skill, rank = msg:match(pat) end
-    if not skill then skill, rank = msg:match("[Yy]our skill in (.+) has increased to (%d+)") end
-    rank = tonumber(rank)
-    if not skill or not rank then return end
-    run.skills = run.skills or {}
-    local s = run.skills[skill]
-    if not s then
-        s = { from = rank - 1, to = rank }
-        run.skills[skill] = s
-    end
-    s.to = rank
-    if not ns.LogOn("skills") then return end
-    local now = GetTime()
-    local last = C.skillLineAt[skill]
-    if not last or (now - last.at) >= 600 then
-        Line(nil, string.format("[SKILL] %s %d -> %d", skill, last and last.rank or (rank - 1), rank))
-        C.skillLineAt[skill] = { at = now, rank = rank }
-    end
-end
-
 local SYSTEM_MILESTONES = {
     { g = "ERR_LEARN_SPELL_S",     fmt = "%s learned a new spell: %s" },
     { g = "ERR_LEARN_ABILITY_S",   fmt = "%s learned a new ability: %s" },
     { g = "ERR_LEARN_RECIPE_S",    fmt = "%s learned a new recipe: %s" },
-    { g = "ERR_DEATHBIND_SUCCESS_S", fmt = "%s bound the hearthstone to %s" },
-    { g = "ERR_NEWTAXIPATH",       fmt = "%s discovered a new flight path%s" },
     { g = "FACTION_STANDING_CHANGED", fmt = "%s is now %s with %s" },
 }
 
@@ -523,10 +456,6 @@ local function OnSystem(msg)
         if pat then
             local a, b = msg:match(pat)
             if a or msg:match(pat) then
-                if m.g == "ERR_NEWTAXIPATH" then
-                    local where = ns.SafeStr(GetSubZoneText())
-                    a = (where and where ~= "") and (" at " .. where) or ""
-                end
                 if m.g == "FACTION_STANDING_CHANGED" then
                     Line(nil, "[MILESTONE] " .. string.format(m.fmt, Me(), a or "?", b or "?"))
                 else
@@ -544,7 +473,7 @@ local function OnPetChange()
     local now = GetTime()
     if name and (now - C.tameAt) < 20 and name ~= C.petName then
         C.tameAt = 0
-        local species = ns.GetPetSpecies and ns.GetPetSpecies("pet")
+        local species = ns.GetPetSpecies("pet")
         Line("milestones", string.format("[MILESTONE] %s tamed a new pet: %s%s", Me(), name, species and (" (" .. species .. ")") or ""))
     end
     C.petName = name or C.petName
@@ -739,7 +668,7 @@ function ns.ChronicleNpc(npcName, msg, event)
     local loud = event == "CHAT_MSG_MONSTER_YELL" or event == "CHAT_MSG_RAID_BOSS_EMOTE"
         or event == "CHAT_MSG_RAID_BOSS_WHISPER" or event == "CHAT_MSG_MONSTER_WHISPER"
     local boss = (RPChroniclerDB and RPChroniclerDB.knownBosses and RPChroniclerDB.knownBosses[npcName or ""])
-        or (ns.GetActiveBossName and ns.GetActiveBossName() == npcName)
+        or (ns.GetActiveBossName() == npcName)
     local named = boss or (UnitExists("target") and ns.SafeStr(UnitName("target")) == npcName)
         or (UnitExists("npc") and ns.SafeStr(UnitName("npc")) == npcName)
         or (C.quest and C.quest.npc == npcName)
@@ -830,21 +759,19 @@ function ns.IsQuestItem(link)
 end
 
 -- =========================================================
--- Prompts: start recording on group join or login, and the
--- interrupted-run question after a logout or disconnect
+-- Prompts: start recording on group join, and the interrupted-run
+-- question after a logout or disconnect. 0.6.1: the recorder asks through
+-- ns.Notify("prompt", ...); the window (UI_Shell) shows it.
 -- =========================================================
 local function Prompt(text, b1, f1, b2, f2)
-    if ns.UI and ns.UI.ShowPrompt then
-        ns.UI.ShowPrompt(text, b1, f1, b2, f2)
-    else
-        print("|cffffd100RP Chronicler|r " .. text)
-    end
+    ns.Notify("prompt", text, b1, f1, b2, f2)
 end
 
 local function OfferStart(reason)
-    if Run() or (ns.GetActiveAdventure and ns.GetActiveAdventure()) or InInstance() then return end
+    if Run() or (ns.GetActiveAdventure()) or InInstance() then return end
     Prompt("|cffffd100RP Chronicler|r " .. reason .. "\nStart recording an adventure?", "Start recording", function()
-        if ns.UI and ns.UI.StartRunFromUI then ns.UI.StartRunFromUI() else ns.StartAdventure(nil, false) end
+        local _, why = ns.StartRun()
+        if why then print("|cffffd100RP Chronicler|r " .. why) end
     end, "Not now", nil)
 end
 
@@ -854,8 +781,7 @@ function ns.OfferInterruptedRun(run)
         tostring(run.title or "Adventure")), "Resume", function()
         local ok, msg = ns.ResumeInterruptedRun(run.id)
         print("|cffffd100RP Chronicler|r " .. tostring(msg))
-        if ns.UI and ns.UI.RefreshAdventuresTab then pcall(ns.UI.RefreshAdventuresTab) end
-        if ns.UI and ns.UI.RefreshRecordIcon then pcall(ns.UI.RefreshRecordIcon) end
+        ns.Notify("runChanged")
     end, "Keep saved", nil)
 end
 
@@ -867,20 +793,16 @@ end
 -- Events
 -- =========================================================
 do
-    local f = CreateFrame("Frame")
     local EV = {
         "PLAYER_ENTERING_WORLD", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA",
-        "PLAYER_LEVEL_UP", "CHAT_MSG_SKILL", "CHAT_MSG_SYSTEM", "ACHIEVEMENT_EARNED", "NEW_MOUNT_ADDED",
+        "PLAYER_LEVEL_UP", "CHAT_MSG_SYSTEM", "ACHIEVEMENT_EARNED", "NEW_MOUNT_ADDED",
         "NEW_PET_ADDED", "UNIT_PET", "UNIT_NAME_UPDATE", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_HEALTH",
         "QUEST_DETAIL", "QUEST_COMPLETE", "QUEST_ACCEPTED", "QUEST_TURNED_IN",
         "MERCHANT_SHOW", "MERCHANT_CLOSED", "MAIL_SHOW", "MAIL_CLOSED", "TRADE_SHOW", "TRADE_CLOSED",
         "LOOT_OPENED", "LOOT_CLOSED", "GROUP_ROSTER_UPDATE", "GROUP_JOINED",
         "QUEST_LOG_UPDATE", "UNIT_QUEST_LOG_CHANGED",
     }
-    for _, ev in ipairs(EV) do pcall(f.RegisterEvent, f, ev) end
-
     local wasGrouped = nil
-    local loginChecked = false
 
     local function Handle(event, a1, a2, a3)
         if event == "UNIT_HEALTH" then
@@ -890,8 +812,7 @@ do
         elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
             if a1 == "player" then
                 local id = ns.SafeNum(a3)
-                local name = id and ((C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)) or (GetSpellInfo and GetSpellInfo(id)))
-                OnPlayerSpell(ns.SafeStr(name))
+                OnPlayerSpell(ns.SpellName(id))
             end
         elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" then
             OnZone(false)
@@ -902,17 +823,9 @@ do
             C.lastSub = ns.SafeStr(GetSubZoneText())
             C.petName = UnitExists("pet") and ns.SafeStr(UnitName("pet")) or nil
             if wasGrouped == nil then wasGrouped = (IsInGroup and IsInGroup()) and true or false end
-            if not loginChecked then
-                loginChecked = true
-                After(4, function()
-                    if RPChroniclerDB and RPChroniclerDB.promptOnLogin and not (IsInGroup and IsInGroup()) then
-                        OfferStart("Welcome back.")
-                    end
-                end)
-            end
         elseif event == "GROUP_ROSTER_UPDATE" or event == "GROUP_JOINED" then
             local grouped = (IsInGroup and IsInGroup()) and true or false
-            if grouped and wasGrouped == false and RPChroniclerDB and RPChroniclerDB.promptOnGroup ~= false then
+            if grouped and wasGrouped == false and ns.Get("promptOnGroup") then
                 After(1.5, function() OfferStart("You joined a group.") end)
             end
             wasGrouped = grouped
@@ -924,9 +837,6 @@ do
                 if not run.levelStart then run.levelStart = lvl - 1 end
                 Line("levels", string.format("[LEVEL] %s reached level %d", Me(), lvl))
             end
-        elseif event == "CHAT_MSG_SKILL" then
-            local msg = ns.SafeStr(a1)
-            if msg then OnSkill(msg) end
         elseif event == "CHAT_MSG_SYSTEM" then
             local msg = ns.SafeStr(a1)
             if msg then OnSystem(msg) end
@@ -961,19 +871,13 @@ do
         end
     end
 
-    f:SetScript("OnEvent", function(_, event, a1, a2, a3)
-        local ok, err = pcall(Handle, event, a1, a2, a3)
-        if not ok then
-            if ns.Debug then ns.Debug("error", "chronicle " .. event .. ": " .. tostring(err)) end
-        end
-    end)
+    ns.On(EV, Handle)
 end
 
 -- A new run starts with a clean chronicle
 function ns.ResetChronicle()
     C.fight, C.killSeen, C.enemySeen = nil, {}, {}
-    C.atmoAt, C.atmoPhase = 0, nil
-    C.skillLineAt, C.questDone, C.npcAt, C.npcSaid = {}, {}, {}, {}
+    C.questDone, C.npcAt, C.npcSaid = {}, {}, {}
     C.subAt = {}
     C.streak, C.subPending = nil, nil
     C.objDone, C.objSeeded, C.objPending = {}, false, false

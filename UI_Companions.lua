@@ -4,7 +4,7 @@ local UI = ns.UI
 -- =========================================================
 -- COMPANIONS section (0.5.0, Companions 2.0): the people, NPCs and
 -- companion pets you RP with. Full First + Last names, relationship and
--- tone, two notes ("Who they are", "Our history"), an Include switch
+-- tone, one note ("Who they are", 0.6.1: "Our history" merged in), an Include switch
 -- (Auto / Always / Never), first met, shared adventures, search and sort.
 -- =========================================================
 local view = UI.NewSection("PLAYERS", "Companions", "Your notes on people go into snapshots and Full Logs whenever they are in the scene.")
@@ -13,7 +13,7 @@ UI.AddRailButton("PLAYERS", "Companions", UI.ICONS.PLAYERS, "People you RP with 
 local P = { rows = {} }
 UI.companions = P
 
-local NOTE_MAX = 1000
+local NOTE_MAX = ns.COMPANION_NOTE_MAX
 local INCLUDE_ORDER = { "auto", "always", "never" }
 local INCLUDE_LABEL = { auto = "Include: Auto", always = "Include: Always", never = "Include: Never" }
 local SORTS = { "NAME", "SEEN", "MET" }
@@ -88,13 +88,13 @@ P.toneInput:SetPoint("RIGHT", P.editor, "RIGHT", -2, 0)
 P.relInput.tip = "Rival, mentor, best friend, guildmate ..."
 
 -- A scrolling note box with a letter cap
-local function NoteBox(label, y, name)
+local function NoteBox(label, y, name, height)
     local lbl = UI.Label(P.editor, label, "GameFontHighlightSmall")
     lbl:SetPoint("TOPLEFT", 0, y)
     local count = P.editor:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     count:SetPoint("TOPRIGHT", P.editor, "TOPRIGHT", -4, y)
     local bg = CreateFrame("Frame", nil, P.editor, UI.BACKDROP)
-    bg:SetHeight(50)
+    bg:SetHeight(height or 50)
     bg:SetPoint("TOPLEFT", 0, y - 14)
     bg:SetPoint("TOPRIGHT", 0, y - 14)
     UI.ApplyDarkGlass(bg, 0.07, 0.09, 0.12, 0.92, 0.24, 0.28, 0.36, 0.80)
@@ -126,8 +126,7 @@ local function NoteBox(label, y, name)
     return eb
 end
 
-P.noteInput = NoteBox("|cffffd100Who they are|r |cff8f9ba8(personality, looks, voice)|r", -82, "RPChroniclerPNoteInput")
-P.historyInput = NoteBox("|cffffd100Our history|r |cff8f9ba8(what you went through together)|r", -150, "RPChroniclerPHistoryInput")
+P.noteInput = NoteBox("|cffffd100Who they are (note)|r |cff8f9ba8(who, voice, your history)|r", -82, "RPChroniclerPNoteInput", 118)
 
 P.info = CreateFrame("Frame", nil, P.editor, UI.BACKDROP)
 P.info:SetPoint("TOPLEFT", 0, -220)
@@ -227,7 +226,6 @@ function UI.LoadPlayerIntoEditor(key)
     P.relInput:SetText(data and data.relationship or "")
     P.toneInput:SetText(data and data.tone or "")
     P.noteInput:SetText(data and data.note or "")
-    P.historyInput:SetText(data and data.history or "")
     SetInfo(key, data)
     SyncInclude(data)
 end
@@ -270,7 +268,7 @@ function UI.RefreshPlayersTab()
         end
         rb:SetPoint("TOPLEFT", 0, -(idx - 1) * 24)
         local data = RPChroniclerDB.players[pName]
-        local hasNote = (data.note or "") ~= "" or (data.history or "") ~= ""
+        local hasNote = (data.note or "") ~= ""
         local tag = (data.kind == "npc" and " |cffb39ddb(NPC)|r") or (data.kind == "pet" and " |cffb39ddb(pet)|r") or ""
         rb:SetText(pName .. tag .. (hasNote and " |cffff80ab*|r" or ""))
         if ns.state.selectedPlayerKey == pName then rb:LockHighlight() else rb:UnlockHighlight() end
@@ -282,7 +280,7 @@ function UI.RefreshPlayersTab()
     end
     P.listChild:SetHeight(math.max(10, #sorted * 24))
     if next(RPChroniclerDB.players) == nil then
-        UI.SetHint("No companions yet. Target someone and click Capture (or press Shift+C in the world, or right-click a player).")
+        UI.SetHint("No companions yet. Target someone and click Capture, or right-click a player.")
     end
 end
 
@@ -317,7 +315,7 @@ P.includeBtn:SetScript("OnClick", function()
     if not data then return end
     local idx = 1
     for i, k in ipairs(INCLUDE_ORDER) do if k == (data.include or "auto") then idx = i end end
-    data.include = INCLUDE_ORDER[(idx % #INCLUDE_ORDER) + 1]
+    ns.UpdateCompanion(key, { include = INCLUDE_ORDER[(idx % #INCLUDE_ORDER) + 1] })
     SyncInclude(data)
 end)
 
@@ -346,9 +344,12 @@ P.saveBtn:SetScript("OnClick", function()
         UI.SetStatus("Type a name first.", "error")
         return
     end
+    local fields = {
+        relationship = P.relInput:GetText(), tone = P.toneInput:GetText(),
+        note = (P.noteInput:GetText() or ""):gsub("||", "|"),
+    }
     local sel = ns.state.selectedPlayerKey
-    local entry = sel and RPChroniclerDB.players[sel]
-    if entry then
+    if sel and RPChroniclerDB.players[sel] then
         -- A rename never overwrites another companion (any case)
         local ok, res = ns.RenameCompanion(sel, newName)
         if not ok then
@@ -356,23 +357,15 @@ P.saveBtn:SetScript("OnClick", function()
             return
         end
         newName = res
+        ns.UpdateCompanion(newName, fields)
     else
-        for k in pairs(RPChroniclerDB.players) do
-            if k:lower() == newName:lower() then
-                UI.SetStatus("A companion named " .. k .. " already exists. Pick them in the list to edit.", "error")
-                return
-            end
+        local key, why = ns.CreateCompanion(newName, fields)
+        if not key then
+            UI.SetStatus(why, "error")
+            return
         end
-        entry = ns.NewCompanionEntry("player")
-        RPChroniclerDB.players[newName] = entry
+        newName = key
     end
-    entry.relationship = Trim(P.relInput:GetText())
-    entry.tone = Trim(P.toneInput:GetText())
-    entry.note = Trim(P.noteInput:GetText()):sub(1, NOTE_MAX)
-    entry.history = Trim(P.historyInput:GetText()):sub(1, NOTE_MAX)
-    if (entry.lastSeen or "") == "" then entry.lastSeen = ns.NowStamp() end
-    local visUnit = ns.FindVisibleUnitForPlayer(newName)
-    if visUnit then ns.CaptureVisibleUnitFields(visUnit, entry) end
     UI.SetStatus("Saved companion: " .. newName, "good")
     UI.OpenCompanion(newName)
 end)
@@ -387,7 +380,7 @@ P.delBtn:SetScript("OnClick", function(self)
         UI.SetStatus("Click Delete again to remove " .. nameToDel .. ".", "error")
         return
     end
-    RPChroniclerDB.players[nameToDel] = nil
+    ns.DeleteCompanion(nameToDel)
     UI.LoadPlayerIntoEditor(nil)
     UI.RefreshPlayersTab()
     UI.SetStatus("Deleted " .. nameToDel, "good")
@@ -396,7 +389,7 @@ end)
 UI.SetSectionOnShow("PLAYERS", function()
     local k = UnitExists("target") and ns.CompanionByName(ns.UnitCompanionName("target"))
     if k then
-        if RPChroniclerDB.autoUpdateKnown then ns.CaptureVisibleUnitFields("target", RPChroniclerDB.players[k]) end
+        if ns.Get("autoUpdateKnown") then ns.CaptureVisibleUnitFields("target", RPChroniclerDB.players[k]) end
         UI.LoadPlayerIntoEditor(k)
     elseif ns.state.selectedPlayerKey and RPChroniclerDB.players[ns.state.selectedPlayerKey] then
         UI.LoadPlayerIntoEditor(ns.state.selectedPlayerKey)
@@ -407,14 +400,20 @@ UI.SetSectionOnShow("PLAYERS", function()
 end)
 
 view:SetScript("OnHide", function()
-    for _, eb in ipairs({ P.firstInput, P.lastInput, P.relInput, P.toneInput, P.noteInput, P.historyInput, P.search }) do
+    for _, eb in ipairs({ P.firstInput, P.lastInput, P.relInput, P.toneInput, P.noteInput, P.search }) do
         eb:ClearFocus()
     end
 end)
 
 UI.AddReflow(function()
-    for _, eb in ipairs({ P.noteInput, P.historyInput }) do
+    for _, eb in ipairs({ P.noteInput }) do
         local w = eb.scroll:GetWidth()
         if w and w > 50 then eb:SetWidth(w) end
     end
+end)
+
+-- 0.6.1: "Add as RP Chronicler companion" (right-click menu) says so with
+-- ns.Notify; open them here when the Companions view is showing
+ns.Listen("companionAdded", function(key)
+    if UI.frame:IsShown() and ns.state.section == "PLAYERS" then UI.OpenCompanion(key) end
 end)

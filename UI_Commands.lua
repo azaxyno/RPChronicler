@@ -2,48 +2,12 @@ local ADDON_NAME, ns = ...
 local UI = ns.UI
 
 -- =========================================================
--- Keybinds: override bindings that click hidden buttons.
--- Set only out of combat (never a protected call in combat).
--- The same actions are in the game's Key Bindings (Bindings.xml).
+-- Keybinds (0.6.1): RP Chronicler sets one override binding itself, Ctrl+C
+-- for the quick copy, and only while RP Copy and "Ctrl+C copies the scene"
+-- are on. It is set only out of combat (never a protected call in combat).
+-- Every other action has an entry in the game's own Key Bindings
+-- (Bindings.xml), unbound until you pick a key there.
 -- =========================================================
-local function SilentButton(name, onClick)
-    local b = CreateFrame("Button", name, UIParent)
-    b:SetSize(1, 1)
-    b:SetPoint("BOTTOMLEFT", 0, 0)
-    b:SetScript("OnClick", onClick)
-    return b
-end
-
-local function NotTyping()
-    local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
-    return not focused or focused == _G.RPChroniclerSilentArmBox
-end
-
-SilentButton("RPChroniclerSilentCaptureBtn", function() RPChronicler_CaptureTarget() end)
-SilentButton("RPChroniclerSilentMarkBtn", function()
-    if NotTyping() and RPChronicler_MarkMoment then RPChronicler_MarkMoment() end
-end)
-SilentButton("RPChroniclerSilentOpenBtn", function()
-    if NotTyping() then RPChronicler_Toggle() end
-end)
-SilentButton("RPChroniclerSilentRunStartBtn", function()
-    if NotTyping() then RPChronicler_StartRun() end
-end)
-SilentButton("RPChroniclerSilentRunPauseBtn", function()
-    if NotTyping() then RPChronicler_ToggleRunPause() end
-end)
-SilentButton("RPChroniclerSilentRunEndBtn", function()
-    if NotTyping() then RPChronicler_EndRun() end
-end)
-
-local KEY_TO_BUTTON = {
-    { field = "markMomentKey", button = "RPChroniclerSilentMarkBtn" },
-    { field = "openWindowKey", button = "RPChroniclerSilentOpenBtn" },
-    { field = "runStartKey", button = "RPChroniclerSilentRunStartBtn" },
-    { field = "runPauseKey", button = "RPChroniclerSilentRunPauseBtn" },
-    { field = "runEndKey", button = "RPChroniclerSilentRunEndBtn" },
-}
-
 local bindOwner = CreateFrame("Frame", "RPChroniclerBindManagerFrame", UIParent)
 
 function UI.UpdateOverrideBindings()
@@ -55,32 +19,21 @@ function UI.UpdateOverrideBindings()
     UI.EnsureOptions()
     if ClearOverrideBindings then ClearOverrideBindings(bindOwner) end
     if not SetOverrideBindingClick then return end
-    local db = RPChroniclerDB
-    -- Quick Copy: Ctrl+C (both copy styles) or a custom key. When the hidden
-    -- copy box already has focus, the keystroke goes to it and copies.
-    if db.quickCtrlC and db.quickCopyKey and db.quickCopyKey ~= "" then
-        SetOverrideBindingClick(bindOwner, false, db.quickCopyKey, "RPChroniclerSilentCopyBtn")
-    end
-    if db.quickCapture and db.captureTargetKey and db.captureTargetKey ~= "" then
-        SetOverrideBindingClick(bindOwner, false, db.captureTargetKey, "RPChroniclerSilentCaptureBtn")
-    end
-    for _, kb in ipairs(KEY_TO_BUTTON) do
-        local key = db[kb.field]
-        if key and key ~= "" then
-            SetOverrideBindingClick(bindOwner, false, key, kb.button)
-        end
+    -- When the hidden copy box already has focus, the keystroke goes to it and copies
+    if UI.IsCtrlCCopy() then
+        SetOverrideBindingClick(bindOwner, false, "CTRL-C", "RPChroniclerSilentCopyBtn")
     end
 end
 
-bindOwner:RegisterEvent("PLAYER_LOGIN")
-bindOwner:RegisterEvent("PLAYER_REGEN_DISABLED")
-bindOwner:RegisterEvent("PLAYER_REGEN_ENABLED")
-bindOwner:SetScript("OnEvent", function(_, event)
+ns.On({ "PLAYER_LOGIN", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }, function(event)
     if event == "PLAYER_REGEN_DISABLED" then
         UI.DisarmCtrlCopy()
     else
         UI.UpdateOverrideBindings()
     end
+end)
+ns.Listen("setting", function(key)
+    if key == "rpCopy" or key == "quickCtrlC" then UI.UpdateOverrideBindings() end
 end)
 
 -- =========================================================
@@ -109,13 +62,13 @@ do
     local items = {
         { key = "run", fn = function() RPChronicler_ToggleRun() end },
         { key = "pause", fn = function() RPChronicler_ToggleRunPause() end },
-        { key = "mark", label = "Mark Moment", fn = function() if RPChronicler_MarkMoment then RPChronicler_MarkMoment() end end },
+        { key = "mark", label = "Mark Moment", fn = function() RPChronicler_MarkMoment() end },
         -- 0.5.0: straight to the live run's Full Log
         { key = "open", label = "Open current recording", fn = function()
-            local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
-            if run and UI.OpenRecording then UI.OpenRecording(run.id, "FULL") end
+            local run = ns.GetActiveAdventure()
+            if run then UI.OpenRecording(run.id, "FULL") end
         end },
-        { key = "book", label = "Story Book", fn = function() if UI.OpenStoryBook then UI.OpenStoryBook() end end },
+        { key = "book", label = "Story Book", fn = function() UI.OpenStoryBook() end },
         { key = "clear", label = "Clear chat logs", fn = function()
             ns.ClearSessionLogs()
             print("|cff00ff00[RP Chronicler]|r All logs cleared.")
@@ -133,7 +86,7 @@ do
     menu:SetHeight(12 + #items * 22)
 
     local function Refresh()
-        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        local run = ns.GetActiveAdventure()
         local runBtn, pauseBtn, markBtn, openBtn = items[1].btn, items[2].btn, items[3].btn, items[4].btn
         if run then openBtn:Enable() else openBtn:Disable() end
         runBtn.accentStyle = run and "danger" or "good"
@@ -213,9 +166,8 @@ do
 
     miniBtn:HookScript("OnUpdate", function(_, elapsed)
         acc = acc + elapsed
-        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        local run = ns.GetActiveAdventure()
         local want = run and (run.paused and "paused" or "rec") or nil
-        if RPChroniclerDB and RPChroniclerDB.iconState == false then want = nil end
         if want ~= state then Apply(want) end
         if state == "rec" then
             local a = 0.55 + 0.45 * math.sin(GetTime() * 4)
@@ -233,7 +185,7 @@ do
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
         GameTooltip:SetText("|cffffd100RP Chronicler|r", 1, 1, 1)
-        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        local run = ns.GetActiveAdventure()
         if run and run.paused then
             GameTooltip:AddLine("|cffffb74dRecording paused:|r " .. (run.title or "Adventure"), 1, 1, 1)
             GameTooltip:AddLine("/rp resume to continue", 0.7, 0.7, 0.7)
@@ -282,41 +234,43 @@ SlashCmdList["RPCHRONICLER"] = function(msg)
     elseif low == "book" or low == "stories" then
         UI.OpenStoryBook()
     elseif low == "setup" or low == "privacy" then
-        if UI.OpenSetup then UI.OpenSetup(true) end
+        UI.OpenSetup(true)
     elseif low == "wipe" then
         UI.ShowPrompt("|cffff6b6bDelete ALL RP Chronicler data?|r\nEvery recording, story, companion and setting is removed, then the UI reloads. This cannot be undone.",
             "Delete everything", function() ns.WipeAllData() end, "Cancel", nil)
     elseif low == "debug" then
         UI.ShowCopyBox("|cffffd100RP Chronicler debug report|r",
             "|cffb0bac5Select All, Ctrl+C, and paste it into your bug report. It holds no chat.|r",
-            ns.BuildDebugReport and ns.BuildDebugReport() or "Debug module not loaded.")
+            ns.BuildDebugReport())
+    elseif low == "debug verbose" then
+        -- 0.6.1: extra detail in the debug log, for this session only
+        ns.debugVerbose = not ns.debugVerbose
+        print("|cff00ff00[RP Chronicler]|r Verbose debug log " .. (ns.debugVerbose and "on until you log out or /reload." or "off."))
     elseif low == "debug clear" then
         if RPChroniclerDB then RPChroniclerDB.debugLog = {} end
         print("|cff00ff00[RP Chronicler]|r Debug log cleared.")
     elseif low == "pause" or low == "resume" then
         local ok, status
         if low == "pause" then
-            ok, status = ns.PauseAdventure and ns.PauseAdventure()
+            ok, status = ns.PauseAdventure()
         else
-            ok, status = ns.ResumeAdventure and ns.ResumeAdventure()
+            ok, status = ns.ResumeAdventure()
         end
-        print("|cff00ff00[RP Chronicler]|r " .. tostring(status or "Adventures module not loaded."))
-        if UI.RefreshRunViews then pcall(UI.RefreshRunViews) end
+        print("|cff00ff00[RP Chronicler]|r " .. tostring(status))
+        pcall(UI.RefreshRunViews)
     elseif low == "end" or low == "stop" then
         local saved = ns.GetActiveAdventure() and ns.EndAdventure("Ended Manually")
         print("|cff00ff00[RP Chronicler]|r " .. (saved and ("Saved adventure: " .. (saved.title or "Adventure")) or "No active adventure running."))
-        if UI.RefreshRunViews then pcall(UI.RefreshRunViews) end
+        pcall(UI.RefreshRunViews)
     elseif low == "diag" then
-        if ns.DiagnoseTarget then
-            for _, line in ipairs(ns.DiagnoseTarget()) do
-                print("|cffffd100[RP Chronicler diag]|r " .. line)
-            end
+        for _, line in ipairs(ns.DiagnoseTarget()) do
+            print("|cffffd100[RP Chronicler diag]|r " .. line)
         end
     elseif low:match("^mark") then
         local noteArg = trimmed:match("^mark%s+(.+)$")
         local ok, status = ns.MarkAdventureHighlight(noteArg)
         print("|cff00ff00[RP Chronicler]|r " .. status)
-        if ok and ns.RequestScreenshot then
+        if ok then
             ns.RequestScreenshot("mark", noteArg or "Marked moment")
         end
     else

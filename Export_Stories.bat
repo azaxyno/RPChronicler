@@ -399,8 +399,9 @@ foreach ($sv in $svFiles) {
     $db = $g['RPChroniclerDB']
     if (-not $db) { Write-Host '  No RPChroniclerDB in this file.'; continue }
 
-    # Where the game's screenshots are: RPCHRONICLER_SHOTS, then Options > Stories
-    # & Export, then the Screenshots folder of this WoW install
+    # Where the game's screenshots are: RPCHRONICLER_SHOTS, then the Screenshots
+    # folder of this WoW install (0.6.1: the Options folder boxes were removed;
+    # saves from 0.6.0 may still name one)
     $shotDir = Join-Path $wowDir 'Screenshots'
     if ($db['exportShotsDir']) { $shotDir = [string]$db['exportShotsDir'] }
     if ($env:RPCHRONICLER_SHOTS) { $shotDir = $env:RPCHRONICLER_SHOTS }

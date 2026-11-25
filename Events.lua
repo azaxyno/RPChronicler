@@ -12,12 +12,12 @@ local function IsBossUnit(unit)
     if (cls == "worldboss") or (lvl ~= nil and lvl < 0) then return true end
     local name = ns.SafeStr(UnitName(unit))
     if name and RPChroniclerDB and RPChroniclerDB.knownBosses and RPChroniclerDB.knownBosses[name] then return true end
-    local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
+    local activeBoss = ns.GetActiveBossName()
     if name and activeBoss and activeBoss == name then return true end
     -- Classic dungeon bosses are plain elites (no skull, often no boss frames).
     -- Inside an instance, an elite with several times your max health counts.
     if cls == "elite" or cls == "rareelite" then
-        local inInstance = IsInInstance and IsInInstance()
+        local _, inInstance = ns.InstanceKind()
         if inInstance then
             local hpMax = ns.SafeNum(UnitHealthMax(unit))
             local myMax = ns.SafeNum(UnitHealthMax("player"))
@@ -28,42 +28,16 @@ local function IsBossUnit(unit)
 end
 ns.IsBossUnit = IsBossUnit
 
--- Health percent that survives the modern engine: plain numbers first, then
--- UnitHealthPercent where it exists. Returns nil when the value is secret.
-local function GetUnitHealthPct(unit)
-    local hp = ns.SafeNum(UnitHealth(unit))
-    local hpMax = ns.SafeNum(UnitHealthMax(unit))
-    if hp and hpMax and hpMax > 0 then
-        return math.floor((hp / hpMax) * 100)
-    end
-    if UnitHealthPercent then
-        local ok, v = pcall(UnitHealthPercent, unit)
-        v = ok and ns.SafeNum(v) or nil
-        if v then
-            if v <= 1 and v ~= math.floor(v) then v = v * 100 end
-            return math.floor(v)
-        end
-    end
-    return nil
-end
-ns.GetUnitHealthPct = GetUnitHealthPct
-
 local function CheckInstanceAdventureState(isInitialLogin)
     ns.EnsureDB()
-    -- NOTE: "IsInInstance and IsInInstance()" would truncate to ONE return value,
-    -- leaving instanceType nil forever. Call it explicitly to keep both values.
-    local inInstance, instanceType = false, nil
-    if IsInInstance then
-        inInstance, instanceType = IsInInstance()
-    end
-    local isDungeonOrRaid = inInstance and (instanceType == "party" or instanceType == "raid")
-    local active = ns.GetActiveAdventure and ns.GetActiveAdventure()
+    local isDungeonOrRaid = ns.InstanceKind() ~= "world"
+    local active = ns.GetActiveAdventure()
 
     if isDungeonOrRaid then
         local zoneName = ns.SafeStr(GetRealZoneText()) or ns.GetCurrentWhere()
         if not active then
             -- Options > Recording: "Auto-record dungeons and raids" (on by default)
-            if ns.StartAdventure and RPChroniclerDB.autoRecord ~= false then
+            if ns.Get("autoRecord") then
                 ns.StartAdventure(zoneName, true)
             end
         else
@@ -72,13 +46,13 @@ local function CheckInstanceAdventureState(isInitialLogin)
                 -- A different dungeon than the run we were recording
                 ns.EndAdventure("Entered " .. zoneName2)
                 ns.StartAdventure(zoneName2, true)
-            elseif ns.SyncAdventureRoster then
+            else
                 ns.SyncAdventureRoster()
             end
         end
     else
         -- A paused run stays put until you resume or end it
-        if active and active.isAuto and not active.paused and ns.EndAdventure then
+        if active and active.isAuto and not active.paused then
             ns.EndAdventure("Left Instance")
         end
     end
@@ -97,12 +71,10 @@ local function RestoreRunOnce()
         print("|cffffd100RP Chronicler|r |cffffb74dRecording paused|r |cffeceff1" .. title .. "|r |cff9aa5b4- type /rp resume to continue or /rp end to save it|r")
     elseif result == "interrupted" then
         print("|cffffd100RP Chronicler|r |cffffb74dSaved your last run|r |cffeceff1" .. title .. "|r |cff9aa5b4(cut short by a logout or disconnect)|r")
-        if ns.OfferInterruptedRun then
-            if C_Timer and C_Timer.After then
-                C_Timer.After(3, function() ns.OfferInterruptedRun(run) end)
-            else
-                ns.OfferInterruptedRun(run)
-            end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(3, function() ns.OfferInterruptedRun(run) end)
+        else
+            ns.OfferInterruptedRun(run)
         end
     end
 end
@@ -116,10 +88,10 @@ local CAPTURE_OF = {
 
 local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawChannelName)
     local capKey = CAPTURE_OF[channelLabel]
-    if capKey and ns.CaptureOn and not ns.CaptureOn(capKey) then return end
+    if capKey and not ns.CaptureOn(capKey) then return end
     local cleanMsg = ns.CleanText(rawMsg)
     if not cleanMsg or cleanMsg == "" then return end
-    if not (ns.IsSecret and ns.IsSecret(rawAuthor)) then
+    if not (ns.IsSecret(rawAuthor)) then
         ns.state.lastRawAuthor = tostring(rawAuthor or "")
     end
 
@@ -160,18 +132,16 @@ local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawCh
         end
     end
 
-    if ns.HandleConversationCapture then
-        ns.HandleConversationCapture(channelLabel, author, cleanMsg, false, nil)
-    end
+    ns.HandleConversationCapture(channelLabel, author, cleanMsg, false, nil)
     -- Only scene chat goes into a run: say, yell, emote, whisper and group
     -- chat. Guild and world channels (General, Trade, LFG, OOC) stay out.
-    if ns.RecordAdventureChat and channelLabel ~= "Channel" and channelLabel ~= "Guild" and channelLabel ~= "Officer" then
+    if channelLabel ~= "Channel" and channelLabel ~= "Guild" and channelLabel ~= "Officer" then
         ns.RecordAdventureChat(chanPrefix, author, cleanMsg)
     end
 end
 
 local function HandleNpcChat(kindLabel, rawMsg, rawAuthor, isEmote, event)
-    if ns.CaptureOn and not ns.CaptureOn("npc") then return end
+    if not ns.CaptureOn("npc") then return end
     local cleanMsg = ns.CleanText(rawMsg)
     if not cleanMsg or cleanMsg == "" then return end
     local npcName = ns.SafeStr(rawAuthor) or "NPC"
@@ -197,13 +167,11 @@ local function HandleNpcChat(kindLabel, rawMsg, rawAuthor, isEmote, event)
     ns.PushLog(ns.logs.npc, line, npcName, "NPC")
     -- Runs keep boss and named NPC lines only (throttled, de-duplicated);
     -- flee emotes become part of the [FIGHT] line
-    if ns.ChronicleNpc and not ns.ChronicleNpc(npcName, cleanMsg, event) then return end
-    if ns.RecordAdventureChat then
-        if isEmote then
-            ns.RecordAdventureChat("NPC Emote", npcName, cleanMsg, true)
-        else
-            ns.RecordAdventureChat(kindLabel, npcName, cleanMsg)
-        end
+    if not ns.ChronicleNpc(npcName, cleanMsg, event) then return end
+    if isEmote then
+        ns.RecordAdventureChat("NPC Emote", npcName, cleanMsg, true)
+    else
+        ns.RecordAdventureChat(kindLabel, npcName, cleanMsg)
     end
 end
 
@@ -348,6 +316,7 @@ local function FormatCoin(copper)
     return table.concat(parts, " ")
 end
 local function AddCoinPickup(msg)
+    if not ns.RpCopyOn() then return end
     local copper = ParseCopper(msg)
     if copper <= 0 then return end
     local now = GetTime()
@@ -395,7 +364,7 @@ local function HandleLootMessage(rawMsg, rawAuthor, isMoney)
     end
     if isMoney then
         AddCoinPickup(safeMsg)
-        if ns.RecordAdventureCoin then ns.RecordAdventureCoin(ParseCopper(safeMsg)) end
+        ns.RecordAdventureCoin(ParseCopper(safeMsg))
     elseif keep and not IsRollSpam(cleanPlain) then
         local line = ns.ColorText("[Loot]", ns.COLORS.lootTag) .. " " .. coloredLine
         ns.PushLog(ns.logs.loot, line, looter, "Loot")
@@ -406,11 +375,11 @@ local function HandleLootMessage(rawMsg, rawAuthor, isMoney)
     if isMoney or not ns.RecordAdventureLoot or IsRollSpam(cleanPlain) then return end
     local selfName = ns.StripRealm(UnitName("player"))
     local isSelf = (ns.StripRealm(looter) == selfName) or cleanPlain:find("^You ") ~= nil
-    local source = ns.ClassifyLootSource and ns.ClassifyLootSource(cleanPlain, isSelf) or nil
+    local source = ns.ClassifyLootSource(cleanPlain, isSelf) or nil
     for _, item in ipairs(items or {}) do
         if item.quality and item.quality >= 2 then
             ns.RecordAdventureLoot(item.colored, item.plain, looter, source, true)
-        elseif ns.IsQuestItem and ns.IsQuestItem(item.link) then
+        elseif ns.IsQuestItem(item.link) then
             ns.RecordAdventureLoot(item.colored, item.plain, looter, source and ("quest item, " .. source) or "quest item", false)
         end
     end
@@ -434,7 +403,6 @@ local function CaptureQuestContext(prefixLabel, questID)
     ns.state.lastQuestInfo = string.format("%s: %s", prefixLabel, title)
 end
 
-local eventFrame = CreateFrame("Frame", "RPChroniclerEventFrame")
 local EVENTS = {
     "PLAYER_LOGIN",
     "PLAYER_ENTERING_WORLD",
@@ -453,30 +421,6 @@ local EVENTS = {
     "PLAYER_LOGOUT",
     "PLAYER_DEAD",
     "PLAYER_LEVEL_UP",
-    "CHAT_MSG_SAY",
-    "CHAT_MSG_YELL",
-    "CHAT_MSG_EMOTE",
-    "CHAT_MSG_TEXT_EMOTE",
-    "CHAT_MSG_WHISPER",
-    "CHAT_MSG_WHISPER_INFORM",
-    "CHAT_MSG_PARTY",
-    "CHAT_MSG_PARTY_LEADER",
-    "CHAT_MSG_RAID",
-    "CHAT_MSG_RAID_LEADER",
-    "CHAT_MSG_RAID_WARNING",
-    "CHAT_MSG_INSTANCE_CHAT",
-    "CHAT_MSG_INSTANCE_CHAT_LEADER",
-    "CHAT_MSG_GUILD",
-    "CHAT_MSG_OFFICER",
-    "CHAT_MSG_CHANNEL",
-    "CHAT_MSG_MONSTER_SAY",
-    "CHAT_MSG_MONSTER_YELL",
-    "CHAT_MSG_MONSTER_EMOTE",
-    "CHAT_MSG_MONSTER_WHISPER",
-    "CHAT_MSG_RAID_BOSS_EMOTE",
-    "CHAT_MSG_RAID_BOSS_WHISPER",
-    "CHAT_MSG_LOOT",
-    "CHAT_MSG_MONEY",
     "QUEST_DETAIL",
     "QUEST_PROGRESS",
     "QUEST_COMPLETE",
@@ -492,9 +436,6 @@ local EVENTS = {
 -- and dead units; your own deaths from PLAYER_DEAD.
 ns.combatLogAvailable = false
 
-for _, ev in ipairs(EVENTS) do
-    pcall(eventFrame.RegisterEvent, eventFrame, ev)
-end
 
 -- =========================================================
 -- Combat poller (no combat log needed)
@@ -556,18 +497,18 @@ do
 
     local function DisplayName(short)
         if not short then return nil end
-        return (ns.ResolveCanonicalPlayerName and ns.ResolveCanonicalPlayerName(short)) or short
+        return (ns.ResolveCanonicalPlayerName(short)) or short
     end
 
     local function PollBossHP()
         if not ns.RecordAdventureBossHP then return end
         ClearTable(seen)
-        local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
+        local activeBoss = ns.GetActiveBossName()
         for _, u in ipairs(BOSS_UNITS) do
             if activeBoss and UnitExists(u) and UnitIsDead(u) and not UnitIsPlayer(u)
                 and ns.SafeStr(UnitName(u)) == activeBoss then
                 -- The boss died on someone's target or a boss frame (kills are de-duplicated)
-                if ns.RecordAdventureBossKill and ns.RecordAdventureBossKill(activeBoss) and ns.RequestScreenshot then
+                if ns.RecordAdventureBossKill(activeBoss) then
                     ns.RequestScreenshot("boss", "Defeated " .. activeBoss)
                 end
                 activeBoss = nil
@@ -575,8 +516,8 @@ do
                 local bName = ns.SafeStr(UnitName(u))
                 if bName and not seen[bName] then
                     seen[bName] = true
-                    if ns.RecordAdventureBossEngage then ns.RecordAdventureBossEngage(bName, u) end
-                    local pct = GetUnitHealthPct(u)
+                    ns.RecordAdventureBossEngage(bName, u)
+                    local pct = ns.HealthPct(u)
                     if pct then ns.RecordAdventureBossHP(bName, pct) end
                 end
             end
@@ -584,7 +525,7 @@ do
     end
 
     local function ScanMob(u, now)
-        if ns.FightSeeUnit then ns.FightSeeUnit(u) end
+        ns.FightSeeUnit(u)
         if not UnitExists(u) or UnitIsPlayer(u) or UnitIsDead(u) then return end
         if not UnitCanAttack("player", u) then return end
         if UnitAffectingCombat and not IsTrue(UnitAffectingCombat(u)) then return end
@@ -596,7 +537,7 @@ do
 
         local holder = GroupHolderName(u .. "target")
         if not holder then return end -- fleeing, stunned or targeting nobody: keep the last holder
-        if ns.RecordAdventureAggroSample then ns.RecordAdventureAggroSample(DisplayName(holder)) end
+        ns.RecordAdventureAggroSample(DisplayName(holder))
 
         local prev = mobTargets[key]
         mobTargets[key] = { name = holder, t = now }
@@ -604,9 +545,7 @@ do
             if (now - (mobSwapAt[key] or 0)) >= AGGRO_MOB_COOLDOWN and (now - lastSwapLog) >= AGGRO_GLOBAL_COOLDOWN then
                 mobSwapAt[key] = now
                 lastSwapLog = now
-                if ns.RecordAdventureAggroSwap then
-                    ns.RecordAdventureAggroSwap(mobName, DisplayName(prev.name), DisplayName(holder))
-                end
+                ns.RecordAdventureAggroSwap(mobName, DisplayName(prev.name), DisplayName(holder))
             end
         end
     end
@@ -625,14 +564,14 @@ do
     end
 
     local function Tick()
-        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        local run = ns.GetActiveAdventure()
         if not run or run.paused then
             groupInCombat = false
             return
         end
         local now = GetTime()
         if AnyGroupInCombat() then
-            if ns.FightBegin then ns.FightBegin() end
+            ns.FightBegin()
             groupInCombat = true
             lastCombatSeen = now
             PollBossHP()
@@ -641,8 +580,8 @@ do
             groupInCombat = false
             ClearTable(mobTargets)
             ClearTable(mobSwapAt)
-            if ns.EndAdventureBossPull then ns.EndAdventureBossPull() end
-            if ns.FightFlush then ns.FightFlush() end
+            ns.EndAdventureBossPull()
+            ns.FightFlush()
         end
     end
 
@@ -653,7 +592,7 @@ do
         local ok, err = pcall(Tick)
         if not ok and not poller.reported then
             poller.reported = true
-            if ns.Debug then ns.Debug("error", "combat poller: " .. tostring(err)) end
+            ns.Debug("error", "combat poller: " .. tostring(err))
             print("|cffffd100RP Chronicler|r |cffff6b6bcombat poller error:|r " .. tostring(err) .. " |cff9aa5b4(/rp debug for a report)|r")
         end
     end)
@@ -673,15 +612,15 @@ do
             local name = ns.SafeStr(UnitName(u)) or "(secret)"
             local cls = ns.SafeStr(UnitClassification(u)) or "(secret)"
             local lvl = ns.SafeNum(UnitLevel(u))
-            local pct = GetUnitHealthPct(u)
+            local pct = ns.HealthPct(u)
             table.insert(out, string.format("Target: %s | class: %s | level: %s", name, cls, lvl and tostring(lvl) or "(secret)"))
             table.insert(out, "Health readable: " .. (pct and (pct .. "%") or "NO (secret or missing)"))
             table.insert(out, "Counts as boss: " .. (IsBossUnit(u) and "yes" or "no"))
             local holder = GroupHolderName(u .. "target")
             table.insert(out, "Its target: " .. (holder or (ns.SafeStr(UnitName(u .. "target")) or "none")))
         end
-        local role, guessed = "NONE", false
-        if ns.GetUnitRole then role, guessed = ns.GetUnitRole("player") end
+        local role, guessed = ns.GetUnitRole("player")
+        role = role or "NONE"
         table.insert(out, "Your role: " .. role .. (guessed and " (guessed)" or " (assigned)"))
         table.insert(out, "Boss frames: " .. (UnitExists("boss1") and "yes" or "none now")
             .. " | threat API: " .. (UnitDetailedThreatSituation and "yes" or "no")
@@ -697,11 +636,11 @@ do
     end
 end
 
-eventFrame:SetScript("OnEvent", function(_, event, ...)
+local function OnEvent(event, ...)
     if event == "PLAYER_LOGIN" then
         ns.EnsureDB()
-        if ns.DebugReady then ns.DebugReady() end
-        if ns.Debug then ns.Debug("info", "login, version " .. tostring(ns.VERSION or "?")) end
+        ns.DebugReady()
+        ns.Debug("info", "login, version " .. tostring(ns.VERSION or "?"))
         -- Version banner, read from the toc's ## Version field (see Core.lua)
         print(string.format("|cffffd100RP Chronicler|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -709,20 +648,16 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RestoreRunOnce()
         CheckInstanceAdventureState()
     elseif event == "PLAYER_LOGOUT" then
-        if ns.TouchActiveAdventure then ns.TouchActiveAdventure(true) end
+        ns.TouchActiveAdventure(true)
     elseif event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
-        if ns.PollCombatSoon then ns.PollCombatSoon() end
+        ns.PollCombatSoon()
     elseif event == "ZONE_CHANGED_NEW_AREA" then
-        if ns.RequestScreenshot then
-            ns.RequestScreenshot("newzone", ns.GetCurrentWhere())
-        end
+        ns.RequestScreenshot("newzone", ns.GetCurrentWhere())
     elseif event == "GROUP_ROSTER_UPDATE" then
-        if ns.SyncAdventureRoster then
-            ns.SyncAdventureRoster()
-        end
+        ns.SyncAdventureRoster()
     elseif event == "PLAYER_TARGET_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" then
         local unit = (event == "PLAYER_TARGET_CHANGED") and "target" or "mouseover"
-        if UnitExists(unit) and UnitIsPlayer(unit) and RPChroniclerDB and RPChroniclerDB.autoUpdateKnown then
+        if UnitExists(unit) and UnitIsPlayer(unit) and ns.Get("autoUpdateKnown") then
             local fullName = ns.GetUnitFullName(unit)
             local key = fullName and ns.FindPlayerKey(fullName, true)
             if key and RPChroniclerDB.players[key] then
@@ -731,7 +666,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         elseif event == "PLAYER_TARGET_CHANGED" and UnitExists("target") and UnitCanAttack("player", "target") and not UnitIsDead("target") then
             if IsBossUnit("target") and UnitAffectingCombat and UnitAffectingCombat("player") then
                 local bName = ns.SafeStr(UnitName("target"))
-                if bName and ns.RecordAdventureBossEngage then
+                if bName then
                     ns.RecordAdventureBossEngage(bName, "target")
                 end
             end
@@ -739,35 +674,31 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_REGEN_DISABLED" then
         -- No "[Combat] Entered combat" line: the [Status] line already says
         -- In Combat / Out of Combat, and the extra lines crowded the slices.
-        if ns.RecordAdventureCombatState then
-            ns.RecordAdventureCombatState(true)
-        end
-        if ns.NoteCombatStarted then ns.NoteCombatStarted() end
+        ns.RecordAdventureCombatState(true)
+        ns.NoteCombatStarted()
         if UnitExists("target") and IsBossUnit("target") and UnitCanAttack("player", "target") then
             local bName = ns.SafeStr(UnitName("target"))
-            if bName and ns.RecordAdventureBossEngage then
+            if bName then
                 ns.RecordAdventureBossEngage(bName, "target")
             end
         end
     elseif event == "PLAYER_REGEN_ENABLED" then
-        if ns.RecordAdventureCombatState then
-            ns.RecordAdventureCombatState(false)
-        end
+        ns.RecordAdventureCombatState(false)
     elseif event == "ENCOUNTER_START" then
         local _, encounterName = ...
         local bName = ns.SafeStr(encounterName)
-        if bName and ns.RecordAdventureBossEngage then
+        if bName then
             ns.RecordAdventureBossEngage(bName)
         end
     elseif event == "ENCOUNTER_END" then
         local _, encounterName, _, _, success = ...
         local bName = ns.SafeStr(encounterName)
         if bName and success == 1 then
-            local recorded = ns.RecordAdventureBossKill and ns.RecordAdventureBossKill(bName)
-            if recorded and ns.RequestScreenshot then
+            local recorded = ns.RecordAdventureBossKill(bName)
+            if recorded then
                 ns.RequestScreenshot("boss", "Defeated " .. bName)
             end
-        elseif bName and ns.EndAdventureBossPull then
+        elseif bName then
             -- Wipe or reset: the next attempt logs its milestones again
             ns.EndAdventureBossPull()
         end
@@ -779,48 +710,40 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                 -- Boss-kill fallback now that the combat log is off-limits:
                 -- a dead boss frame, skull/worldboss, or the boss we were fighting.
                 local bName = ns.SafeStr(UnitName(unit))
-                local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
+                local activeBoss = ns.GetActiveBossName()
                 local isBoss = unit:match("^boss%d+$") or IsBossUnit(unit)
                     or (bName and activeBoss and activeBoss:lower() == bName:lower())
-                if bName and isBoss and ns.RecordAdventureBossKill then
-                    if ns.RecordAdventureBossKill(bName) and ns.RequestScreenshot then
+                if bName and isBoss then
+                    if ns.RecordAdventureBossKill(bName) then
                         ns.RequestScreenshot("boss", "Defeated " .. bName)
                     end
                 end
             elseif UnitExists(unit) and UnitCanAttack("player", unit) then
                 if IsBossUnit(unit) then
                     local bName = ns.SafeStr(UnitName(unit))
-                    local pct = GetUnitHealthPct(unit)
+                    local pct = ns.HealthPct(unit)
                     if bName and pct then
-                        if ns.RecordAdventureBossEngage and UnitAffectingCombat and UnitAffectingCombat("player") then
+                        if UnitAffectingCombat and UnitAffectingCombat("player") then
                             ns.RecordAdventureBossEngage(bName, unit)
                         end
-                        if ns.RecordAdventureBossHP then
-                            ns.RecordAdventureBossHP(bName, pct)
-                        end
+                        ns.RecordAdventureBossHP(bName, pct)
                     end
                 end
             end
         elseif unit == "player" or unit:match("^party%d+$") then
-            if ns.RecordAdventureUnitVitals then
-                ns.RecordAdventureUnitVitals(unit)
-            end
+            ns.RecordAdventureUnitVitals(unit)
         end
     elseif event == "UNIT_POWER_UPDATE" then
         local unit = ...
         if unit == "player" or (unit and unit:match("^party%d+$")) then
-            if ns.RecordAdventureUnitVitals then
-                ns.RecordAdventureUnitVitals(unit)
-            end
+            ns.RecordAdventureUnitVitals(unit)
         end
     elseif event == "PLAYER_DEAD" then
         local selfName = ns.StripRealm(UnitName("player")) or "Player"
         local now = GetTime()
         if not recentLoggedDeaths[selfName] or (now - recentLoggedDeaths[selfName]) > 3 then
             recentLoggedDeaths[selfName] = now
-            if ns.RecordAdventureDeath then
-                ns.RecordAdventureDeath(selfName, true, lastKillerByVictim[selfName])
-            end
+            ns.RecordAdventureDeath(selfName, true, lastKillerByVictim[selfName])
             local e = ns.PushLog(ns.logs.combat, ns.ColorText("died", ns.COLORS.death))
             if e then e.at = time() end
         end
@@ -829,26 +752,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         if newLevel then
             local e = ns.PushLog(ns.logs.combat, ns.ColorText("reached level " .. newLevel, ns.COLORS.gold))
             if e then e.at = time() end
-            if ns.RequestScreenshot then
-                ns.RequestScreenshot("levelup", "Reached Level " .. newLevel)
-            end
+            ns.RequestScreenshot("levelup", "Reached Level " .. newLevel)
         end
-    elseif event == "CHAT_MSG_SAY" then
-        local msg, author = ...
-        HandlePlayerChat("Say", ns.COLORS.say, msg, author)
-    elseif event == "CHAT_MSG_YELL" then
-        local msg, author = ...
-        HandlePlayerChat("Yell", ns.COLORS.yell, msg, author)
-    elseif event == "CHAT_MSG_EMOTE" or event == "CHAT_MSG_TEXT_EMOTE" then
-        local msg, author = ...
-        HandlePlayerChat("Emote", ns.COLORS.emote, msg, author)
-    elseif event == "CHAT_MSG_WHISPER" then
-        local msg, author = ...
-        HandlePlayerChat("Whisper", ns.COLORS.whisper, msg, author)
     elseif event == "CHAT_MSG_WHISPER_INFORM" then
         local msg, recipient = ...
         local cleanMsg = ns.CleanText(msg)
-        if ns.CaptureOn and not ns.CaptureOn("whisper") then cleanMsg = nil end
+        if not ns.CaptureOn("whisper") then cleanMsg = nil end
         if cleanMsg and cleanMsg ~= "" then
             local selfName = ns.StripRealm(UnitName("player")) or "Me"
             local recipClean = ns.StripRealm(recipient) or "Unknown"
@@ -858,35 +767,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                 ns.ColorText(cleanMsg, ns.COLORS.text))
             local wEntry = ns.PushLog(ns.logs.social, line, selfName, "Whisper")
             if type(wEntry) == "table" then wEntry.to = recipClean end
-            if ns.HandleConversationCapture then
-                ns.HandleConversationCapture("Whisper", selfName, cleanMsg, true, recipClean)
-            end
-            if ns.RecordAdventureChat then
-                ns.RecordAdventureChat("Whisper -> " .. recipClean, selfName, cleanMsg)
-            end
+            ns.HandleConversationCapture("Whisper", selfName, cleanMsg, true, recipClean)
+            ns.RecordAdventureChat("Whisper -> " .. recipClean, selfName, cleanMsg)
         end
-    elseif event == "CHAT_MSG_PARTY" or event == "CHAT_MSG_PARTY_LEADER" then
-        local msg, author = ...
-        HandlePlayerChat("Party", ns.COLORS.party, msg, author)
-    elseif event == "CHAT_MSG_RAID" or event == "CHAT_MSG_RAID_LEADER" or event == "CHAT_MSG_RAID_WARNING" then
-        local msg, author = ...
-        HandlePlayerChat("Raid", ns.COLORS.raid, msg, author)
-    elseif event == "CHAT_MSG_INSTANCE_CHAT" or event == "CHAT_MSG_INSTANCE_CHAT_LEADER" then
-        local msg, author = ...
-        HandlePlayerChat("Instance", ns.COLORS.instanceChat, msg, author)
-    elseif event == "CHAT_MSG_GUILD" then
-        local msg, author = ...
-        HandlePlayerChat("Guild", ns.COLORS.guild, msg, author)
-    elseif event == "CHAT_MSG_OFFICER" then
-        local msg, author = ...
-        HandlePlayerChat("Officer", ns.COLORS.guild, msg, author)
-    elseif event == "CHAT_MSG_CHANNEL" then
-        local msg, author, _, channelName = ...
-        HandlePlayerChat("Channel", ns.COLORS.channel, msg, author, channelName)
-    elseif event == "CHAT_MSG_MONSTER_SAY" or event == "CHAT_MSG_MONSTER_YELL" or event == "CHAT_MSG_MONSTER_EMOTE" or event == "CHAT_MSG_MONSTER_WHISPER" or event == "CHAT_MSG_RAID_BOSS_EMOTE" or event == "CHAT_MSG_RAID_BOSS_WHISPER" then
-        local msg, author = ...
-        local isEmote = (event == "CHAT_MSG_MONSTER_EMOTE" or event == "CHAT_MSG_RAID_BOSS_EMOTE")
-        HandleNpcChat("NPC", msg, author, isEmote, event)
     elseif event == "CHAT_MSG_LOOT" or event == "CHAT_MSG_MONEY" then
         local msg, author = ...
         HandleLootMessage(msg, author, event == "CHAT_MSG_MONEY")
@@ -899,11 +782,42 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "QUEST_TURNED_IN" then
         local qId = ns.SafeNum((...))
         CaptureQuestContext("Completed Quest", qId)
-        if ns.RequestScreenshot and lastCapturedQuestTitle ~= "" then
+        if lastCapturedQuestTitle ~= "" then
             ns.RequestScreenshot("quest", "Completed: " .. lastCapturedQuestTitle)
         end
     end
-end)
+end
+table.insert(EVENTS, "CHAT_MSG_WHISPER_INFORM")
+table.insert(EVENTS, "CHAT_MSG_LOOT")
+table.insert(EVENTS, "CHAT_MSG_MONEY")
+ns.On(EVENTS, OnEvent)
+
+-- Chat events (0.6.1: one list each instead of an if-chain): the channel
+-- label and the color it is shown in
+local PLAYER_CHAT = {
+    CHAT_MSG_SAY = { "Say", "say" }, CHAT_MSG_YELL = { "Yell", "yell" },
+    CHAT_MSG_EMOTE = { "Emote", "emote" }, CHAT_MSG_TEXT_EMOTE = { "Emote", "emote" },
+    CHAT_MSG_WHISPER = { "Whisper", "whisper" },
+    CHAT_MSG_PARTY = { "Party", "party" }, CHAT_MSG_PARTY_LEADER = { "Party", "party" },
+    CHAT_MSG_RAID = { "Raid", "raid" }, CHAT_MSG_RAID_LEADER = { "Raid", "raid" }, CHAT_MSG_RAID_WARNING = { "Raid", "raid" },
+    CHAT_MSG_INSTANCE_CHAT = { "Instance", "instanceChat" }, CHAT_MSG_INSTANCE_CHAT_LEADER = { "Instance", "instanceChat" },
+    CHAT_MSG_GUILD = { "Guild", "guild" }, CHAT_MSG_OFFICER = { "Officer", "guild" },
+    CHAT_MSG_CHANNEL = { "Channel", "channel" },
+}
+for ev, def in pairs(PLAYER_CHAT) do
+    ns.On(ev, function(event, msg, author, _, channelName)
+        HandlePlayerChat(def[1], ns.COLORS[def[2]], msg, author, event == "CHAT_MSG_CHANNEL" and channelName or nil)
+    end)
+end
+
+-- NPC speech; true = an emote
+local NPC_CHAT = {
+    CHAT_MSG_MONSTER_SAY = false, CHAT_MSG_MONSTER_YELL = false, CHAT_MSG_MONSTER_WHISPER = false,
+    CHAT_MSG_RAID_BOSS_WHISPER = false, CHAT_MSG_MONSTER_EMOTE = true, CHAT_MSG_RAID_BOSS_EMOTE = true,
+}
+for ev, isEmote in pairs(NPC_CHAT) do
+    ns.On(ev, function(event, msg, author) HandleNpcChat("NPC", msg, author, isEmote, event) end)
+end
 
 -- =========================================================
 -- Extra run telemetry, still without the combat log (0.3.1):
@@ -915,11 +829,7 @@ end)
 -- throttled, wrapped in pcall, and skips values the client hides as secret.
 -- =========================================================
 do
-    local tracker = CreateFrame("Frame")
-    for _, ev in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START",
-        "UNIT_AURA", "UNIT_PET", "UNIT_HEALTH" }) do
-        pcall(tracker.RegisterEvent, tracker, ev)
-    end
+    local reported = false
 
     local T = {
         GROUP = { player = true, party1 = true, party2 = true, party3 = true, party4 = true },
@@ -948,31 +858,20 @@ do
     -- 0.4.0: open-world runs are tracked too, with stricter throttles.
     -- Returns the run and whether it is inside a dungeon or raid.
     local function Recording()
-        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        local run = ns.GetActiveAdventure()
         if not run or run.paused then return nil end
-        local inInstance = false
-        if IsInInstance then inInstance = IsInInstance() and true or false end
+        local _, inInstance = ns.InstanceKind()
         return run, inInstance
     end
 
     local function ShortName(unit)
         local n = ns.StripRealm(UnitName(unit))
         if not n or n == "" then return nil end
-        return (ns.ResolveCanonicalPlayerName and ns.ResolveCanonicalPlayerName(n)) or n
+        return (ns.ResolveCanonicalPlayerName(n)) or n
     end
 
     local function SpellName(spellID)
-        local id = ns.SafeNum(spellID)
-        if not id then return nil end
-        if C_Spell and C_Spell.GetSpellName then
-            local ok, n = pcall(C_Spell.GetSpellName, id)
-            if ok then return ns.SafeStr(n) end
-        end
-        if GetSpellInfo then
-            local ok, n = pcall(GetSpellInfo, id)
-            if ok then return ns.SafeStr(n) end
-        end
-        return nil
+        return ns.SpellName(ns.SafeNum(spellID))
     end
 
     local function GroupInCombat()
@@ -1014,7 +913,7 @@ do
                 if low:find("%f[%a]" .. w) then notable = true break end
             end
         end
-        local folded = ns.FightNoteSpell and ns.FightNoteSpell(unit == "player" and "you" or short, spell)
+        local folded = ns.FightNoteSpell(unit == "player" and "you" or short, spell)
         if folded and not notable then return end
         local now = GetTime()
         local key = who .. ":" .. spell
@@ -1035,8 +934,8 @@ do
         if UnitIsPlayer(unit) or not UnitCanAttack("player", unit) then return end
         local bName = ns.SafeStr(UnitName(unit))
         if not bName then return end
-        local activeBoss = ns.GetActiveBossName and ns.GetActiveBossName()
-        if bName ~= activeBoss and not (ns.IsBossUnit and ns.IsBossUnit(unit)) then return end
+        local activeBoss = ns.GetActiveBossName()
+        if bName ~= activeBoss and not (ns.IsBossUnit(unit)) then return end
         local spell = SpellName(spellID)
         if not spell or T.SKIP_SPELLS[spell] then return end
         local now = GetTime()
@@ -1114,7 +1013,7 @@ do
         local petName = ns.SafeStr(UnitName(unit))
         if not petName then return end
         -- 0.5.0: name plus species, so "Crab" is never just a word
-        local species = ns.GetPetSpecies and ns.GetPetSpecies(unit)
+        local species = ns.GetPetSpecies(unit)
         local kind = (unit == "pet" and ns.GetPetKind) and ns.GetPetKind("pet") or "pet"
         local label = string.format("%s (%s%s's %s)", petName, species and (species .. ", ") or "", owner, kind)
         local dead = UnitIsDead(unit) == true
@@ -1123,7 +1022,7 @@ do
         elseif not dead and st.dead and st.name == petName then
             ns.RecordAdventureLine(string.format("[PET] %s is back on its feet", label))
         elseif not dead and GroupInCombat() then
-            local pct = ns.GetUnitHealthPct and ns.GetUnitHealthPct(unit)
+            local pct = ns.HealthPct(unit)
             local now = GetTime()
             if pct and pct > 0 and pct <= 25 and (now - (st.lowAt or 0)) > 30 then
                 st.lowAt = now
@@ -1155,11 +1054,12 @@ do
         end
     end
 
-    tracker:SetScript("OnEvent", function(_, event, unit, a2, a3)
+    ns.On({ "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START",
+        "UNIT_AURA", "UNIT_PET", "UNIT_HEALTH" }, function(event, unit, a2, a3)
         local ok, err = pcall(Handle, event, unit, a2, a3)
-        if not ok and not tracker.reported then
-            tracker.reported = true
-            if ns.Debug then ns.Debug("error", "run tracker: " .. tostring(err)) end
+        if not ok and not reported then
+            reported = true
+            ns.Debug("error", "run tracker: " .. tostring(err))
             print("|cffffd100RP Chronicler|r |cffff6b6brun tracker error:|r " .. tostring(err))
         end
     end)

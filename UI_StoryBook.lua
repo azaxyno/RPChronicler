@@ -40,7 +40,7 @@ end
 
 -- Left: the library
 B.list = CreateFrame("Frame", nil, root, UI.BACKDROP)
-B.list:SetWidth(200)
+B.list:SetWidth(180)
 B.list:SetPoint("TOPLEFT", 0, 0)
 B.list:SetPoint("BOTTOMLEFT", 0, 0)
 UI.ApplyStoryTomeLook(B.list)
@@ -50,18 +50,40 @@ do
     header:SetPoint("TOPLEFT", 10, -8)
 end
 
-B.importBtn = UI.CreateSleekButton(B.list, 180, 22, "Import Story from AI", "gold")
-B.importBtn:SetPoint("BOTTOM", 0, 8)
-B.importBtn:SetIcon(UI.ICONS.STORY, 14)
+-- 0.6.1: one Import button, in the list header (the empty Story Book has
+-- its own), so it never shows twice
+B.importBtn = UI.CreateSleekButton(B.list, 64, 18, "+ Import", "gold")
+B.importBtn:SetPoint("TOPRIGHT", -6, -5)
 B.importBtn.tipTitle = "|cffffd100Import Story from AI|r"
 B.importBtn.tipText = "Paste the colored story your AI wrote and pick the run it belongs to."
 
 B.listScroll = CreateFrame("ScrollFrame", "RPChroniclerBookListScroll", B.list, "UIPanelScrollFrameTemplate")
-B.listScroll:SetPoint("TOPLEFT", 6, -26)
-B.listScroll:SetPoint("BOTTOMRIGHT", -26, 36)
+B.listScroll:SetPoint("TOPLEFT", 6, -28)
+B.listScroll:SetPoint("BOTTOMRIGHT", -26, 8)
+-- the scroll bar only shows when the list is longer than the pane
+B.listScroll.scrollBarHideable = true
 B.listChild = CreateFrame("Frame", nil, B.listScroll)
-B.listChild:SetSize(166, 10)
+B.listChild:SetSize(146, 10)
 B.listScroll:SetScrollChild(B.listChild)
+
+B.listEmpty = B.list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+B.listEmpty:SetPoint("TOPLEFT", 10, -30)
+B.listEmpty:SetPoint("RIGHT", B.list, "RIGHT", -10, 0)
+B.listEmpty:SetJustifyH("LEFT")
+B.listEmpty:SetText("|cffb0a080No stories yet.|r")
+
+-- Shows the list's scroll bar only when the cards do not fit
+local function SyncListScrollBar(contentH)
+    local bar = B.listScroll.ScrollBar or _G["RPChroniclerBookListScrollScrollBar"]
+    if not bar then return end
+    local fits = contentH <= (B.listScroll:GetHeight() or 0) + 1
+    if fits then
+        B.listScroll:SetVerticalScroll(0)
+        bar:Hide()
+    else
+        bar:Show()
+    end
+end
 
 -- Right: header, tools, reader
 B.right = CreateFrame("Frame", nil, root)
@@ -90,23 +112,23 @@ do
     B.stats = HeadLine("GameFontHighlightSmall", -53)
 end
 
-B.shareBtn = UI.CreateSleekButton(B.right, 56, 22, "Share", "gold")
+B.shareBtn = UI.CreateSleekButton(B.right, 52, 22, "Share", "gold")
 B.shareBtn:SetPoint("TOPLEFT", 0, -76)
 B.shareBtn.tipTitle = "|cffffd100Share|r"
 B.shareBtn.tipText = "Copy the story as clean plain text, for Discord or a forum post."
-B.editBtn = UI.CreateSleekButton(B.right, 58, 22, "Details")
+B.editBtn = UI.CreateSleekButton(B.right, 56, 22, "Details")
 B.editBtn:SetPoint("LEFT", B.shareBtn, "RIGHT", 4, 0)
 B.editBtn.tipTitle = "|cffffd100Edit Details|r"
-B.editBtn.tipText = "Change the title, instance, zone, duration, date or party shown here."
-B.reimportBtn = UI.CreateSleekButton(B.right, 72, 22, "Re-Import")
+B.editBtn.tipText = "Rename the story, or change the instance, zone, duration, date or party shown here."
+B.reimportBtn = UI.CreateSleekButton(B.right, 68, 22, "Re-Import")
 B.reimportBtn:SetPoint("LEFT", B.editBtn, "RIGHT", 4, 0)
 B.reimportBtn.tipTitle = "|cffffd100Re-Import|r"
 B.reimportBtn.tipText = "Replace this story with a new one. Details you edited by hand are kept."
-B.recBtn = UI.CreateSleekButton(B.right, 74, 22, "Recording", "tool")
+B.recBtn = UI.CreateSleekButton(B.right, 40, 22, "Run", "tool")
 B.recBtn:SetPoint("LEFT", B.reimportBtn, "RIGHT", 4, 0)
-B.recBtn.tipTitle = "|cffffd100Recording|r"
+B.recBtn.tipTitle = "|cffffd100Open the Run|r"
 B.recBtn.tipText = "Open the run this story was written from (Summary and Full Log), while the recording still exists."
-B.delBtn = UI.CreateSleekButton(B.right, 56, 22, "Delete", "danger")
+B.delBtn = UI.CreateSleekButton(B.right, 54, 22, "Delete", "danger")
 B.delBtn:SetPoint("TOPRIGHT", 0, -76)
 B.delBtn.tipTitle = "|cffff6b6bDelete Story|r"
 B.delBtn.tipText = "Click twice. Removes the story only; the recording stays."
@@ -129,9 +151,9 @@ do
     local x = UI.CreateSleekButton(B.tip, 20, 18, "x", "danger")
     x:SetPoint("TOPRIGHT", -5, -5)
     x.tipTitle = "|cffffd100Hide this tip|r"
-    x.tipText = "Bring it back in Options > Stories & Export."
+    x.tipText = "Bring it back in Options > AI & Stories."
     x:SetScript("OnClick", function()
-        RPChroniclerDB.exportTip = false
+        ns.Set("exportTip", false)
         UI.RefreshStoryBook()
     end)
 end
@@ -204,19 +226,23 @@ do
         "|cffffd100How to make a story:|r\n" ..
         "|cfff5e6c81. One time:|r copy a story template below into your AI and make the storyteller skill.\n" ..
         "   |cffffd100Dungeon/Raid Story|r for instance runs, |cffffd100Adventure Story|r for the open world.\n" ..
-        "|cfff5e6c82. Copy the run:|r in Recordings open |cff69ccf0Full Log|r, click |cffffd100Select All|r, press |cffffd100Ctrl+C|r.\n" ..
+        "|cfff5e6c82. Copy the run:|r in Adventures open |cff69ccf0Full Log|r, click |cffffd100Select All|r, press |cffffd100Ctrl+C|r.\n" ..
         "|cfff5e6c83. Import:|r paste the log into your AI, copy its story, and click |cffffd100Import Story|r.\n\n" ..
         "|cff9aa5b4Which AI? See the Requirements section of the README.|r")
 
-    local dBtn = UI.CreateSleekButton(e, 150, 24, "Dungeon/Raid Template", "gold")
-    dBtn:SetPoint("BOTTOMLEFT", 18, 14)
-    dBtn:SetScript("OnClick", function() if UI.OpenSkillTemplateModal then UI.OpenSkillTemplateModal("STORY") end end)
-    local aBtn = UI.CreateSleekButton(e, 140, 24, "Adventure Template", "gold")
-    aBtn:SetPoint("LEFT", dBtn, "RIGHT", 6, 0)
-    aBtn:SetScript("OnClick", function() if UI.OpenSkillTemplateModal then UI.OpenSkillTemplateModal("ADVENTURE") end end)
-    local iBtn = UI.CreateSleekButton(e, 110, 24, "Import Story", "good")
-    iBtn:SetPoint("LEFT", aBtn, "RIGHT", 6, 0)
+    -- 0.6.1: the buttons stack and stretch to the pane, so they always fit
+    local iBtn = UI.CreateSleekButton(e, 100, 24, "Import Story", "good")
+    iBtn:SetPoint("BOTTOMLEFT", 18, 14)
+    iBtn:SetPoint("BOTTOMRIGHT", -18, 14)
     iBtn:SetScript("OnClick", function() UI.OpenStoryImportModal(nil) end)
+    local aBtn = UI.CreateSleekButton(e, 100, 24, "Adventure Story Template", "gold")
+    aBtn:SetPoint("BOTTOMLEFT", iBtn, "TOPLEFT", 0, 6)
+    aBtn:SetPoint("BOTTOMRIGHT", iBtn, "TOPRIGHT", 0, 6)
+    aBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("ADVENTURE") end)
+    local dBtn = UI.CreateSleekButton(e, 100, 24, "Dungeon/Raid Story Template", "gold")
+    dBtn:SetPoint("BOTTOMLEFT", aBtn, "TOPLEFT", 0, 6)
+    dBtn:SetPoint("BOTTOMRIGHT", aBtn, "TOPRIGHT", 0, 6)
+    dBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("STORY") end)
 end
 
 local function UpdateReaderHeight()
@@ -227,7 +253,7 @@ end
 
 local function MakeCard(parent)
     local card = CreateFrame("Button", nil, parent, UI.BACKDROP)
-    card:SetSize(166, 44)
+    card:SetSize(146, 44)
     UI.ApplyDarkGlass(card, 0.12, 0.09, 0.06, 0.92, 0.40, 0.31, 0.16, 0.85)
     card.icon = card:CreateTexture(nil, "ARTWORK")
     card.icon:SetSize(30, 30)
@@ -290,6 +316,8 @@ function UI.RefreshStoryBook()
         card:Show()
     end
     B.listChild:SetHeight(math.max(10, #list * 48))
+    SyncListScrollBar(#list * 48)
+    if #list > 0 then B.listEmpty:Hide(); B.importBtn:Show() else B.listEmpty:Show(); B.importBtn:Hide() end
 
     local adv = SelectedStory(list)
     if not adv then
@@ -311,7 +339,7 @@ function UI.RefreshStoryBook()
 
     local info = ns.GetBookInfo(adv)
     B.title:SetText("|cffffd100" .. info.name .. "|r")
-    local metaParts = { ns.GetRunKindLabel(adv) }
+    local metaParts = { (info.instance ~= "" and info.instance) or ns.GetRunKindLabel(adv) }
     if info.zone ~= "" and info.zone ~= info.instance then table.insert(metaParts, info.zone) end
     table.insert(metaParts, info.duration)
     table.insert(metaParts, info.date)
@@ -322,7 +350,7 @@ function UI.RefreshStoryBook()
 
     B.readBg:ClearAllPoints()
     B.readBg:SetPoint("BOTTOMRIGHT", 0, 0)
-    if RPChroniclerDB.exportTip ~= false then
+    if ns.Get("exportTip") then
         B.tip:Show()
         B.readBg:SetPoint("TOPLEFT", 0, -164)
     else
@@ -331,10 +359,10 @@ function UI.RefreshStoryBook()
     end
 
     local shown = ns.NormalizeStoryText(adv.story)
-    if ns.CleanStoryHeader then shown = ns.CleanStoryHeader(shown) end
+    shown = ns.CleanStoryHeader(shown)
     -- 0.5.3: auto-color the stored text once (markers kept), so the
     -- exporter gets the same colors after a /reload
-    if RPChroniclerDB.autoColorStory ~= false and ns.AutoColorStory and adv.autoColored ~= ns.AUTOCOLOR_VERSION then
+    if adv.autoColored ~= ns.AUTOCOLOR_VERSION then
         local ok, colored = pcall(ns.AutoColorStory, shown, adv)
         if ok and type(colored) == "string" then
             shown = colored
@@ -393,7 +421,7 @@ B.delBtn:SetScript("OnClick", function(self)
     self.armedAt = nil
     ns.DeleteStory(adv.id)
     ns.state.bookStoryId = nil
-    UI.SetStatus("Story deleted. The recording is still in Recordings.", "good")
+    UI.SetStatus("Story deleted. The recording is still in Adventures.", "good")
     UI.RefreshStoryBook()
 end)
 

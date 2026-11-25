@@ -12,57 +12,6 @@ local ADDON_NAME, ns = ...
 ns.UI = ns.UI or {}
 local UI = ns.UI
 
--- Safe fallbacks if Adventures.lua failed to load
-do
-    if not ns.GetActiveAdventure then ns.GetActiveAdventure = function() return nil end end
-    if not ns.GetAdventureIcon then
-        ns.GetAdventureIcon = function() return "Interface\\Icons\\INV_Misc_Map_01" end
-    end
-    if not ns.StartAdventure then
-        ns.StartAdventure = function() return { id = tostring(time()), title = "Run" } end
-    end
-    if not ns.EndAdventure then ns.EndAdventure = function() return nil end end
-    if not ns.MarkAdventureHighlight then
-        ns.MarkAdventureHighlight = function() return false, "Adventures module not loaded." end
-    end
-    if not RPChronicler_MarkMoment then
-        RPChronicler_MarkMoment = function()
-            local _, status = ns.MarkAdventureHighlight(nil)
-            print("|cff00ff00[RP Chronicler]|r " .. status)
-        end
-    end
-    if not ns.BuildAdventureSummary then
-        ns.BuildAdventureSummary = function(adv)
-            if not adv then return "No adventure selected." end
-            return (adv.title or "Adventure") .. " (" .. (adv.zone or "Unknown") .. ")"
-        end
-    end
-    if not ns.BuildAdventureFullLog then
-        ns.BuildAdventureFullLog = function(adv)
-            if not adv then return "No adventure selected." end
-            return adv.exportText or "No timeline recorded."
-        end
-    end
-    if not ns.SetAdventureStory then
-        ns.SetAdventureStory = function(advId, rawStoryText)
-            if ns.EnsureDB then ns.EnsureDB() end
-            local cleaned = ns.NormalizeStoryText(rawStoryText)
-            local active = ns.GetActiveAdventure()
-            if active and active.id == advId then
-                active.story = cleaned
-                return true
-            end
-            for _, adv in ipairs((RPChroniclerDB and RPChroniclerDB.adventures) or {}) do
-                if adv.id == advId then
-                    adv.story = cleaned
-                    return true
-                end
-            end
-            return false
-        end
-    end
-end
-
 UI.SOLID_TEX = "Interface\\Buttons\\WHITE8x8"
 UI.BACKDROP = BackdropTemplateMixin and "BackdropTemplate" or nil
 
@@ -76,24 +25,11 @@ UI.ICONS = {
     DOT        = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask",
 }
 
--- Every saved setting the window uses, with defaults
+-- 0.6.1: every setting and its default lives in ns.SETTINGS (Core.lua);
+-- this only makes sure the saved data is ready
 function UI.EnsureOptions()
     ns.EnsureDB()
-    local db = RPChroniclerDB
-    if db.quickCtrlC == nil then db.quickCtrlC = true end
-    if not db.quickCopyKey or db.quickCopyKey == "" then db.quickCopyKey = "CTRL-C" end
-    if db.quickCapture == nil then db.quickCapture = true end
-    if not db.captureTargetKey or db.captureTargetKey == "" then db.captureTargetKey = "SHIFT-C" end
-    -- Keys with no default ("" = unbound) so they never steal a bind
-    for _, field in ipairs({ "markMomentKey", "openWindowKey", "runStartKey", "runPauseKey", "runEndKey" }) do
-        if type(db[field]) ~= "string" then db[field] = "" end
-    end
-    -- Ctrl+C copy style: INSTANT (hold Ctrl, press C), TWOPRESS (Ctrl+C twice)
-    -- or BOX (0.5.1: Ctrl+C shows the snapshot selected in a visible box)
-    if db.copyMode ~= "INSTANT" and db.copyMode ~= "TWOPRESS" and db.copyMode ~= "BOX" then db.copyMode = "INSTANT" end
-    if db.instantInCombat == nil then db.instantInCombat = false end
-    if not db.lastSliceId or db.lastSliceId == "" then db.lastSliceId = "CHAT" end
-    if type(db.optionsPage) ~= "string" then db.optionsPage = "GENERAL" end
+    if type(RPChroniclerDB.optionsPage) ~= "string" then RPChroniclerDB.optionsPage = "GENERAL" end
 end
 
 -- =========================================================
@@ -260,7 +196,7 @@ end
 -- =========================================================
 -- Main window
 -- =========================================================
-local RAIL_W = 80
+local RAIL_W = 92   -- 0.6.1: wide enough for "Companions" in full
 UI.DEFAULT_W, UI.DEFAULT_H = 680, 490
 UI.MIN_W, UI.MIN_H = 600, 450
 
@@ -349,7 +285,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.0") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.1") .. "|r")
 end
 
 -- Left rail
@@ -363,14 +299,31 @@ do
     UI.railButtons = {}
 end
 
-function UI.AddRailButton(key, label, icon, tip)
+UI.railOrder = {}
+
+-- Stacks the shown rail buttons from the top (0.6.1: the Copy button is
+-- hidden while RP Copy is off)
+function UI.LayoutRail()
     local idx = 0
-    for _ in pairs(UI.railButtons) do idx = idx + 1 end
-    local btn = UI.CreateSleekButton(UI.rail, RAIL_W - 14, 52, label, "rail")
-    btn:SetPoint("TOP", 0, -10 - idx * 58)
+    for _, key in ipairs(UI.railOrder) do
+        local btn = UI.railButtons[key]
+        if btn.hiddenByFeature then
+            btn:Hide()
+        else
+            btn:ClearAllPoints()
+            btn:SetPoint("TOP", 0, -10 - idx * 58)
+            btn:Show()
+            idx = idx + 1
+        end
+    end
+end
+
+function UI.AddRailButton(key, label, icon, tip)
+    local btn = UI.CreateSleekButton(UI.rail, RAIL_W - 10, 52, label, "rail")
     btn.label:ClearAllPoints()
-    btn.label:SetPoint("BOTTOMLEFT", 2, 6)
-    btn.label:SetPoint("BOTTOMRIGHT", -2, 6)
+    btn.label:SetPoint("BOTTOMLEFT", 1, 6)
+    btn.label:SetPoint("BOTTOMRIGHT", -1, 6)
+    btn.label:SetWordWrap(false)
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
     btn.icon:SetSize(24, 24)
     btn.icon:SetPoint("TOP", 0, -6)
@@ -380,6 +333,8 @@ function UI.AddRailButton(key, label, icon, tip)
     btn.tipText = tip
     btn:SetScript("OnClick", function() UI.ShowSection(key) end)
     UI.railButtons[key] = btn
+    table.insert(UI.railOrder, key)
+    UI.LayoutRail()
     return btn
 end
 
@@ -412,7 +367,7 @@ do
         acc = acc + elapsed
         if acc < 0.5 then return end
         acc = 0
-        local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+        local run = ns.GetActiveAdventure()
         if not run then chip:Hide() return end
         local mins = math.floor(math.max(0, time() - (run.startTime or time())) / 60)
         if run.paused then
@@ -475,6 +430,7 @@ function UI.SetSectionOnShow(key, fn)
 end
 
 function UI.ShowSection(key)
+    if key == "COPY" and not ns.RpCopyOn() then key = "ADVENTURES" end
     local sec = UI.sections[key]
     if not sec then return end
     ns.state.section = key
@@ -576,7 +532,6 @@ do
     local function StopSizing()
         if not UI.sizing then return end
         UI.sizing = false
-        copyFrame:StopMovingOrSizing()
         if copyFrame.SetUserPlaced then pcall(copyFrame.SetUserPlaced, copyFrame, false) end
         SaveSize()
         UI.SavePosition()
@@ -629,24 +584,40 @@ do
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     grip:RegisterForClicks("RightButtonUp")
+    -- 0.6.1: the window follows the cursor itself instead of the engine's
+    -- StartSizing, which jumped (to the max size, or by the clamp offset)
+    -- on the first frame. The top-left stays pinned; only the bottom-right
+    -- corner moves, by exactly as far as the cursor moved.
+    local drag
+    local function Cursor()
+        local x, y = GetCursorPosition()
+        local scale = copyFrame:GetEffectiveScale() or 1
+        return (x or 0) / scale, (y or 0) / scale
+    end
     grip:SetScript("OnMouseDown", function(_, button)
-        if button == "LeftButton" then
-            -- Sizing a CENTER-anchored frame from its corner moves the top-left
-            -- too, which made it jump to max size for a moment. Pin the
-            -- top-left first so only the bottom-right corner follows the mouse.
-            if UI.moving then return end
-            UI.PinTopLeft()
-            copyFrame:StartSizing("BOTTOMRIGHT")
-            UI.sizing = true
-        end
+        if button ~= "LeftButton" or UI.moving then return end
+        UI.PinTopLeft()
+        local cx, cy = Cursor()
+        drag = { x = cx, y = cy, w = copyFrame:GetWidth(), h = copyFrame:GetHeight() }
+        UI.sizing = true
     end)
     grip:SetScript("OnMouseUp", function(_, button)
-        if button == "LeftButton" then StopSizing() end
+        if button == "LeftButton" then drag = nil; StopSizing() end
     end)
-    -- A release the grip never saw (mouse let go over another frame or
-    -- outside the game) must not leave the window stuck to the cursor
     grip:SetScript("OnUpdate", function()
-        if UI.sizing and IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then StopSizing() end
+        if not UI.sizing or not drag then return end
+        -- A release the grip never saw (mouse let go over another frame or
+        -- outside the game) must not leave the window stuck to the cursor
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+            drag = nil
+            StopSizing()
+            return
+        end
+        local cx, cy = Cursor()
+        local w, h = ClampSize(drag.w + (cx - drag.x), drag.h + (drag.y - cy))
+        if math.abs(w - copyFrame:GetWidth()) >= 1 or math.abs(h - copyFrame:GetHeight()) >= 1 then
+            copyFrame:SetSize(w, h)
+        end
     end)
     grip:SetScript("OnClick", function() UI.ResetWindow() end)
     grip:SetScript("OnEnter", function(self)
@@ -742,6 +713,8 @@ do
         p:Show()
     end
     UI.promptFrame = p
+    -- 0.6.1: the recorder asks its questions through ns.Notify("prompt", ...)
+    ns.Listen("prompt", UI.ShowPrompt)
 end
 
 -- =========================================================
@@ -798,7 +771,7 @@ do
     eb:SetScript("OnKeyDown", function(self, key)
         if f.autoClose and key == "C" and IsControlKeyDown() then
             self:HighlightText()
-            if ns.Debug then ns.Debug("copy", "copy box Ctrl+C: len " .. #(self:GetText() or "")) end
+            ns.Debug("copy", "copy box Ctrl+C: len " .. #(self:GetText() or ""))
             UI.ShowToast("|cffffd100Copied|r |cff5cb85cto clipboard!|r", 1.8, 0.36, 0.72, 0.36)
             f.autoClose = false
             if C_Timer and C_Timer.After then C_Timer.After(0.25, function() f:Hide() end) else f:Hide() end
@@ -834,15 +807,21 @@ end
 -- =========================================================
 -- Opening and closing
 -- =========================================================
+-- The section the window opens on: Copy, or Adventures while RP Copy is off
+function UI.DefaultSection()
+    return ns.RpCopyOn() and "COPY" or "ADVENTURES"
+end
+
 function RPChronicler_Open(note, section)
     UI.EnsureOptions()
-    if UI.DisarmCtrlCopy then UI.DisarmCtrlCopy() end
+    UI.DisarmCtrlCopy()
     copyFrame.closeDelay = nil
     copyFrame.openedAt = GetTime()
     ns.state.activeNote = note or ""
     ns.state.isExpanded = false
     copyFrame:Show()
-    UI.ShowSection(section or "COPY")
+    if section == "COPY" and not ns.RpCopyOn() then section = nil end
+    UI.ShowSection(section or UI.DefaultSection())
 end
 
 function RPChronicler_Toggle()

@@ -2,7 +2,7 @@
 
 <h1 align="center">RP Chronicler</h1>
 
-<p align="center"><b>Roleplay in World of Warcraft: Forever with your own AI character, without typing a novel. Then turn your runs into stories.</b></p>
+<p align="center"><b>Roleplay in World of Warcraft: Forever with your own character, without typing a novel. Then turn your runs into stories.</b></p>
 
 RP Chronicler is a free addon that sits between WoW and the AI you already use (Gemini, ChatGPT or Claude). It never sends chat and never goes online. It copies text out, and you decide what to paste back.
 

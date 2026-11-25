@@ -415,7 +415,7 @@ If the game shows a "blocked from an action" popup, `Logs\taint.log` in your gam
 <details>
 <summary><b>Architecture</b></summary>
 
-All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). WoW loads them in the order in `RPCopy.toc`, and the order matters. Full reference: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). WoW loads them in the order in `RPCopy.toc`, and the order matters.
 
 | # | File | Role |
 |---|---|---|

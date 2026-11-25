@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.4.0"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.5.4"
 
 BINDING_HEADER_RPCOPY = "RPCopy (RP Context & Chronicle)"
 BINDING_NAME_RPCOPY_OPEN = "Toggle RPCopy Window"
@@ -33,9 +33,9 @@ end
 
 ns.DEFAULT_TABS = {
     -- Chat: local RP (say, emotes, whispers); the direct line is marked inside the timeline
-    Tab("CHAT", "Chat", { incDirect = true, incTarget = true, incSocial = true }),
+    Tab("CHAT", "Chat", { incDirect = true, incTarget = true, incStatus = true, incSocial = true }),
     -- World: General, Trade, LFG and other numbered channels (the OOC channel is kept apart)
-    Tab("WORLD", "World", { incWorld = true }),
+    Tab("WORLD", "World", { incStatus = true, incWorld = true }),
     -- Party: your group only (party chat plus say/emotes from party members)
     Tab("PARTY", "Party", { incTarget = true, incParty = true, incStatus = true,
         incPartySay = true, incPartyChat = true }),
@@ -48,6 +48,7 @@ ns.DEFAULT_TABS = {
 -- Full Log categories. Each one has its own switch in Options > Full Log.
 ns.LOG_CATEGORIES = {
     { key = "fights",      label = "Fights (one line each)" },
+    { key = "fightStreaks", label = "Fold repeated trash fights" },
     { key = "kills",       label = "Kills of elites, rares, bosses" },
     { key = "aggro",       label = "Aggro swaps" },
     { key = "danger",      label = "Near deaths and saves" },
@@ -56,6 +57,7 @@ ns.LOG_CATEGORIES = {
     { key = "cc",          label = "Crowd control" },
     { key = "pets",        label = "Pets" },
     { key = "quests",      label = "Quests accepted and done" },
+    { key = "questObjectives", label = "Quest objectives done" },
     { key = "npcDialogue", label = "NPC and quest dialogue" },
     { key = "levels",      label = "Level ups" },
     { key = "places",      label = "Subzone changes" },
@@ -66,6 +68,7 @@ ns.LOG_CATEGORIES = {
     { key = "atmosphere",  label = "Atmosphere (time of day)" },
     { key = "guildmates",  label = "Guildmates in the party" },
     { key = "chat",        label = "Party and say chat" },
+    { key = "screenshots", label = "Screenshot list (for export)" },
 }
 
 -- Editable limits (Options > Full Log)
@@ -74,6 +77,7 @@ ns.LOG_LIMITS = {
     { key = "spellCap",    label = "Spell lines per run",         default = 120, min = 0, max = 400 },
     { key = "npcCap",      label = "NPC dialogue lines per run",  default = 60, min = 0, max = 300 },
     { key = "timelineMax", label = "Timeline lines kept per run",  default = 500, min = 100, max = 1500 },
+    { key = "shotCap",     label = "Screenshots kept per run",     default = 40, min = 0, max = 200 },
 }
 
 -- AI picker for the Full Log size meter: a comfortable paste size in
@@ -90,6 +94,70 @@ ns.AI_MODELS = {
     { key = "CLAUDE_PAID",  label = "Claude (paid)",       chars = 400000 },
     { key = "CUSTOM",       label = "Custom limit",        chars = nil },
 }
+
+-- Run Summary stats (Recordings > Summary and the top bar). Each one has a
+-- switch in Options > Summary. kinds: which run types show it.
+ns.SUMMARY_STATS = {
+    { key = "roster",     label = "Party roster",            kinds = "all" },
+    { key = "bosses",     label = "Boss kills",              kinds = "instance" },
+    { key = "wipes",      label = "Wipes",                   kinds = "instance" },
+    { key = "deaths",     label = "Deaths",                  kinds = "all" },
+    { key = "levels",     label = "Levels gained",           kinds = "all" },
+    { key = "foes",       label = "Foes defeated",           kinds = "all" },
+    { key = "notable",    label = "Named, elite, rare kills", kinds = "all" },
+    { key = "pvp",        label = "PvP kills and deaths",    kinds = "all" },
+    { key = "quests",     label = "Quests completed",        kinds = "all" },
+    { key = "places",     label = "Zones and places visited", kinds = "world" },
+    { key = "skills",     label = "Skill-ups",               kinds = "all" },
+    { key = "milestones", label = "Milestones",              kinds = "all" },
+    { key = "loot",       label = "Notable loot",            kinds = "all" },
+    { key = "coin",       label = "Coin earned",             kinds = "all" },
+    { key = "shots",      label = "Screenshots",             kinds = "all" },
+    { key = "highlights", label = "Highlights",              kinds = "all" },
+}
+
+function ns.SummaryOn(key)
+    local c = RPCopyDB and RPCopyDB.summaryStats
+    return not c or c[key] ~= false
+end
+
+-- Chat types RPCopy captures (Options > Privacy and the first-run setup)
+ns.CAPTURE_TYPES = {
+    { key = "say",     label = "Say, yell and emotes" },
+    { key = "whisper", label = "Whispers" },
+    { key = "group",   label = "Party, raid and instance chat" },
+    { key = "guild",   label = "Guild and officer chat" },
+    { key = "world",   label = "World channels (General, Trade, LFG)" },
+    { key = "npc",     label = "NPC dialogue" },
+}
+
+function ns.CaptureOn(key)
+    local c = RPCopyDB and RPCopyDB.capture
+    return not c or c[key] ~= false
+end
+
+-- The privacy note (first-run setup and Options > Privacy). Plain ASCII.
+ns.PRIVACY_TEXT =
+    "|cffd8dee9RPCopy stores everything on your PC, in your WoW SavedVariables. It has no internet access and sends nothing anywhere. " ..
+    "No account, email or real-world personal data is collected.\n" ..
+    "Chat and log text only leave your PC if YOU paste them into your own AI tool, and that tool's own privacy terms apply then.\n" ..
+    "You can delete everything at any time with |cff69ccf0/rp wipe|cffd8dee9 (or by deleting RPCopy.lua in your SavedVariables folder).|r"
+
+-- /rp wipe and Options > Privacy: forget everything, then reload
+function ns.WipeAllData()
+    if InCombatLockdown and InCombatLockdown() then
+        print("|cffffd100RPCopy|r Leave combat first, then try again.")
+        return false
+    end
+    if ns.DropActiveAdventure then ns.DropActiveAdventure() end
+    RPCopyDB = {}
+    ns._dbChecked = nil
+    ns.EnsureDB()
+    RPCopyDB.wipedAt = time and time() or 0
+    print("|cffffd100RPCopy|r All RPCopy data deleted. Reloading...")
+    if ReloadUI then ReloadUI() end
+    return true
+end
 
 function ns.LogOn(cat)
     local c = RPCopyDB and RPCopyDB.logCats
@@ -121,6 +189,7 @@ RPCopyDB = RPCopyDB or {
     adventures = {},
     autoUpdateKnown = true,
     autoScreenshots = false,
+    worldAutoShots = false, -- 0.5.1: auto shots only in dungeons and raids
     quickCtrlC = true,
     quickCopyKey = "CTRL-C",
     quickCapture = true,
@@ -223,6 +292,25 @@ local KNOWN_CLASSES = {
     "Rogue", "Priest", "Shaman", "Mage", "Warlock", "Monk", "Druid", "Evoker"
 }
 
+-- Class token ("HUNTER") from a token or an English class name. Other
+-- client languages store the token itself (0.5.0), so colors always work.
+function ns.ClassToken(cls)
+    if type(cls) ~= "string" or cls == "" then return nil end
+    local key = cls:upper():gsub("%s+", "")
+    if ns.CLASS_COLORS[key] then return key end
+    if LOCALIZED_CLASS_NAMES_MALE then
+        for token, loc in pairs(LOCALIZED_CLASS_NAMES_MALE) do
+            if loc == cls then return token end
+        end
+    end
+    if LOCALIZED_CLASS_NAMES_FEMALE then
+        for token, loc in pairs(LOCALIZED_CLASS_NAMES_FEMALE) do
+            if loc == cls then return token end
+        end
+    end
+    return nil
+end
+
 function ns.IsSecret(val)
     if val == nil then return false end
     if issecretvalue and issecretvalue(val) then return true end
@@ -278,16 +366,41 @@ function ns.JoinFullName(first, last)
     return f ~= "" and f or l
 end
 
+-- Honor rank titles that UnitPVPName puts in front of a name. They are
+-- never part of a companion's name ("Private Aloria" is Aloria).
+ns.HONOR_RANKS = {
+    "Grand Marshal", "Field Marshal", "Marshal", "Commander", "Lieutenant Commander",
+    "Knight-Champion", "Knight-Captain", "Knight-Lieutenant", "Knight", "Sergeant Major",
+    "Master Sergeant", "Sergeant", "Corporal", "Private",
+    "High Warlord", "Warlord", "General", "Lieutenant General", "Champion", "Centurion",
+    "Legionnaire", "Blood Guard", "Stone Guard", "First Sergeant", "Senior Sergeant",
+    "Grunt", "Scout",
+}
+table.sort(ns.HONOR_RANKS, function(a, b) return #a > #b end)
+
+function ns.StripHonorRank(name)
+    if type(name) ~= "string" then return name end
+    for _, r in ipairs(ns.HONOR_RANKS) do
+        if #name > #r + 1 and name:sub(1, #r + 1) == r .. " " then
+            return (name:sub(#r + 2):match("^%s*(.-)%s*$"))
+        end
+    end
+    return name
+end
+
 function ns.GetUnitFullName(unit)
     if not UnitExists(unit) then return nil end
     if UnitFullName then
         local ok, raw = pcall(UnitFullName, unit)
         local n = ok and ns.StripRealm(raw) or nil
+        if n then n = ns.StripHonorRank(n) end
         if n and n:find("%s") then return n end
     end
     if UnitPVPName then
         local ok, raw = pcall(UnitPVPName, unit)
         local pvp = ok and ns.StripRealm(raw) or nil
+        -- "Private Aloria" is a rank title, not a last name
+        if pvp then pvp = ns.StripHonorRank(pvp) end
         if pvp and pvp:find("%s") then return pvp end
     end
     local base = ns.StripRealm(UnitName(unit))
@@ -295,7 +408,7 @@ function ns.GetUnitFullName(unit)
         local tip1 = ns.SafeStr(GameTooltipTextLeft1:GetText())
         if tip1 then
             local escapedBase = base:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
-            local fullFromTip = tip1:match("(" .. escapedBase .. "%s+%S+)")
+            local fullFromTip = ns.StripHonorRank(tip1):match("^(" .. escapedBase .. "%s+%S+)")
             if fullFromTip then return fullFromTip end
         end
     end
@@ -411,7 +524,7 @@ end
 
 function ns.ColorizeClass(text, classFile)
     if not text or text == "" then return "" end
-    local key = (classFile or ""):upper():gsub("%s+", "")
+    local key = ns.ClassToken(classFile) or ""
     local hex = ns.CLASS_COLORS[key]
     if hex then
         return "|cff" .. hex .. text .. "|r"
@@ -419,37 +532,6 @@ function ns.ColorizeClass(text, classFile)
     return text
 end
 
-function ns.GetPlayerClassFile(name)
-    if not name or name == "" then return nil end
-    local targetFirst = ns.SplitFullName(name):lower()
-    local units = { "player", "target", "mouseover", "party1", "party2", "party3", "party4" }
-    for _, u in ipairs(units) do
-        if UnitExists(u) and UnitIsPlayer(u) then
-            local uFull = ns.GetUnitFullName(u)
-            local uFirst = ns.StripRealm(UnitName(u))
-            if (uFull and uFull:lower() == name:lower()) or (uFirst and uFirst:lower() == targetFirst) then
-                local _, classFile = UnitClass(u)
-                return ns.SafeStr(classFile)
-            end
-        end
-    end
-    if RPCopyDB and RPCopyDB.players then
-        local key = ns.FindPlayerKey(name, false)
-        if key and RPCopyDB.players[key] and RPCopyDB.players[key].class and RPCopyDB.players[key].class ~= "" then
-            return RPCopyDB.players[key].class
-        end
-    end
-    return nil
-end
-
-function ns.FormatSpeakerTag(name)
-    local who = name or "Unknown"
-    local classFile = ns.GetPlayerClassFile(who)
-    if classFile then
-        return "[" .. ns.ColorizeClass(who, classFile) .. "]"
-    end
-    return "[" .. ns.ColorText(who, ns.COLORS.speaker) .. "]"
-end
 
 function ns.GetRoleTag(role, useIcon)
     if role == "TANK" then
@@ -606,6 +688,8 @@ end
 ns.logSeq = 0
 function ns.PushLog(tbl, line, author, chan)
     if not line or line == "" then return end
+    -- A "secret" value in a line would make the whole snapshot secret
+    if ns.IsSecret(line) or ns.IsSecret(author) then return end
     ns.logSeq = ns.logSeq + 1
     local entry = { line = line, seq = ns.logSeq, author = author, chan = chan }
     if (tbl == ns.logs.social or tbl == ns.logs.world) and IsOocLine(line) then
@@ -679,7 +763,11 @@ function ns.GetTabConfig(tabId)
     return RPCopyDB.tabs[1]
 end
 
+-- The full check runs once per RPCopyDB table (it also runs migrations and
+-- rebuilds old Full Logs). Later calls return at once: EnsureDB is called
+-- on every copy, and a slow copy was one lead in the 0.4.0 Ctrl+C bug.
 function ns.EnsureDB()
+    if RPCopyDB and ns._dbChecked == RPCopyDB then return end
     RPCopyDB = RPCopyDB or {}
     RPCopyDB.players = RPCopyDB.players or {}
     RPCopyDB.adventures = RPCopyDB.adventures or {}
@@ -782,9 +870,37 @@ function ns.EnsureDB()
         iconState = true,         -- the [RP] button shows the recording state
         sizeMeter = true,         -- Full Log size meter
         debugVerbose = false,     -- extra lines in the debug log
+        -- 0.5.0
+        debugEnabled = true,      -- the debug log itself
+        recordManualShots = true, -- your own Print Screen shots join the run
+        autoColorStory = true,    -- color plain names in an imported story
+        exportTip = true,         -- the export tip in the Story Book
+        knownPlayerBlocks = true, -- [Known Player] blocks in snapshots
+        knownPlayerMax = 3,       -- at most this many blocks
+        knownNoteMax = 300,       -- characters of each note in a block
+        companionMenu = true,     -- "Add as RPCopy companion" in unit menus
+        nearbyChip = true,        -- "Nearby companions" chip in the Copy view
+        runCompanions = true,     -- companions who chat in a run are Known companions
+        rpReplyLength = "SHORT",  -- RP template: SHORT, MEDIUM or LONG
+        exportImageDir = "",      -- Export_Stories.bat: where images go ("" = next to the pages)
+        exportShotsDir = "",      -- Export_Stories.bat: the game's Screenshots folder ("" = auto)
     }
     for k, v in pairs(defaults) do
         if RPCopyDB[k] == nil then RPCopyDB[k] = v end
+    end
+    RPCopyDB.knownPlayerMax = math.max(0, math.min(10, math.floor(tonumber(RPCopyDB.knownPlayerMax) or 3)))
+    RPCopyDB.knownNoteMax = math.max(40, math.min(1000, math.floor(tonumber(RPCopyDB.knownNoteMax) or 300)))
+    RPCopyDB.summaryStats = type(RPCopyDB.summaryStats) == "table" and RPCopyDB.summaryStats or {}
+    RPCopyDB.capture = type(RPCopyDB.capture) == "table" and RPCopyDB.capture or {}
+    for _, c in ipairs(ns.CAPTURE_TYPES) do
+        if RPCopyDB.capture[c.key] == nil then RPCopyDB.capture[c.key] = true end
+    end
+    RPCopyDB.stories = type(RPCopyDB.stories) == "table" and RPCopyDB.stories or {}
+    -- 0.5.0: the Status line is back in Chat and World (it lived in Smart)
+    if not RPCopyDB.migratedV050 then
+        for _, t in ipairs(RPCopyDB.tabs) do
+            if t.id == "CHAT" or t.id == "WORLD" then t.incStatus = true end
+        end
     end
     if type(RPCopyDB.aiModel) ~= "string" then RPCopyDB.aiModel = "GEMINI_FREE" end
     RPCopyDB.aiCustomLimit = math.max(1000, tonumber(RPCopyDB.aiCustomLimit) or 40000)
@@ -819,257 +935,24 @@ function ns.EnsureDB()
 
     for _, adv in ipairs(RPCopyDB.adventures or {}) do
         adv.shots = adv.shots or {}
+        -- 0.5.0: every shot is a numbered table
+        for i, sh in ipairs(adv.shots) do
+            if type(sh) ~= "table" then adv.shots[i] = { n = i, description = "Captured moment" }
+            elseif not sh.n then sh.n = i end
+        end
         adv.reloads = adv.reloads or 0
-        adv.story = adv.story or ""
         if (not adv.exportText or adv.exportText == "") and ns.BuildAdventureFullLog then
             adv.exportText = ns.BuildAdventureFullLog(adv)
         end
     end
+
+    -- 0.5.0 migrations live with their modules: companions (Companions.lua)
+    -- and stories moving out of the recordings (Adventures.lua)
+    if not RPCopyDB.migratedV050 and ns.MigrateCompanions and ns.MigrateStories then
+        pcall(ns.MigrateCompanions)
+        pcall(ns.MigrateStories)
+        RPCopyDB.migratedV050 = true
+    end
+    if ns.BuildAdventureFullLog and ns.MigrateStories then ns._dbChecked = RPCopyDB end
 end
 
-function ns.FindPlayerKey(name, allowFirstNameUpgrade)
-    if not name or name == "" or not RPCopyDB or not RPCopyDB.players then return nil end
-    if RPCopyDB.players[name] then return name end
-
-    local low = name:lower()
-    for k in pairs(RPCopyDB.players) do
-        if k:lower() == low then return k end
-    end
-
-    local inFirst, inLast = ns.SplitFullName(name)
-    local inFirstLow = inFirst:lower()
-    if inFirstLow ~= "" then
-        for k in pairs(RPCopyDB.players) do
-            local kFirst, kLast = ns.SplitFullName(k)
-            if kFirst:lower() == inFirstLow then
-                if allowFirstNameUpgrade and kLast == "" and inLast ~= "" then
-                    RPCopyDB.players[name] = RPCopyDB.players[k]
-                    RPCopyDB.players[k] = nil
-                    return name
-                end
-                if inLast == "" then return k end
-            end
-        end
-    end
-    return nil
-end
-
-function ns.ResolveCanonicalPlayerName(rawName)
-    if not rawName or rawName == "" then return nil end
-    local savedKey = ns.FindPlayerKey(rawName, true)
-    if savedKey then return savedKey end
-
-    local rawFirstLow = ns.SplitFullName(rawName):lower()
-    local units = { "target", "mouseover", "party1", "party2", "party3", "party4" }
-    for _, u in ipairs(units) do
-        if UnitExists(u) and UnitIsPlayer(u) then
-            local uFirst = ns.StripRealm(UnitName(u))
-            if uFirst and uFirst:lower() == rawFirstLow then
-                return ns.GetUnitFullName(u) or rawName
-            end
-        end
-    end
-    return rawName
-end
-
-function ns.CaptureVisibleUnitFields(unit, entry)
-    if not UnitExists(unit) or not UnitIsPlayer(unit) then return false end
-    local lvl = ns.SafeNum(UnitLevel(unit))
-    if lvl and lvl > 0 then
-        entry.level = tostring(lvl)
-    end
-    local r = ns.SafeStr(UnitRace(unit))
-    if r and r ~= "" then entry.race = r end
-    local c = ns.SafeStr(UnitClass(unit))
-    if c and c ~= "" then entry.class = c end
-    local g = ns.SafeStr(GetGuildInfo(unit))
-    if g and g ~= "" then
-        entry.guild = g
-    elseif g == nil then
-        entry.guild = "None"
-    end
-    entry.lastSeen = ns.NowStamp()
-    return true
-end
-
-function ns.FindVisibleUnitForPlayer(name)
-    if not name or name == "" then return nil end
-    local targetFirst = ns.SplitFullName(name):lower()
-    local units = { "target", "mouseover", "party1", "party2", "party3", "party4" }
-    for _, u in ipairs(units) do
-        if UnitExists(u) and UnitIsPlayer(u) then
-            local uFull = ns.GetUnitFullName(u)
-            local uFirst = ns.StripRealm(UnitName(u))
-            if (uFull and uFull:lower() == name:lower()) or (uFirst and uFirst:lower() == targetFirst) then
-                return u
-            end
-        end
-    end
-    return nil
-end
-
-function ns.AppendConvoForPlayer(otherPlayerRaw, formattedConvoLine)
-    if not otherPlayerRaw or otherPlayerRaw == "" or otherPlayerRaw == "Unknown" then return end
-    local canonical = ns.ResolveCanonicalPlayerName(otherPlayerRaw)
-    local selfFirst = ns.StripRealm(UnitName("player"))
-    local selfFull = ns.GetUnitFullName("player") or selfFirst
-    if canonical == selfFirst or canonical == selfFull then return end
-
-    ns.logs.playerRecentChat[canonical] = ns.logs.playerRecentChat[canonical] or {}
-    ns.PushBounded(ns.logs.playerRecentChat[canonical], formattedConvoLine, ns.MAX_PLAYER_CHAT)
-
-    if RPCopyDB and RPCopyDB.autoUpdateKnown then
-        local existingKey = ns.FindPlayerKey(canonical, true)
-        if existingKey and RPCopyDB.players[existingKey] then
-            local entry = RPCopyDB.players[existingKey]
-            entry.chatHistory = entry.chatHistory or {}
-            ns.PushBounded(entry.chatHistory, formattedConvoLine, ns.MAX_PLAYER_CHAT)
-            entry.lastSeen = ns.NowStamp()
-            local visUnit = ns.FindVisibleUnitForPlayer(existingKey)
-            if visUnit then
-                ns.CaptureVisibleUnitFields(visUnit, entry)
-            end
-        end
-    end
-end
-
-function ns.HandleConversationCapture(channelLabel, rawAuthor, cleanMsg, isOutgoingWhisper, whisperRecipient)
-    local selfFirst = ns.StripRealm(UnitName("player")) or ""
-    local selfFull = ns.GetUnitFullName("player") or selfFirst
-    local authorShort = ns.StripRealm(rawAuthor) or "Unknown"
-    local where = ns.GetCurrentWhere()
-
-    if isOutgoingWhisper then
-        local recip = ns.ResolveCanonicalPlayerName(ns.StripRealm(whisperRecipient))
-        if recip then
-            ns.AppendConvoForPlayer(recip, string.format("[Whisper | %s] %s: %s", where, selfFull, cleanMsg))
-        end
-        return
-    end
-
-    local isSelf = (authorShort ~= "Unknown") and (authorShort == selfFirst or authorShort == selfFull)
-    local hasPlayerTarget = UnitExists("target") and UnitIsPlayer("target")
-    local targetFull = hasPlayerTarget and ns.GetUnitFullName("target") or nil
-    local targetFirst = hasPlayerTarget and ns.StripRealm(UnitName("target")) or nil
-
-    if isSelf then
-        local recordedKeys = {}
-        if targetFull and targetFirst ~= selfFirst then
-            ns.AppendConvoForPlayer(targetFull, string.format("[%s | %s] %s: %s", channelLabel, where, selfFull, cleanMsg))
-            recordedKeys[targetFull:lower()] = true
-        end
-        if channelLabel == "Party" or channelLabel == "Instance" or channelLabel == "Raid" then
-            for i = 1, 4 do
-                local u = "party" .. i
-                if UnitExists(u) and UnitIsPlayer(u) then
-                    local pFull = ns.GetUnitFullName(u)
-                    if pFull and not recordedKeys[pFull:lower()] and ns.FindPlayerKey(pFull, true) then
-                        ns.AppendConvoForPlayer(pFull, string.format("[%s | %s] %s: %s", channelLabel, where, selfFull, cleanMsg))
-                        recordedKeys[pFull:lower()] = true
-                    end
-                end
-            end
-        end
-    else
-        local isWhisperIn = (channelLabel == "Whisper")
-        local isCurrentTarget = hasPlayerTarget and (authorShort == targetFirst or authorShort == targetFull)
-        local isSavedPlayer = (ns.FindPlayerKey(authorShort, true) ~= nil)
-
-        if isWhisperIn or isCurrentTarget or isSavedPlayer then
-            local speakerFull = isCurrentTarget and (targetFull or authorShort) or ns.ResolveCanonicalPlayerName(authorShort)
-            ns.AppendConvoForPlayer(speakerFull, string.format("[%s | %s] %s: %s", channelLabel, where, speakerFull, cleanMsg))
-        end
-    end
-end
-
-function ns.SaveOrUpdatePlayer(name)
-    ns.EnsureDB()
-    if not name or name == "" then return nil, false end
-    local canonical = ns.ResolveCanonicalPlayerName(name)
-    local existingKey = ns.FindPlayerKey(canonical, true)
-    local isNew = (existingKey == nil)
-    local key = existingKey or canonical
-    local entry = RPCopyDB.players[key] or {
-        note = "", level = "", race = "", class = "", guild = "",
-        chatHistory = {}, lastSeen = "",
-    }
-
-    local visUnit = ns.FindVisibleUnitForPlayer(key)
-    if visUnit then
-        ns.CaptureVisibleUnitFields(visUnit, entry)
-    end
-
-    local buf = ns.logs.playerRecentChat[key] or ns.logs.playerRecentChat[canonical] or ns.logs.playerRecentChat[ns.SplitFullName(key)]
-    if buf and #buf > 0 then
-        entry.chatHistory = {}
-        for _, line in ipairs(buf) do
-            ns.PushBounded(entry.chatHistory, line, ns.MAX_PLAYER_CHAT)
-        end
-    end
-    entry.lastSeen = ns.NowStamp()
-
-    RPCopyDB.players[key] = entry
-    return key, isNew
-end
-
-function ns.GetKnownPlayerBlocks(searchBlob)
-    if not RPCopyDB or not RPCopyDB.players then return {} end
-    local haystack = ns.StripColors(searchBlob or ""):lower()
-    if haystack == "" then return {} end
-
-    local matchedKeys = {}
-    for savedName, data in pairs(RPCopyDB.players) do
-        if type(data) == "table" then
-            local fullLow = savedName:lower()
-            local firstLow = ns.SplitFullName(savedName):lower()
-            local matched = haystack:find(fullLow, 1, true) ~= nil
-            if not matched and #firstLow >= 3 then
-                matched = haystack:find("%f[%a]" .. firstLow .. "%f[%A]") ~= nil
-            end
-            if matched then
-                table.insert(matchedKeys, savedName)
-            end
-        end
-    end
-
-    table.sort(matchedKeys)
-    local blocks = {}
-    for _, savedName in ipairs(matchedKeys) do
-        local data = RPCopyDB.players[savedName]
-        local displayName = (data.class and data.class ~= "")
-            and ns.ColorizeClass(savedName, data.class)
-            or ns.ColorText(savedName, ns.COLORS.speaker)
-        local noteVal = (data.note and data.note ~= "")
-            and ns.ColorText(data.note, ns.COLORS.softWhite)
-            or ns.ColorText("None", ns.COLORS.muted)
-
-        local blockLines = {
-            ns.ColorText("[Known Player:", ns.COLORS.gold) .. " " .. displayName .. ns.ColorText("]", ns.COLORS.gold),
-            ns.ColorText("Note:", ns.COLORS.lootType) .. " " .. noteVal,
-        }
-
-        -- Skip chat lines the copy already shows, so nothing is pasted twice
-        local fresh = {}
-        if type(data.chatHistory) == "table" then
-            for _, line in ipairs(data.chatHistory) do
-                local plainLine = ns.StripColors(line or "")
-                local msg = plainLine:match("^%[[^%]]*%]%s*[^:]+:%s*(.+)$") or plainLine
-                msg = msg:match("^%s*(.-)%s*$"):lower()
-                if msg ~= "" and not haystack:find(msg, 1, true) then
-                    table.insert(fresh, line)
-                end
-            end
-        end
-        if #fresh > 0 then
-            table.insert(blockLines, ns.ColorText("Latest Chat:", ns.COLORS.lootType))
-            for _, line in ipairs(fresh) do
-                table.insert(blockLines, ns.ColorText(line, ns.COLORS.text))
-            end
-        elseif type(data.chatHistory) ~= "table" or #data.chatHistory == 0 then
-            table.insert(blockLines, ns.ColorText("Latest Chat:", ns.COLORS.lootType) .. " " .. ns.ColorText("None", ns.COLORS.muted))
-        end
-
-        table.insert(blocks, table.concat(blockLines, "\n"))
-    end
-    return blocks
-end

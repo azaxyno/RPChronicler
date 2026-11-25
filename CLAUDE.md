@@ -8,11 +8,12 @@ A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP sce
   - The addon is in alpha. Versioning restarted at 0.1.0 (the old 3.x tags were retired); stay below 1.0.0 until Mor says otherwise.
   - Small fix: patch bump, e.g. 0.1.0 -> 0.1.1.
   - Big update: minor bump, e.g. 0.1.x -> 0.2.0.
-- Keep the toc load order: Core -> Debug -> Snapshot -> Adventures -> Screenshots -> Events -> Chronicle -> UI_Shell -> UI_Copy -> UI_Companions -> UI_Adventures -> UI_StoryBook -> UI_Options -> UI_Commands. UI_Shell must load first among the UI files (it creates `ns.UI`), and UI_StoryBook after UI_Adventures (it builds into `UI.adventures.bookView`).
+- Keep the toc load order: Core -> Debug -> Companions -> Snapshot -> Adventures -> Screenshots -> Events -> Chronicle -> UI_Shell -> UI_Copy -> UI_Companions -> UI_Adventures -> UI_StoryBook -> UI_Options -> UI_Setup -> UI_Commands. UI_Shell must load first among the UI files (it creates `ns.UI`). Since 0.5.0 UI_StoryBook builds its own BOOK section and rail button, and UI_Setup must load after UI_Options (it reads `ns.CAPTURE_TYPES` and opens from Options > Privacy).
+- Every new recording or capture feature goes into the first-run setup (`CHOICES` in `UI_Setup.lua` with a `since` = the bumped `SETUP_VERSION`), `ns.PRIVACY_TEXT`, the README Privacy section and the CurseForge description.
 - Every feature, Full Log category, prompt, indicator and default must have a switch or setting in Options (Mor's standing rule). New Full Log line kinds get a key in `ns.LOG_CATEGORIES` and check `ns.LogOn(key)`; new limits go in `ns.LOG_LIMITS` and are read with `ns.Limit(key)`. The Full Log stays rich but short (one meaningful line over many raw ones) and never keeps OOC.
 - The Forever client runs on the modern engine. Guard APIs, never register `COMBAT_LOG_EVENT_UNFILTERED`, and make no protected calls in combat (`SetOverrideBindingClick` only out of combat). Read unit values through `ns.SafeStr` / `ns.SafeNum`, because values can be "secret". If a "blocked from an action" popup appears, read `..\..\..\Logs\taint.log`.
 - No non-ASCII glyphs or Markdown in FontStrings or EditBoxes. Use `|cffRRGGBB...|r` codes, and normalize `||` to `|` on pasted text.
-- Lua 5.1 caps a function at 200 *active* locals, and locals inside a top-level `do ... end` still count while that block runs. Going over stops the whole file loading ("main function has more than 200 local variables"). The old `UI.lua` hit about 187, so in 0.3.0 it was split into the `UI_*.lua` files, which share the `ns.UI` table. Every file's main chunk is now 50 or under (`Events.lua` is the highest at 50, `Chronicle.lua` 49). Put new UI code in the file it belongs to, in a `do ... end` block or on `UI`, and run `python tools/check_locals.py <file>.lua` on every changed file before every commit (no Lua interpreter is installed on Mor's machine).
+- Lua 5.1 caps a function at 200 *active* locals, and locals inside a top-level `do ... end` still count while that block runs. Going over stops the whole file loading ("main function has more than 200 local variables"). The old `UI.lua` hit about 187, so in 0.3.0 it was split into the `UI_*.lua` files, which share the `ns.UI` table. Every file's main chunk is well under the limit (on 0.5.0 `Chronicle.lua` is the highest at 54, `Events.lua` 51). Put new UI code in the file it belongs to, in a `do ... end` block or on `UI`, and run `python tools/check_locals.py <file>.lua` on every changed file before every commit (no Lua interpreter is installed on Mor's machine).
 - In Git Bash heredocs on this machine, `\\` collapses to `\`. Write files containing backslashes with the Write/Edit tools, not heredocs.
 - Keep `README.md` in step with user-visible changes, and `docs/ARCHITECTURE.md` in step with structural ones.
 - Commit only after Mor approves. Mor pushes.
@@ -25,28 +26,31 @@ A WoW: Forever addon (Interface 16001, alpha, MIT). It copies the current RP sce
 
 | File | Role |
 |---|---|
-| `Core.lua` | `RPCopyDB` defaults and `ns.EnsureDB` migrations, `ns.TAB_FLAGS` / `ns.DEFAULT_TABS`, `ns.LOG_CATEGORIES` / `ns.LOG_LIMITS` / `ns.AI_MODELS`, colors, safe-value helpers, roles, log buffers (`ns.PushLog`), companions, `[Known Player]` blocks, `NormalizeStoryText` |
+| `Core.lua` | `RPCopyDB` defaults and `ns.EnsureDB` migrations, `ns.TAB_FLAGS` / `ns.DEFAULT_TABS`, `ns.LOG_CATEGORIES` / `ns.LOG_LIMITS` / `ns.AI_MODELS`, `ns.SUMMARY_STATS`, `ns.CAPTURE_TYPES`, `ns.PRIVACY_TEXT`, `ns.WipeAllData`, colors, safe-value helpers, roles, log buffers (`ns.PushLog`), `NormalizeStoryText` |
+| `Companions.lua` | Companion records (players, NPCs, pets), rename, include mode, pet kind and species, `[Known Player]` blocks, the right-click "Add as RPCopy companion" entry |
 | `Debug.lua` | `ns.Debug` ring buffer (no chat), RPCopy-only error hook, blocked actions, `ns.BuildDebugReport` for `/rp debug` |
 | `Snapshot.lua` | `ns.BuildSnapshot(tabId, note, expanded)`: Skill Call, Instruction, Location, Direct, Target, Party, Status, Quest, then one time-ordered chat timeline, then companion blocks |
-| `Adventures.lua` | Run lifecycle (interrupted runs, resume) and every `Record*` function, timeline, Summary, Full Log and its size, story storage and Story Book metadata, boss icons (`DecorateStoryBosses`) |
-| `Screenshots.lua` | `ns.RequestScreenshot`: debounced, combat-safe, capped per run |
+| `Adventures.lua` | Run lifecycle (interrupted runs, resume) and every `Record*` function, timeline, Summary by run type, Full Log and its size, story storage (`RPCopyDB.stories`, independent of runs) and Story Book metadata, boss icons (`DecorateStoryBosses`), `AutoColorStory` |
+| `Screenshots.lua` | `ns.RequestScreenshot`: debounced, combat-safe, capped per run; your own Print Screen shots join the run |
 | `Events.lua` | Event router to `ns.*`, chat buffers, loot filter and sources, combat poller (boss HP, pull end, aggro, fight enemies), run trackers (spell, boss cast, CC, pet) |
-| `Chronicle.lua` | `[FIGHT]` tracker, kills, quests, NPC filter, levels, places, skills, milestones, loot source, atmosphere, start-recording and interrupted-run prompts |
+| `Chronicle.lua` | `[FIGHT]` / `[FIGHTS]` streak tracker, kills, PvP, quest objectives, quests, NPC filter, levels, places, skills, milestones, loot source, atmosphere, start-recording and interrupted-run prompts |
 | `UI_Shell.lua` | `ns.UI`, option defaults, theme and widget helpers, prompt and copy boxes, main window: rail, gear, sections, status line, resize, saved position |
 | `UI_Copy.lua` | Copy view and the quick-copy engine (Instant / Two-press Ctrl+C) |
 | `UI_Companions.lua` | Companions view |
-| `UI_Adventures.lua` | Adventures view: Recordings / Story Book sub-tabs, record bar (one Start/Stop toggle), run list, size meter, story import with a run selector |
-| `UI_StoryBook.lua` | Story Book: library, reader, Share, Details, Re-Import, Delete |
-| `UI_Options.lua` | Options pages (General, Keybinds, Slice Tabs, Recording, Full Log, AI Setup, Debug), RP and two story templates, key capture |
+| `UI_Adventures.lua` | Adventures view (`UI.OpenRecording`): record bar (one Start/Stop toggle), run list, size meter, story import with a run selector |
+| `UI_StoryBook.lua` | Story Book section (`UI.OpenStoryBook`): library, reader, export tip, Share, Details, Re-Import, Delete |
+| `UI_Options.lua` | Options pages (General, Keybinds, Slice Tabs, Recording, Full Log, Summary, Companions, Stories & Export, AI Setup, Privacy, Debug), RP and two story templates, key capture |
+| `UI_Setup.lua` | First-run privacy note and setup choices (`UI.OpenSetup`, `/rp setup`) |
 | `UI_Commands.lua` | Keybind override buttons, floating `[RP]` button (right-click menu, recording state), `/rp` commands |
 | `Bindings.xml` | The 7 Key Bindings entries |
-| `Export_Stories.bat` | Windows PowerShell exporter: SavedVariables to HTML and text |
+| `Export_Stories.bat` | Windows PowerShell exporter: SavedVariables to HTML and text, with screenshots placed in the stories |
 
 Key facts that are easy to get wrong:
 
 - Log entries are tables `{ line, seq, author, chan }` (use `ns.LogLine`). The buffers are social, party, npc, loot, ooc, world (numbered channels), guild (guild and officer) and combat (deaths and level ups, read by Status).
 - A slice tab is `{ id, label, prefix, inc* }`, with flags from `ns.TAB_FLAGS`. Built-in ids are CHAT, WORLD, PARTY, GUILD, QUEST and LOOT (SMART was removed in 0.4.0). Migrations run once in `ns.EnsureDB` behind `migratedV32` / `migratedV031` / `migratedV040` flags.
 - Runs have `kind` (dungeon, raid, world). The Full Log's first line is the story trigger: `use story` (Dungeon/Raid Story) or `use adventure story` (Adventure Story).
+- Stories live in `RPCopyDB.stories` (since 0.5.0), each with a copy of its run's details, so deleting a run keeps the story. `adv.story` is legacy and migrated by `ns.MigrateStories`.
 - Story colors: class colors, but Priest is gray `C0C0C0` and bosses are crimson `dc143c`. The two story templates live in `UI_Options.lua` (shared part `STORY_SHARED_RULES`) and must match the Full Log tags and the Story Book header/footer that `ns.ParseStoryMeta` reads.
 - Mor asked to keep the floating `[RP]` button and not add a minimap button.
 - Testing: there is no game here. Use a lupa (Lua 5.1) mock harness to load every toc file, click every button and fire events. PowerShell can't be run here, so `Export_Stories.bat` changes are untested until Mor runs them.

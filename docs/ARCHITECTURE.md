@@ -1,4 +1,4 @@
-# RPCopy Architecture & Module Reference (0.4.0)
+# RPCopy Architecture & Module Reference (0.5.0)
 
 This replaces the old "RPCopy v3.6 Architecture & Module Reference" PDF, which describes a single `UI.lua` and the retired 3.x versions.
 
@@ -7,10 +7,10 @@ This replaces the old "RPCopy v3.6 Architecture & Module Reference" PDF, which d
 RPCopy is a WoW: Forever addon (`## Interface: 16001`, alpha, MIT). It has three jobs:
 
 1. **Copy the scene.** `Ctrl+C` puts a text snapshot of the current situation in the clipboard. The player pastes it into an AI that holds their character skill. Line 1 is the Skill Call (`[Skill Call] use aloria`) that triggers the skill.
-2. **Remember companions.** It saves players with your RP note and their last 5 chat lines. A `[Known Player]` block is added whenever they show up in a snapshot.
-3. **Chronicle runs.** It records dungeons, raids and open-world adventures as a timestamped Full Log, which an AI storyteller skill (Dungeon/Raid Story or Adventure Story) turns into a colored story. The story is imported into the Story Book and read in game.
+2. **Remember companions.** It saves players, NPCs and pets with your notes (relationship, tone, "Who they are", "Our history") and their last 5 chat lines. A `[Known Player]` (or `[Known NPC]` / `[Known Pet]`) block is added when they are in the scene.
+3. **Chronicle runs.** It records dungeons, raids and open-world adventures as a timestamped Full Log, which an AI storyteller skill (Dungeon/Raid Story or Adventure Story) turns into a colored story. The story is imported into the Story Book (its own section since 0.5.0) and read in game. Stories are stored apart from runs, so deleting a recording keeps its story.
 
-It never sends chat. All data lives in the account-wide SavedVariable `RPCopyDB`.
+It never sends chat and has no network access. All data lives in the account-wide SavedVariable `RPCopyDB`. A first-run setup (`UI_Setup.lua`) shows the privacy note and the recording choices.
 
 ## 2. Files and load order
 
@@ -18,20 +18,22 @@ Every file starts with `local ADDON_NAME, ns = ...` and shares `ns`. The UI file
 
 | # | File | Role |
 |---|---|---|
-| 1 | `Core.lua` | Version, binding names, `RPCopyDB` defaults, `ns.TAB_FLAGS` / `ns.DEFAULT_TABS`, `ns.LOG_CATEGORIES` / `ns.LOG_LIMITS` / `ns.AI_MODELS` with `ns.LogOn(cat)` and `ns.Limit(key)`, `ns.COLORS` / `ns.CLASS_COLORS`, safe-value helpers, name and realm helpers, role guessing, log buffers, companions, `NormalizeStoryText`, `EnsureDB` and migrations |
-| 2 | `Debug.lua` | `ns.Debug(kind, msg)` ring buffer (200 lines in `RPCopyDB.debugLog`, pending until `ns.DebugReady()` at login), RPCopy-only `seterrorhandler` chain, `ADDON_ACTION_BLOCKED/FORBIDDEN`, `ns.BuildDebugReport()` |
-| 3 | `Snapshot.lua` | Target, Party and Status lines; `ns.BuildSnapshot` |
-| 4 | `Adventures.lua` | Run state and lifecycle (restore, interrupted runs, resume), all `Record*` functions, Summary and Full Log builders, size and AI limit, story storage, Story Book metadata (`ParseStoryMeta`, `GetBookInfo`, `SetBookField`, `DeleteAdventureStory`, `GetStoryPlainText`), boss icons |
-| 5 | `Screenshots.lua` | `ns.RequestScreenshot(kind, caption)` |
-| 6 | `Events.lua` | `RPCopyEventFrame` router, chat and loot handling (loot source, quest items, coin), combat poller (also feeds the fight tracker), run trackers, `/rp diag` |
-| 7 | `Chronicle.lua` | Fight tracker (`FightBegin`, `FightSeeUnit`, `FightNote*`, `FightFlush`), kills, quests and quest text, NPC filter (`ns.ChronicleNpc`), levels, places, skills, milestones, loot source (`ns.ClassifyLootSource`, `ns.IsQuestItem`), atmosphere, start-recording and interrupted-run prompts |
-| 8 | `UI_Shell.lua` | `ns.UI`, `UI.EnsureOptions`, theme and widgets, main window `RPCopyFrame`, rail, sections, status line, resize, toast, `UI.ShowPrompt`, `UI.ShowCopyBox`, `RPCopy_Open` / `RPCopy_Toggle` |
-| 9 | `UI_Copy.lua` | Quick-copy engine, `RPCopy_QuickCopy`, `RPCopy_CaptureTarget`, COPY section |
-| 10 | `UI_Companions.lua` | PLAYERS section (list and note editor) |
-| 11 | `UI_Adventures.lua` | `RPCopy_StartRun` / `RPCopy_ToggleRun` / `RPCopy_ToggleRunPause` / `RPCopy_EndRun`, story import modal with a run selector, ADVENTURES section with the Recordings / Story Book sub-tabs (`UI.ShowAdventuresSub`), size meter |
-| 12 | `UI_StoryBook.lua` | The Story Book sub-tab (`A.bookView`): library, reader, Share, Details modal, Re-Import, Delete, jump to the recording (`UI.RefreshStoryBook`) |
-| 13 | `UI_Options.lua` | RP and two story templates, template modal, key capture modal, OPTIONS pages |
-| 14 | `UI_Commands.lua` | Hidden keybind buttons, `UI.UpdateOverrideBindings`, floating `[RP]` button with its right-click menu (`UI.ToggleIconMenu`) and recording state (`UI.RefreshRecordIcon`), `/rp` slash commands |
+| 1 | `Core.lua` | Version, binding names, `RPCopyDB` defaults, `ns.TAB_FLAGS` / `ns.DEFAULT_TABS`, `ns.LOG_CATEGORIES` / `ns.LOG_LIMITS` / `ns.AI_MODELS` with `ns.LogOn(cat)` and `ns.Limit(key)`, `ns.SUMMARY_STATS` / `ns.SummaryOn`, `ns.CAPTURE_TYPES` / `ns.CaptureOn`, `ns.PRIVACY_TEXT`, `ns.WipeAllData`, `ns.COLORS` / `ns.CLASS_COLORS`, safe-value helpers, name and realm helpers, role guessing, log buffers, `NormalizeStoryText`, `EnsureDB` and migrations |
+| 2 | `Debug.lua` | `ns.Debug(kind, msg)` ring buffer (200 lines in `RPCopyDB.debugLog`, pending until `ns.DebugReady()` at login, off when `debugEnabled == false` except errors and blocked actions), RPCopy-only `seterrorhandler` chain, `ADDON_ACTION_BLOCKED/FORBIDDEN`, `ns.BuildDebugReport()` (with Names and Quick copy lines) |
+| 3 | `Companions.lua` | Companion records (`SaveOrUpdatePlayer(name, unit)`, `RenameCompanion`, `FindPlayerKey`), include modes, pet helpers (`GetPetKind`, `GetPetSpecies`, `GetPetDescriptor`), `UnitCompanionName`, `GetKnownPlayerBlocks(people, body)`, `CompanionSharedAdventures`, the "Add as RPCopy companion" right-click entry (`Menu.ModifyMenu`) |
+| 4 | `Snapshot.lua` | Target, Party (raid1-40 too) and Status lines; `ns.BuildSnapshot` |
+| 5 | `Adventures.lua` | Run state and lifecycle (restore, interrupted runs, resume, `DropActiveAdventure`), all `Record*` functions, timeline handles (`UpdateAdventureLine`), places and companions met, Summary by run type, Full Log builder, size and AI limit, story storage (`RPCopyDB.stories`), Story Book metadata (`ParseStoryMeta`, `GetBookInfo`, `GetBookStats`, `SetBookField`, `DeleteStory`, `GetStoryPlainText`), boss icons, `AutoColorStory` |
+| 6 | `Screenshots.lua` | `ns.RequestScreenshot(kind, caption)`, and your own Print Screen shots on `SCREENSHOT_SUCCEEDED` |
+| 7 | `Events.lua` | `RPCopyEventFrame` router, chat capture switches, chat and loot handling (loot source, quest items, coin), combat poller (also feeds the fight tracker), run trackers, `/rp diag` |
+| 8 | `Chronicle.lua` | Fight tracker (`FightBegin`, `FightSeeUnit`, `FightNote*`, `FightNoteSpell`, `FightFlush` with trash streaks), kills and foe counts, PvP, quests, objectives and quest text, NPC filter (`ns.ChronicleNpc`), levels, places, skills, milestones, loot source (`ns.ClassifyLootSource`, `ns.IsQuestItem`), atmosphere, start-recording and interrupted-run prompts |
+| 9 | `UI_Shell.lua` | `ns.UI`, `UI.EnsureOptions`, theme and widgets, main window `RPCopyFrame`, rail, sections, status line, resize (throttled reflow, sizing stop on mouse up or hide, on-screen clamp), toast, `UI.ShowPrompt`, `UI.ShowCopyBox`, `RPCopy_Open` / `RPCopy_Toggle` |
+| 10 | `UI_Copy.lua` | Quick-copy engine, `RPCopy_QuickCopy`, `RPCopy_CaptureTarget`, COPY section, Nearby companions chip (`UI.RefreshNearbyChip`) |
+| 11 | `UI_Companions.lua` | PLAYERS section: search, sort, editor (names, relationship, tone, two notes), include, capture, delete |
+| 12 | `UI_Adventures.lua` | `RPCopy_StartRun` / `RPCopy_ToggleRun` / `RPCopy_ToggleRunPause` / `RPCopy_EndRun`, story import modal (`UI.OpenStoryImportModal(adv, st)`), ADVENTURES section (`UI.OpenRecording(advId, mode)`), size meter |
+| 13 | `UI_StoryBook.lua` | The BOOK section with its own rail button: library, reader, export tip, Share, Details modal, Re-Import, Delete, jump to the recording (`UI.OpenStoryBook(storyId)`, `UI.RefreshStoryBook`) |
+| 14 | `UI_Options.lua` | RP and two story templates, template modal, key capture modal, OPTIONS pages |
+| 15 | `UI_Setup.lua` | First-run setup (`UI.OpenSetup(force)`): privacy note, recording and capture choices, copy mode, `SETUP_VERSION` |
+| 16 | `UI_Commands.lua` | Hidden keybind buttons, `UI.UpdateOverrideBindings`, floating `[RP]` button with its right-click menu (`UI.ToggleIconMenu`) and recording state (`UI.RefreshRecordIcon`), `/rp` slash commands |
 | | `Bindings.xml` | Key Bindings entries |
 | | `Export_Stories.bat` | Batch + PowerShell exporter (section 12) |
 | | `tools/check_locals.py` | Counts active locals per function (Lua 5.1 limit of 200) |
@@ -55,8 +57,9 @@ Other folders: `docs/` (screenshots and this file), `tools/`, and `.pkgmeta` (Cu
 | Key | Contents |
 |---|---|
 | `tabs` | Slice tabs (section 5) |
-| `players[name]` | `{ note, level, race, class, guild, chatHistory (last 5), lastSeen }` |
+| `players[name]` | `{ cid, kind (player/npc/pet), note ("Who they are"), history ("Our history"), relationship, tone, include (auto/always/never), level, race, class, classFile, guild, chatHistory (last 5), firstMet, firstMetPlace, lastSeen }` |
 | `adventures` | Up to 40 finished runs, newest first |
+| `stories[]` | Imported stories (0.5.0): `{ id, advId, text, book, ... }` plus a copy of the run's details at the top level (`CopyRunMeta`), so a story has the same shape as a run and outlives it |
 | `activeRun` | The run being recorded, saved live so it survives `/reload` and disconnects |
 | `knownBosses[name]` | Bosses fought before, so classic bosses without a skull are recognized |
 | `autoUpdateKnown`, `autoScreenshots` | Toggles |
@@ -66,7 +69,11 @@ Other folders: `docs/` (screenshots and this file), `tools/`, and `.pkgmeta` (Cu
 | `frameW`, `frameH`, `frameX`, `frameY`, `optionsPage` | Window size and place, last Options page |
 | `autoRecord`, `promptOnGroup`, `promptOnLogin`, `resumeAfterReload`, `iconState`, `sizeMeter` | Recording options (0.4.0) |
 | `logCats[cat]`, `limits[key]`, `aiModel`, `aiCustomLimit` | Full Log categories (false = off), limits (clamped in EnsureDB), size meter AI |
-| `debugLog`, `debugVerbose` | Debug log and its verbose switch |
+| `summaryStats[key]`, `capture[key]` | Summary stats shown (0.5.0), chat kinds kept (0.5.0, false = off) |
+| `setupVersion`, `wipedAt` | Last setup version seen (`UI_Setup.lua`), time of the last `/rp wipe` |
+| `recordManualShots`, `knownPlayerBlocks`, `knownPlayerMax`, `knownNoteMax`, `companionMenu`, `nearbyChip`, `runCompanions` | Screenshot and companion options (0.5.0) |
+| `autoColorStory`, `exportTip`, `exportImageDir`, `exportShotsDir`, `rpReplyLength` | Story, export and template options (0.5.0) |
+| `debugLog`, `debugEnabled`, `debugVerbose` | Debug log and its switches |
 | `migratedV32`, `migratedV031`, `migratedV040` | One-time migration flags |
 
 Defaults and migrations:
@@ -77,6 +84,7 @@ Defaults and migrations:
   - Once, behind `migratedV031`, it resets the built-in tabs' flags to the 0.3.1 defaults. Labels and prefixes are kept, and custom tabs aren't touched.
   - Once, behind `migratedV040`, it removes SMART, inserts missing WORLD and GUILD at their default places, and moves `lastSliceId` SMART to CHAT. `incGuild` is filled with false where missing.
   - It fills `logCats`, clamps `limits` and sets the 0.4.0 recording defaults.
+  - 0.5.0: it fills `capture` and `summaryStats`, turns old string screenshots into `{ n, description }` tables, and `ns.MigrateStories` moves each old `run.story` into `RPCopyDB.stories`.
 - **`UI.EnsureOptions`** (UI_Shell) fills the key and copy-mode defaults.
 
 Session buffers (`ns.logs`) are in memory only and are cleared by `/reload`, `/rp clear` or right-clicking `[RP]`.
@@ -131,7 +139,7 @@ Built-in tabs (0.4.0): **CHAT** (direct, target, social), **WORLD** (world), **P
 1. `[Skill Call]`, `[Instruction]` and `[Location]`.
 2. Direct, Target, Party, Status and Quest.
 3. **One timeline:** the last `limit` entries of each included buffer (3, or 6 when expanded), deduplicated and sorted by `seq`. If the direct entry is in the timeline, it is tagged `[Direct]` there and the separate line is skipped.
-4. `ns.GetKnownPlayerBlocks(body)`: one block per saved companion named in the body. A block's "Latest Chat" skips lines whose message is already in the body.
+4. `ns.GetKnownPlayerBlocks(people, body)`: `people` is the direct author, the target, party or raid members, timeline authors and whisper recipients. Companions set to Always are added too, Never are skipped, up to `knownPlayerMax`. A block has Relationship, Who they are, Our history (each cut at `knownNoteMax`) and a "Latest Chat" that skips lines already in the body.
 
 ## 6. Quick copy (UI_Copy.lua)
 
@@ -142,6 +150,7 @@ Addons can't write to the clipboard. The only route is a focused EditBox with th
   - `RPCopyCtrlWatcher` arms after Ctrl has been held 0.25 s (`ARM_DELAY`).
   - `RPCopyKeyListener` uses `SetPropagateKeyboardInput(true)`, set once out of combat and enabled only if propagation is verified. It marks the hold as used when another key is pressed with Ctrl, so other Ctrl+key binds pass through.
   - It is off in combat unless `instantInCombat` is set.
+- **0.5.0 fixes:** the box gets `ChatFontNormal` and no letter or byte limit; arming checks it really has focus and text, and logs the focused frame when not; the selection is re-applied while armed and just before the copy; a binding press while armed but unfocused re-arms instead of reporting a false copy. `/rp debug` shows the last copy attempt.
 - **TWOPRESS mode, and any custom key:** the override binding `CTRL-C` -> `RPCopySilentCopyBtn` arms on the first press, and the second press copies. The binding is always set when the copy key is `CTRL-C`, so a fast Ctrl+C also works in INSTANT mode.
 
 ## 7. Adventures (Adventures.lua + Events.lua)
@@ -169,14 +178,16 @@ Addons can't write to the clipboard. The only route is a focused EditBox with th
 | `spellLines`, `npcLines` | Counts, capped by `ns.Limit("spellCap")` and `ns.Limit("npcCap")` |
 | `keyLoot[]` | `{ colored, plain, looter, source }` |
 | `participants[].guild`, `.guildmate` | Guild, and whether it is the player's guild |
-| `fullTimeline[]` | Max `ns.Limit("timelineMax")` lines (500) |
+| `fullTimeline[]`, `tlRemoved` | Max `ns.Limit("timelineMax")` lines (500); a line handle is `tlRemoved + index`, so a line can be updated in place (`ns.UpdateAdventureLine`) |
+| `killCounts[name]`, `pvpKills`, `pvpDeaths`, `levelStart`, `levelEnd`, `questsDone`, `places[]`, `milestones[]`, `metCompanions[]` | 0.5.0 stats for the Summary, header and Story Book |
+| `shots[]` | `{ n, at, kind, description, zone }`, capped by `shotCap` |
 | `exportText` | The Full Log, built at end |
-| `story`, `book` | The imported story and its Story Book details (`title`, `instance`, `duration`, `zone`, `date`, `party`, `kills`, `wipes`, `deaths`, `chapters`, `edited[field]`) |
+| `story`, `book` | Before 0.5.0 only: moved into `RPCopyDB.stories` by `ns.MigrateStories` |
 
 **Timeline tags** (`[HH:MM:SS] ...`):
 
 - Lifecycle: `[PAUSED]`, `[RESUMED]`, `[RELOAD]`.
-- Fights (Chronicle): `[FIGHT]` one line per fight, written by `ns.FightFlush` when the poller sees the whole group out of combat (or on pause / end / logout). Skipped under `minFightSec` with no kill or death. `[COMBAT START]` / `[COMBAT END]` are gone and are filtered out of old runs' Full Logs.
+- Fights (Chronicle): `[FIGHTS]` folds plain trash fights (no notable kill, death or boss) into one streak line, updated in place while the next one starts within 300 s. `[FIGHT]` one line per notable fight, with the spells used (`ns.FightNoteSpell`) and the outcome (defeated, it escaped, the party disengaged, you disengaged), written by `ns.FightFlush` when the poller sees the whole group out of combat (or on pause / end / logout). Skipped under `minFightSec` with no kill or death. `[COMBAT START]` / `[COMBAT END]` are gone and are filtered out of old runs' Full Logs.
 - `[KILL]`: an enemy seen in the fight that reads as dead. Rares and rare elites always, elites only outside instances. Bosses are left to `[BOSS KILL]`.
 - `[QUEST]`, `[QUEST TEXT]` (240 chars, `$N` / `$C` / `$R` filled), `[NPC]` (`ns.ChronicleNpc`: yells, boss emotes and named NPCs 8 s apart, other mob chatter one line per name per 3 minutes, de-duplicated for 10 minutes, `npcCap` per run; flee emotes go into the fight), `[LEVEL]`, `[PLACE]` (subzones, each at most every 5 minutes), `[SKILL]` (one line per skill per 10 minutes), `[MILESTONE]`, `[ATMOSPHERE]` (`GetGameTime`, `IsIndoors`; at start and on a new zone if the phase changed or 20 minutes passed).
 - Bosses:
@@ -190,7 +201,10 @@ Addons can't write to the clipboard. The only route is a focused EditBox with th
   - `[DANGER]`: a party member is under 10% HP in combat.
   - `[SAVED]`: they are back at 40% or more and alive. This can also happen after combat.
   - `[LOW MANA]`: 8% or less.
-- `[SPELL]`: party and pet casts in combat. In instances at most one per caster and spell every 30 s with a global gap of 1 s; in the open world 60 s and 3 s. `spellCap` per run. Auto Shot, Shoot and Attack are skipped.
+- `[PVP]`: hostile players who die in the fight, and PvP deaths.
+- `[QUEST] Objective done:` from `QUEST_LOG_UPDATE` / `UNIT_QUEST_LOG_CHANGED` (`ScanObjectives`, seeded at start so old objectives aren't logged).
+- `[SHOT N]`: a screenshot with its caption (`ns.RecordAdventureScreenshot`).
+- `[SPELL]`: since 0.5.0 only crowd control and big cooldowns; other party and pet casts in a fight go into its `[FIGHT]` line. In instances at most one per caster and spell every 30 s with a global gap of 1 s; in the open world 60 s and 3 s. `spellCap` per run. Auto Shot, Shoot and Attack are skipped.
 - `[CC]`:
   - From `UNIT_AURA` on player and party1-4: a new harmful aura whose name matches a CC word list (polymorph, fear, stun, sap, sleep and so on).
   - From `UnitIsCharmed`: "is mind controlled!" and "breaks free".
@@ -198,7 +212,7 @@ Addons can't write to the clipboard. The only route is a focused EditBox with th
   - `[PET]` when a pet is under 25% HP in combat (30 s cooldown) or comes back to life.
   - `[PET DEATH]` when it dies.
   - Tracked units: `pet` and `partypet1-4`, via `UNIT_HEALTH` and `UNIT_PET`.
-- Other events: `[DEATH]` (yours from `PLAYER_DEAD`, party members' from `UNIT_HEALTH`, with the foe and last HP), `[WIPE #N]` (3 deaths in 45 s, or everyone dead), `[REZ]`, `[LOOT]` (green and better, and quest items, with the looter and source), `[NPC Emote]`, `[HIGHLIGHT]` (Mark Moment) and `[SCREENSHOT]`.
+- Other events: `[DEATH]` (yours from `PLAYER_DEAD`, party members' from `UNIT_HEALTH`, with the foe and last HP), `[WIPE #N]` (3 deaths in 45 s, or everyone dead), `[REZ]`, `[LOOT]` (green and better, and quest items, with the looter and source), `[NPC Emote]`, `[HIGHLIGHT]` (Mark Moment). Repeat loot of the same item by the same looter within 15 minutes updates one line with `xN`.
 - Every kind checks `ns.LogOn(cat)`. OOC text (`(( ))`, `[OOC`, the word ooc) is never recorded (`ns.IsOocText`), and guild and world channels never go into a run.
 - Chat lines are tagged with the fight, for example `[Party | vs Arugal 5% HP] Mira: OOM!`.
 
@@ -210,13 +224,14 @@ Addons can't write to the clipboard. The only route is a focused EditBox with th
 **Full Log** (`ns.BuildAdventureFullLog`), in order:
 1. The trigger (`use story`, or `use adventure story` for world runs), then `[ADVENTURE: title]` and `Run type: ... | Zone | Date | Duration | Wipes | Deaths`, plus a note for interrupted runs.
 2. The roster, with `<Guild> (guildmate)` and a "Guildmates in the party" line.
-3. `Known companions:`: only party members saved in the Companion book with a note, never you (`ns.GetKnownCompanionNotes`).
-4. Bosses, "Foes defeated: N (notable: ...)", Notable Loot `item -> Looter (source)`, Coin looted, Skill-ups, starred highlights.
-5. The last `timelineMax` timeline lines.
+3. `Known companions:`: party members and companions met in the run (`metCompanions`) with notes, never you and never Include = Never (`ns.GetKnownCompanionNotes`). Pets are on the roster line.
+4. World runs: Levels, Quests completed, Places (no Wipes). Bosses, "Foes defeated: N" by type, "Notable kills", Notable Loot `item -> Looter (source)`, Coin looted, Skill-ups, starred highlights.
+5. A Screenshots list (`[Shot N] caption`) that the templates ask the AI to place.
+6. The last `timelineMax` timeline lines.
 
 `ns.GetFullLogSize(adv)` and `ns.GetAiLimit()` feed the size meter in Recordings.
 
-**Summary** (`ns.BuildAdventureSummary`) is the in-game overview. Its boss kill list has icons.
+**Summary** (`ns.BuildAdventureSummary`) is the in-game overview, by run type: zeros are hidden, each stat is gated by its `kinds` in `ns.SUMMARY_STATS` and by `ns.SummaryOn`. `ns.GetRunHeroStats` feeds the top bar.
 
 ## 8. Stories
 
@@ -224,8 +239,10 @@ Addons can't write to the clipboard. The only route is a focused EditBox with th
 1. Copy the Full Log.
 2. The AI, using the Dungeon/Raid Story (`wow-dungeon-raid-story`) or Adventure Story (`wow-open-world-story`) skill, writes a story with WoW color codes, a header (title; `instance | duration | zone`; `Date: | Party:`), `Chapter N:` lines and a footer (`Bosses: | Wipes: | Deaths:`).
 3. Paste it into the Import modal and pick the run.
-4. `ns.SetAdventureStory` stores it, cleaned by `NormalizeStoryText`, and fills `adv.book` from `ns.ParseStoryMeta`. Fields edited by hand (`book.edited`) survive a re-import.
-5. The Story Book renders `ns.DecorateStoryBosses(NormalizeStoryText(story), run)`. `ns.GetBookInfo(adv)` gives the details with run fallbacks and the entry name "title - instance". Share uses `ns.GetStoryPlainText`.
+4. `ns.SetAdventureStory(advId, text)` stores it in `RPCopyDB.stories` (one per run, `ns.StoryForRun`), cleaned by `NormalizeStoryText` and, when `autoColorStory` is on, `ns.AutoColorStory`. It copies the run's details into the story and fills `st.book` from `ns.ParseStoryMeta` (which also reads foes, quests and levels). Fields edited by hand (`book.edited`) survive a re-import. When the run is gone, Re-Import uses `ns.SetStoryText(storyId, text)`.
+5. The Story Book renders `ns.DecorateStoryBosses(NormalizeStoryText(text), st)` with `[Shot N]` markers stripped. `ns.GetBookInfo(st)` gives the details with run fallbacks and the entry name "title - instance"; `ns.GetBookStats(info)` the stats by kind. Share uses `ns.GetStoryPlainText`.
+
+`AutoColorStory` colors plain prose only (it walks the escape codes): party in class colors, pets `80cbc4`, places `40e0d0`, foes `dc143c`, NPCs `fff0a0`, items in their link color. A first name alone is colored only when it is unique.
 
 `DecorateStoryBosses`:
 - It walks the text, skipping `|c..`, `|r`, `|T..|t`, `|A..|a` and `|H..|h` codes.
@@ -235,7 +252,7 @@ Addons can't write to the clipboard. The only route is a focused EditBox with th
 - Runs from before 0.3.1 have no `bossInfo`, so their bosses get a skull.
 
 **Templates** (`UI_Options.lua`, shown with `UI.OpenSkillTemplateModal`):
-- The RP character skill template.
+- The RP character skill template (0.5.0: a short chat-sized persona with 5 moods, per-channel rules and a personalize note; `<REPLY_LENGTH>` comes from `rpReplyLength` via `UI.GetRpSkillTemplate()`).
 - Two story templates, built from `STORY_SHARED_RULES` plus a structure part each: Dungeon/Raid (one chapter per boss, mode `STORY`) and Adventure (open world, by place and event, mode `ADVENTURE`). The shared part has the tag list, guildmates, the Story Book header and footer, the color palette with gray Priests and crimson bosses, and WoW-safe formatting.
 - When you add a Full Log tag, update the story template too.
 
@@ -245,15 +262,15 @@ Addons can't write to the clipboard. The only route is a focused EditBox with th
   - Default 680x490, minimum 600x450.
   - In `UISpecialFrames`, so Esc closes it.
   - Header: title, close button, gear (Options) and version badge.
-  - Left rail (80 px): Copy, Companions and Adventures, plus a REC / PAUSED chip.
+  - Left rail (80 px): Copy, Companions, Adventures and Story Book, plus a REC / PAUSED chip.
   - Content area and a status line (`UI.SetStatus(msg, kind)`, shown for 8 s).
-- **Sections:** `UI.NewSection(key, title, hint, onShow)` and `UI.ShowSection(key)`. The keys are COPY, PLAYERS, ADVENTURES and OPTIONS (`ns.state.section`). ADVENTURES has two sub-views, `A.recView` and `A.bookView`, picked by `ns.state.adventureSub` (`REC` / `BOOK`).
-- **Resize:** `UI.PinTopLeft` runs before `StartSizing`, which fixes the old jump. Size and place are saved. Right-clicking the grip calls `UI.ResetWindow`. `UI.AddReflow` callbacks re-layout views.
+- **Sections:** `UI.NewSection(key, title, hint, onShow)` and `UI.ShowSection(key)`. The keys are COPY, PLAYERS, ADVENTURES, BOOK and OPTIONS (`ns.state.section`). Since 0.5.0 the Story Book is its own BOOK section; `UI.ShowAdventuresSub` is kept as a wrapper that calls `UI.OpenRecording` or `UI.OpenStoryBook`.
+- **Resize:** `UI.PinTopLeft` runs before `StartSizing`. 0.5.0: the frame is `SetDontSavePosition` and `SetUserPlaced(false)` after a move, reflow is throttled to once a frame, `UI.StopSizing` also runs on hide and when the grip sees the mouse button up, and the saved place is clamped on screen. Size and place are saved. Right-clicking the grip calls `UI.ResetWindow`. `UI.AddReflow` callbacks re-layout views.
 - **Widgets:**
   - `UI.CreateSleekButton(parent, w, h, text, style)` with styles gold, good, tool, danger and rail, plus `SetIcon` and `tipTitle` / `tipText`. Change `btn.accentStyle` then call `btn.ApplyNormalLook()` to recolor.
   - `UI.ShowPrompt(text, label1, fn1, label2, fn2, label3, fn3)` and `UI.ShowCopyBox(title, sub, text)`.
   - Theme helpers: `UI.ApplyDarkGlass`, `UI.ApplyPanelLook` and `UI.ApplyStoryTomeLook`. `UI.ICONS` holds the icon paths.
-- **Options pages:** General, Keybinds, Slice Tabs, Recording (key `ADVENTURES`), Full Log (`FULLLOG`), AI Setup and Debug (`UI.OpenOptionsPage(key)`).
+- **Options pages:** General, Keybinds, Slice Tabs, Recording (key `ADVENTURES`), Full Log (`FULLLOG`), Summary, Companions, Stories & Export (`STORIES`), AI Setup (`AI`), Privacy and Debug (`UI.OpenOptionsPage(key)`).
 - **Floating `[RP]` button:** draggable. Left-click toggles the window and right-click opens the recording menu. While recording the label is red with a pulsing red dot and border; while paused it is dimmed (alpha 0.55) and amber. `iconState = false` turns that off. Mor wants it kept, and no minimap button.
 
 ## 10. Keybindings and commands
@@ -285,6 +302,8 @@ RPCopy's own keys (Options > Keybinds) are override bindings that click hidden b
 | `btn` | Show or hide the `[RP]` button |
 | `book` / `stories` | Open the Story Book |
 | `debug`, `debug clear` | Debug report in a copy box, or empty the log |
+| `setup` / `privacy` | Show the first-run setup again |
+| `wipe` | Delete all RPCopy data after a confirmation (`ns.WipeAllData`) |
 | `clear` | Clear the session logs |
 | `diag` | What RPCopy can read about your target |
 
@@ -311,12 +330,13 @@ Globals: `RPCopy_Open(note, section)`, `RPCopy_Toggle`, `RPCopy_QuickCopy`, `RPC
 
 The file is a batch header followed by a PowerShell body.
 - It reads `WTF\Account\*\SavedVariables\RPCopy.lua` with a small Lua table parser.
-- For each run, it writes `<date> - <title>.html` (colored, with the same boss icons as HTML emoji spans), `.txt` and `- Full Log.txt`, plus an `index.html`, to `World of Warcraft\_forever_\RPCopy Stories\<account>\`.
+- For each story in `db.stories` (and legacy `run.story`, and runs with no story as Full Log only), it writes `<date> - <title>.html` (colored, with the same boss icons as HTML emoji spans), `.txt` and `- Full Log.txt`, plus an `index.html` with cover images, to `World of Warcraft\_forever_\RPCopy Stories\<account>\`.
+- Screenshots (0.5.0): it reads `WoWScrnShot_MMDDYY_HHMMSS` files (folder: `RPCOPY_SHOTS`, then `exportShotsDir`, then `_forever_\Screenshots`) from 30 s before the run to 2 minutes after, matches recorded shots within 3 s for their number and caption, copies them with ~1280 px JPEG previews (System.Drawing) into `exportImageDir` or `images\`, and places them at `[Shot N]` markers, then by chapter title words, then by time, then in a gallery.
 - It needs only Windows PowerShell. It can't be run in Claude's Linux sandbox, so changes need a test on Mor's PC.
 
 ## 13. Build, test, release
 
-- **Locals check:** run `python tools/check_locals.py <file>.lua` on every changed file. Every main chunk is 50 or under (Events.lua is the highest at 50 and Chronicle.lua 49, on 0.4.0).
+- **Locals check:** run `python tools/check_locals.py <file>.lua` on every changed file. Every main chunk is well under 200 (on 0.5.0 Chronicle.lua is the highest at 54, Events.lua 51, Adventures.lua 48).
 - **Smoke test** (cloud sessions): a lupa (Lua 5.1) mock of the WoW API. It loads the toc files in order, fires login, clicks every button and fires chat, loot and run events.
 - **Release:**
   1. Bump the version in 4 places.

@@ -88,8 +88,9 @@ function UI.EnsureOptions()
     for _, field in ipairs({ "markMomentKey", "openWindowKey", "runStartKey", "runPauseKey", "runEndKey" }) do
         if type(db[field]) ~= "string" then db[field] = "" end
     end
-    -- Ctrl+C copy style: INSTANT (hold Ctrl, press C) or TWOPRESS (Ctrl+C twice)
-    if db.copyMode ~= "INSTANT" and db.copyMode ~= "TWOPRESS" then db.copyMode = "INSTANT" end
+    -- Ctrl+C copy style: INSTANT (hold Ctrl, press C), TWOPRESS (Ctrl+C twice)
+    -- or BOX (0.5.1: Ctrl+C shows the snapshot selected in a visible box)
+    if db.copyMode ~= "INSTANT" and db.copyMode ~= "TWOPRESS" and db.copyMode ~= "BOX" then db.copyMode = "INSTANT" end
     if db.instantInCombat == nil then db.instantInCombat = false end
     if not db.lastSliceId or db.lastSliceId == "" then db.lastSliceId = "CHAT" end
     if type(db.optionsPage) ~= "string" then db.optionsPage = "GENERAL" end
@@ -295,9 +296,19 @@ function UI.SavePosition()
     end
 end
 
-copyFrame:SetScript("OnDragStart", function(self) self:StartMoving() end)
+-- 0.5.0 (resize jumps): RPCopy saves the place itself, so the client's own
+-- layout cache must not restore an older one on top of it
+if copyFrame.SetDontSavePosition then pcall(copyFrame.SetDontSavePosition, copyFrame, true) end
+
+copyFrame:SetScript("OnDragStart", function(self)
+    if UI.sizing then return end
+    self:StartMoving()
+    UI.moving = true
+end)
 copyFrame:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
+    UI.moving = false
+    if self.SetUserPlaced then pcall(self.SetUserPlaced, self, false) end
     UI.SavePosition()
 end)
 
@@ -338,7 +349,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.4.0") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.5.4") .. "|r")
 end
 
 -- Left rail
@@ -526,10 +537,19 @@ do
     ApplyBounds()
     if copyFrame.SetClampedToScreen then copyFrame:SetClampedToScreen(true) end
 
-    local function Reflow()
+    local function ReflowNow()
         for _, fn in ipairs(UI.reflowHooks) do pcall(fn) end
     end
-    UI.Reflow = Reflow
+    -- 0.5.0: OnSizeChanged fires for every pixel while you drag; lay the
+    -- window out once per frame (and once more when the drag ends)
+    local reflowFrame = CreateFrame("Frame")
+    reflowFrame:Hide()
+    reflowFrame:SetScript("OnUpdate", function(self)
+        self:Hide()
+        ReflowNow()
+    end)
+    local function Reflow() reflowFrame:Show() end
+    UI.Reflow = ReflowNow
 
     local function ClampSize(w, h)
         local mw, mh = MaxSize()
@@ -543,17 +563,50 @@ do
         RPCopyDB.frameW, RPCopyDB.frameH = ClampSize(copyFrame:GetWidth(), copyFrame:GetHeight())
     end
 
+    -- A saved place that is off screen now (another resolution or UI
+    -- scale) is pulled back so the whole title bar can be reached
+    local function ClampPlace(x, y, w, h)
+        local sw = (UIParent and UIParent:GetWidth()) or 1600
+        local sh = (UIParent and UIParent:GetHeight()) or 1000
+        x = math.min(math.max(tonumber(x) or 0, 0), math.max(0, sw - w))
+        y = math.min(math.max(tonumber(y) or sh, h), sh)
+        return math.floor(x), math.floor(y)
+    end
+
+    local function StopSizing()
+        if not UI.sizing then return end
+        UI.sizing = false
+        copyFrame:StopMovingOrSizing()
+        if copyFrame.SetUserPlaced then pcall(copyFrame.SetUserPlaced, copyFrame, false) end
+        SaveSize()
+        UI.SavePosition()
+        ReflowNow()
+    end
+    UI.StopSizing = StopSizing
+
     copyFrame:HookScript("OnSizeChanged", Reflow)
+    copyFrame:HookScript("OnHide", function()
+        StopSizing()
+        if UI.moving then
+            copyFrame:StopMovingOrSizing()
+            UI.moving = false
+            UI.SavePosition()
+        end
+    end)
     copyFrame:HookScript("OnShow", function()
         ApplyBounds()
+        local w, h = copyFrame:GetWidth(), copyFrame:GetHeight()
         if RPCopyDB and RPCopyDB.frameW and RPCopyDB.frameH then
-            copyFrame:SetSize(ClampSize(RPCopyDB.frameW, RPCopyDB.frameH))
+            w, h = ClampSize(RPCopyDB.frameW, RPCopyDB.frameH)
+            copyFrame:SetSize(w, h)
         end
         if RPCopyDB and RPCopyDB.frameX and RPCopyDB.frameY then
+            local x, y = ClampPlace(RPCopyDB.frameX, RPCopyDB.frameY, w, h)
+            RPCopyDB.frameX, RPCopyDB.frameY = x, y
             copyFrame:ClearAllPoints()
-            copyFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", RPCopyDB.frameX, RPCopyDB.frameY)
+            copyFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
         end
-        Reflow()
+        ReflowNow()
     end)
 
     function UI.ResetWindow()
@@ -564,7 +617,7 @@ do
             RPCopyDB.frameW, RPCopyDB.frameH = nil, nil
             RPCopyDB.frameX, RPCopyDB.frameY = nil, nil
         end
-        Reflow()
+        ReflowNow()
         UI.SetStatus("Window size and position reset.", "good")
     end
 
@@ -581,17 +634,19 @@ do
             -- Sizing a CENTER-anchored frame from its corner moves the top-left
             -- too, which made it jump to max size for a moment. Pin the
             -- top-left first so only the bottom-right corner follows the mouse.
+            if UI.moving then return end
             UI.PinTopLeft()
             copyFrame:StartSizing("BOTTOMRIGHT")
+            UI.sizing = true
         end
     end)
     grip:SetScript("OnMouseUp", function(_, button)
-        if button == "LeftButton" then
-            copyFrame:StopMovingOrSizing()
-            SaveSize()
-            UI.SavePosition()
-            Reflow()
-        end
+        if button == "LeftButton" then StopSizing() end
+    end)
+    -- A release the grip never saw (mouse let go over another frame or
+    -- outside the game) must not leave the window stuck to the cursor
+    grip:SetScript("OnUpdate", function()
+        if UI.sizing and IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then StopSizing() end
     end)
     grip:SetScript("OnClick", function() UI.ResetWindow() end)
     grip:SetScript("OnEnter", function(self)
@@ -739,6 +794,16 @@ do
         scroll:UpdateScrollChildRect()
     end)
     scroll:SetScrollChild(eb)
+    -- 0.5.1: a quick-copy box closes itself once Ctrl+C has copied
+    eb:SetScript("OnKeyDown", function(self, key)
+        if f.autoClose and key == "C" and IsControlKeyDown() then
+            self:HighlightText()
+            if ns.Debug then ns.Debug("copy", "copy box Ctrl+C: len " .. #(self:GetText() or "")) end
+            UI.ShowToast("|cffffd100Copied|r |cff5cb85cto clipboard!|r", 1.8, 0.36, 0.72, 0.36)
+            f.autoClose = false
+            if C_Timer and C_Timer.After then C_Timer.After(0.25, function() f:Hide() end) else f:Hide() end
+        end
+    end)
 
     local selBtn = UI.CreateSleekButton(f, 110, 24, "Select All", "gold")
     selBtn:SetPoint("BOTTOMLEFT", 14, 11)
@@ -752,8 +817,9 @@ do
     closeBtn:SetPoint("BOTTOMRIGHT", -14, 11)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
 
-    function UI.ShowCopyBox(titleText, subText, body)
+    function UI.ShowCopyBox(titleText, subText, body, autoClose)
         f.text = body or ""
+        f.autoClose = autoClose and true or false
         title:SetText(titleText or "|cffffd100RPCopy|r")
         sub:SetText(subText or "")
         eb:SetText(f.text)

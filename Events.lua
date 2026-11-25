@@ -107,9 +107,21 @@ local function RestoreRunOnce()
     end
 end
 
+-- 0.5.0: chat capture per type (first-run setup, Options > Privacy)
+local CAPTURE_OF = {
+    Say = "say", Yell = "say", Emote = "say", Whisper = "whisper", ["To"] = "whisper",
+    Party = "group", Raid = "group", Instance = "group", ["Raid Warning"] = "group",
+    Guild = "guild", Officer = "guild", Channel = "world",
+}
+
 local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawChannelName)
+    local capKey = CAPTURE_OF[channelLabel]
+    if capKey and ns.CaptureOn and not ns.CaptureOn(capKey) then return end
     local cleanMsg = ns.CleanText(rawMsg)
     if not cleanMsg or cleanMsg == "" then return end
+    if not (ns.IsSecret and ns.IsSecret(rawAuthor)) then
+        ns.state.lastRawAuthor = tostring(rawAuthor or "")
+    end
 
     local author = ns.StripRealm(rawAuthor) or "Unknown"
     local speakerTag = ns.FormatSpeakerTag(author)
@@ -159,6 +171,7 @@ local function HandlePlayerChat(channelLabel, colorHex, rawMsg, rawAuthor, rawCh
 end
 
 local function HandleNpcChat(kindLabel, rawMsg, rawAuthor, isEmote, event)
+    if ns.CaptureOn and not ns.CaptureOn("npc") then return end
     local cleanMsg = ns.CleanText(rawMsg)
     if not cleanMsg or cleanMsg == "" then return end
     local npcName = ns.SafeStr(rawAuthor) or "NPC"
@@ -835,6 +848,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "CHAT_MSG_WHISPER_INFORM" then
         local msg, recipient = ...
         local cleanMsg = ns.CleanText(msg)
+        if ns.CaptureOn and not ns.CaptureOn("whisper") then cleanMsg = nil end
         if cleanMsg and cleanMsg ~= "" then
             local selfName = ns.StripRealm(UnitName("player")) or "Me"
             local recipClean = ns.StripRealm(recipient) or "Unknown"
@@ -842,7 +856,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                 ns.ColorText("[Whisper]", ns.COLORS.whisper),
                 ns.ColorText(recipClean, ns.COLORS.speaker),
                 ns.ColorText(cleanMsg, ns.COLORS.text))
-            ns.PushLog(ns.logs.social, line, selfName, "Whisper")
+            local wEntry = ns.PushLog(ns.logs.social, line, selfName, "Whisper")
+            if type(wEntry) == "table" then wEntry.to = recipClean end
             if ns.HandleConversationCapture then
                 ns.HandleConversationCapture("Whisper", selfName, cleanMsg, true, recipClean)
             end
@@ -912,6 +927,14 @@ do
         SKIP_SPELLS = { ["Auto Shot"] = true, ["Shoot"] = true, ["Attack"] = true, ["Auto Attack"] = true },
         SPELL_UNIT_CD = 30, SPELL_GAP = 1.0, WORLD_SPELL_CD = 60, WORLD_SPELL_GAP = 3.0,
         BOSS_CAST_CD = 12,
+        BIG_CD = { ["bestial wrath"] = true, ["rapid fire"] = true, ["recklessness"] = true, ["shield wall"] = true,
+            ["last stand"] = true, ["avenging wrath"] = true, ["divine shield"] = true, ["lay on hands"] = true,
+            ["divine intervention"] = true, ["icy veins"] = true, ["arcane power"] = true, ["combustion"] = true,
+            ["evocation"] = true, ["ice block"] = true, ["innervate"] = true, ["tranquility"] = true, ["rebirth"] = true,
+            ["bloodlust"] = true, ["heroism"] = true, ["power infusion"] = true, ["adrenaline rush"] = true,
+            ["blade flurry"] = true, ["evasion"] = true, ["vanish"] = true, ["feign death"] = true, ["death wish"] = true,
+            ["barkskin"] = true, ["metamorphosis"] = true, ["soulstone resurrection"] = true, ["fear ward"] = true,
+            ["mana tide totem"] = true, ["reincarnation"] = true, ["shadowfiend"] = true, ["guardian spirit"] = true },
         spellAt = {}, lastSpell = 0, bossCastAt = {}, bossStartAt = {},
         cc = {}, charmed = {}, auraScanAt = {}, pets = {},
         CC_WORDS = { "polymorph", "fear", "psychic scream", "intimidating shout", "howl of terror", "death coil",
@@ -971,15 +994,28 @@ do
     -- [SPELL] party casts, pets included
     local function OnPartySpell(run, unit, spellID, inInstance)
         if not GroupInCombat() or not ns.LogOn("spells") then return end
-        local who
+        local who, short
         if T.PETS[unit] then
             local petName, owner = ns.SafeStr(UnitName(unit)), ShortName(T.PETS[unit])
             who = petName and owner and string.format("%s (%s's pet)", petName, owner)
+            short = petName
         else
             who = ShortName(unit)
+            short = who
         end
         local spell = SpellName(spellID)
         if not who or not spell or T.SKIP_SPELLS[spell] then return end
+        -- 0.5.0: abilities fold into the [FIGHT] line ("used Arcane Shot;
+        -- Snips: Claw"). Only crowd control and big cooldowns stand alone.
+        local low = spell:lower()
+        local notable = T.BIG_CD[low] or false
+        if not notable then
+            for _, w in ipairs(T.CC_WORDS) do
+                if low:find("%f[%a]" .. w) then notable = true break end
+            end
+        end
+        local folded = ns.FightNoteSpell and ns.FightNoteSpell(unit == "player" and "you" or short, spell)
+        if folded and not notable then return end
         local now = GetTime()
         local key = who .. ":" .. spell
         local cd = inInstance and T.SPELL_UNIT_CD or T.WORLD_SPELL_CD
@@ -1077,7 +1113,10 @@ do
         if not UnitExists(unit) then return end
         local petName = ns.SafeStr(UnitName(unit))
         if not petName then return end
-        local label = string.format("%s (%s's pet)", petName, owner)
+        -- 0.5.0: name plus species, so "Crab" is never just a word
+        local species = ns.GetPetSpecies and ns.GetPetSpecies(unit)
+        local kind = (unit == "pet" and ns.GetPetKind) and ns.GetPetKind("pet") or "pet"
+        local label = string.format("%s (%s%s's %s)", petName, species and (species .. ", ") or "", owner, kind)
         local dead = UnitIsDead(unit) == true
         if dead and not st.dead then
             ns.RecordAdventureLine(string.format("[PET DEATH] %s died", label))

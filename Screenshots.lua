@@ -8,9 +8,10 @@ local DEBOUNCE = 20
 local LOADING_RETRY = 1
 local LOADING_RETRIES = 10
 local UI_RESTORE = 2.0
-local MAX_SHOTS = 12
+local OWN_WINDOW = 6   -- seconds: a SCREENSHOT_SUCCEEDED this soon after our own shot is ours
 
 local pending, lastShotAt, loading, uiFaded = nil, nil, false, false
+local ownShotAt = nil
 
 -- When two moments land inside the delay, the bigger one labels the shot.
 local PRIORITY = { story = 1, newzone = 2, quest = 3, mark = 4, levelup = 5, boss = 6 }
@@ -35,14 +36,14 @@ local function Capture(kind, description)
     if not RPCopyDB or not RPCopyDB.autoScreenshots then return end
     local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
     if not run then return end
+    -- 0.5.1: no automatic shots in open-world runs unless switched on
+    -- (Options > Recording). Mark Moment is your own choice, so it still shoots.
+    if run.kind == "world" and kind ~= "mark" and not RPCopyDB.worldAutoShots then return end
+    -- 0.5.0: the per-run cap (Options > Full Log limits) stops new shots
+    -- instead of dropping the oldest ones
+    if not ns.RecordAdventureScreenshot(kind, description) then return end
     lastShotAt = GetTime()
-    run.shots = run.shots or {}
-    ns.PushBounded(run.shots, {
-        at = time(),
-        kind = kind,
-        description = description,
-        zone = ns.GetCurrentWhere(),
-    }, MAX_SHOTS)
+    ownShotAt = GetTime()
 
     local function Fire()
         pcall(Screenshot)
@@ -110,7 +111,24 @@ for _, ev in ipairs({
     pcall(shotFrame.RegisterEvent, shotFrame, ev)
 end
 
+-- 0.5.0: your own Print Screen shots join the run too (with a caption),
+-- so the exporter can place them in the story. Options > Recording.
+local function OnManualShot()
+    if not RPCopyDB or RPCopyDB.recordManualShots == false then return end
+    if ownShotAt and (GetTime() - ownShotAt) < OWN_WINDOW then
+        ownShotAt = nil
+        return
+    end
+    local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+    if not run or run.paused then return end
+    local foe = ns.FightCurrentFoe and ns.FightCurrentFoe()
+    local where = ns.GetCurrentWhere()
+    local caption = foe and string.format("Fighting %s in %s", foe, where) or ("A view of " .. where)
+    ns.RecordAdventureScreenshot("manual", caption)
+end
+
 shotFrame:SetScript("OnEvent", function(_, event)
+    if event == "SCREENSHOT_SUCCEEDED" then pcall(OnManualShot) end
     if event == "LOADING_SCREEN_ENABLED" then
         loading = true
         RestoreUI()

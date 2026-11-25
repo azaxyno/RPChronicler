@@ -4,48 +4,85 @@ local UI = ns.UI
 -- =========================================================
 -- AI skill templates (pasted into Gemini / ChatGPT / Claude once)
 -- =========================================================
+-- 0.5.0: a shorter, chat-sized persona template. <REPLY_LENGTH> is filled
+-- in from Options > AI Setup (short, medium or long).
 local RP_SKILL_TEMPLATE_TEXT = [[---
 name: <character-name>-rp-<class>
-description: Generate short, casual World of Warcraft roleplay responses for <Character Full Name> (<Faction> <Race> <Class>) inspired by <Persona Inspiration>. Use when the user uploads a WoW chat screenshot, mentions "<trigger>" (such as "use <trigger>"), or asks for <Class> RP replies in General, Say, Whisper, or Party chat.
+description: Generate short, lively World of Warcraft: Forever roleplay responses for a <gender> <Faction> <Race> <Class> (<Character Full Name>) inspired by <Persona Inspiration>. Use when the user pastes an RPCopy snapshot or a WoW chat screenshot for <First Name>, mentions <trigger> or <surname> (such as "use <trigger>"), or asks for <Class> RP replies in General, Guild, Say, Party or Whisper chat.
 ---
 
-WOW RP <FACTION> <RACE> <CLASS> (<PERSONA INSPIRATION> PERSONA)
+STARTER TEMPLATE: personalize it. Replace every <...> field, and make it yours: personality, backstory, voice, quirks, the 5 moods and how your character talks. The more of your character is in here, the better the replies. Delete this paragraph when you are done.
 
-Generate short, casual in-character English roleplay replies for <Character Full Name>, a <personality summary> <Faction>-aligned <Race> <Class> in World of Warcraft, capturing the voice and quirks of <Persona Inspiration>.
+WOW FOREVER RP: <FACTION> <RACE> <CLASS> (<CHARACTER FULL NAME>)
+
+Generate 5 short, natural, in-character English chat replies for <Character Full Name>, a <three or four personality words> <Faction> <Race> <Class> in World of Warcraft: Forever, inspired by <Persona Inspiration>.
 
 WHEN TO USE
 
-- The user pastes an RPCopy context snapshot starting with "[Skill Call] use <trigger>" (containing [Location], [Target], [S], [G], [P], [W], [Loot], etc.) or uploads a WoW chat screenshot.
-- The user mentions the trigger words "<trigger>" or "<surname>" (for example: "use <trigger>", "<trigger> reply").
-- The user asks for quick in-character <Class> roleplay responses.
+- The user pastes an RPCopy snapshot that starts with "[Skill Call] use <trigger>" (with [Location], [Target], [Status], chat lines and maybe [Known Player] blocks), or uploads a WoW chat screenshot for <First Name>.
+- The user includes triggers like "use <trigger>", "<trigger>" or "<surname>".
+- The user asks for quick in-character <Class> responses in any WoW chat channel.
 
-CORE PERSONALITY (5 DISTINCT ANGLES)
+VOICE AND PERSONALITY
 
-1. Signature Quirk / Theatrical Angle:
-   - Frames ordinary moments with <Character Full Name>'s signature flair (e.g., dramatic titles, deadpan grand declarations, or noble poise), then drops right back into casual speech.
-   - Invents overly dramatic names for ordinary beasts, spells, gear, or low-level mobs.
+<First Name> feels alive because <she/he/they> actually reacts to what people are saying in chat instead of reciting catchphrases. <Describe the core of the voice in one or two sentences: the kind of humor, the attitude, what flips their mood.>
 
-2. Petty & Witty Banter:
-   - Invents grandiose lore excuses to dodge mundane chores, walking, or blame ("my keen senses are currently sealed for greater prey").
-   - Turns trivial moments into playful rivalry and gets flustered if treated like a novice.
+- React to the room first: engage directly with the specific joke, quest, monster or player in the log. Never force <Class> buzzwords into every line if they do not fit the conversation.
+- Never repeat stock catchphrases: no canned openers like "i am <name>, the great...", and never reuse the same pet, spell or gear joke across turns. Invent fresh angles every time.
+- Casual WoW chat rhythm: natural lowercase without stiff punctuation. <REPLY_LENGTH>
+- Vary the length across the 5 options: some are a few words, one may run a little longer when the moment calls for it.
+- [Known Player] blocks are the user's own notes on the people in the scene (relationship, who they are, shared history). Let them shape how <First Name> talks to that person, but never quote a note.
+- If the snapshot has an [Instruction] line, it is the user's direction for these replies (tone, focus, who to answer). Follow it. It is not chat and never something a character said.
 
-3. Heart & Everyday Habits:
-   - Carries grounded adventurer habits into Azeroth (counting every copper, hating repair/reagent bills, hoarding free food, protecting loot rights).
-   - Loyal to <Faction> and teammates, with a soft spot for <favorite thing/creatures>.
+THE 5 RESPONSE ANGLES
 
-4. Class / Companion / Lore Chaos (Option 4):
-   - Obsessed with <class-specific gimmick: e.g., taming dangerous elites, forbidden arcane theory, questionable engineering>, giving them ridiculous names, and blaming accidental pulls on <pet/spells/fate>.
+Give 5 distinct options, one per mood, labeled with the mood:
 
-5. Unhinged Overkill Mode (Option 5):
-   - Over-the-top <Class> mode: eager to solve every minor problem by unloading big AoE/traps/cooldowns on the entire room, then immediately <Feign / Blink / Vanish / bubble> while the party handles the aggro.
+1. <mood 1 name>: <one line on what this mood does, e.g. delivers an overly grand verdict on an ordinary situation, completely straight-faced>
+2. <mood 2 name>: <e.g. quick snark, competitive pride, or a ridiculous excuse to save face>
+3. <mood 3 name>: <e.g. counts every copper, eyes free food or loot, or shows a soft spot for allies>
+4. <mood 4 name>: <a class or companion angle, e.g. blames the pet, a spell gone wrong, or questionable engineering>
+5. <mood 5 name>: <e.g. casually escalates a minor problem into maximum collateral damage, then plans a quick exit>
 
-CHANNEL CONTEXT & FORMATTING RULES
+CHANNEL AND FORMATTING RULES
 
-1. No Channel Prefixes: Never start replies with /1, /p, /s, /w, or /y. Output pure, copy-paste-ready text.
-2. Adapt to the Chat Channel Context: Check [G], [P], [S], [W], [Y] tags and tailor RP accordingly.
-3. Always Output RP in English: Write all 5 RP chat options in natural, casual lowercase English.
-4. Keep It Short: 1-2 short sentences max per option so it fits fast-paced WoW chat.
-5. Follow the [Instruction] Line: If the snapshot has an [Instruction] line, it is the user's direction for these replies (tone, focus, who to answer, what to do). Follow it. It is not chat and never something a character said.]]
+- No channel prefixes: never start lines with /1, /g, /p, /s or /w. Output pure copy-paste-ready text.
+- Match the channel:
+  - [General] / [Guild]: zone or guild chatter. Keep it conversational and skip physical actions that distant players cannot see.
+  - [Party]: teammate banter aware of pulls, mana breaks, loot and group survival.
+  - [Say]: face to face. A standalone WoW emote (/shrug, /sigh, /giggle, /ponder) may go on its own line when it fits.
+  - [Whisper]: a direct one-on-one reply tailored to the sender.
+- Clean text: keep at least 4 options free of *action* asterisks (at most 1 brief *action*, only if it sharpens the joke). Always write in English.
+
+EXAMPLES (replace them with lines in your character's own voice)
+
+Input: [1. General] [Kaelen]: anyone seen the rare tiger spawn near the ridge?
+
+1. <mood 1>: that beast and i have unfinished business, stay back
+2. <mood 2>: even if i did, why would i hand over my own prey?
+3. <mood 3>: if it drops decent leather, i'm helping you look
+4. <mood 4>: you mean my future best friend? don't you dare
+5. <mood 5>: just pull the whole ridge and i'll sort out the survivors
+
+Input: [Party] [Thorgar]: who just pulled the entire patrol
+
+1. <mood 1>: destiny demanded a true test of our strength
+2. <mood 2>: my aim slipped, partly your fault for standing there
+3. <mood 3>: bright side, more pockets to loot if we live
+4. <mood 4>: my pet made an executive decision
+5. <mood 5>: i'm vanishing in three seconds, good luck everyone]]
+
+local RP_REPLY_LENGTH = {
+    SHORT = "Keep every option punchy: one short sentence or chat fragment (most about 5 to 14 words), never two sentences and never long comma-spliced speeches.",
+    MEDIUM = "Keep options chat-sized: one sentence each (about 10 to 20 words), never a paragraph.",
+    LONG = "Options may be one or two sentences (up to about 30 words) when the scene is slower, but stay chat-sized.",
+}
+
+function UI.GetRpSkillTemplate()
+    local key = (RPCopyDB and RPCopyDB.rpReplyLength) or "SHORT"
+    local text = RP_SKILL_TEMPLATE_TEXT:gsub("<REPLY_LENGTH>", (RP_REPLY_LENGTH[key] or RP_REPLY_LENGTH.SHORT):gsub("%%", "%%%%"))
+    return text
+end
 
 -- 0.4.0: two story skills share the same reading rules, color palette,
 -- header and footer (Story Book parses them), so they are built from parts.
@@ -56,16 +93,17 @@ READING THE LOG (HIDDEN CONTEXT)
 2. Header lines: "Run type:" says Dungeon, Raid or Open world adventure. The Roster gives each member's level, class and role ([Tank], [Healer], [DPS]). A member marked "<Guild> (guildmate)" shares the player's guild: treat them as old companions-in-arms of the same guild and mention the shared guild naturally once or twice. "Known companions:" lines are the player's own RP notes: let them shape how that character acts and talks, but never quote a note or invent a scene from it.
 3. Timestamps, HP and mana are hidden context: [HH:MM:SS], [BOSS HP], [LOW MANA], [DANGER] and combat tags tell you order and intensity only. The story prose must NEVER mention clock times, durations, or any HP, mana or percent numbers. "at 4% HP" becomes "with the beast staggering on its last breath".
 4. Tags and what they mean:
-   [FIGHT] one line per fight: the foes, how long it took, who fled, who took aggro from whom, who got low, who fell, and how it ended.
+   [FIGHT] one line per fight: the foes, how long it took, the abilities used ("used Arcane Shot; Snips: Claw"), who fled, who took aggro from whom, who got low, who fell, and how it ended. [FIGHTS] a streak of easy fights against the same foe folded into one line ("14x Windsong Crawler"): give it a sentence of travel color, not a scene each.
    [KILL] an elite, rare or named foe defeated. Foes defeated: N in the header counts all foes, trash included.
    [BOSS ENGAGED] [BOSS KILL] [BOSS RESET] [WIPE #N] boss fights and wipes. [BOSS CAST] what a boss cast and at whom.
-   [SPELL] party spells in combat (pets show as "Name (Owner's pet)"). [CC] mind control, fear, stun, polymorph. [AGGRO] a foe turning on someone else.
+   [SPELL] a big cooldown or crowd control cast. [CC] mind control, fear, stun, polymorph. [AGGRO] a foe turning on someone else.
    [DANGER] near death, [SAVED] pulled back from the brink, [DEATH] a death with what they were fighting, [REZ] a resurrection.
-   [PET] [PET DEATH] the party's pets. [MILESTONE] a new spell, pet, mount, achievement, reputation standing, hearthstone bind or flight path.
+   [PET] [PET DEATH] the party's pets. Pets show as "Name (Species, Owner's hunter pet)", e.g. "Snips (Crab, ...)": Snips is the pet's own name and a crab is what it is. Always call the pet by its name and write it as the creature it is ("Snips, her crab"); when name and species are the same ("Crab (Crab, ...)") the pet is simply named Crab. [MILESTONE] a new spell, pet, mount, achievement, reputation standing, hearthstone bind or flight path.
    [QUEST] quests accepted and completed, [QUEST TEXT] the quest giver's own words (quote them sparingly).
    [NPC] [NPC Emote] lines spoken by bosses and named NPCs. [LEVEL] a level up. [SKILL] a profession skill-up. [PLACE] a new place reached.
    [ATMOSPHERE] the time of day (dawn, morning, midday, afternoon, dusk, night) and indoors or open sky: use it to set the mood of the scene.
    [LOOT] an item with who got it and where it came from (crafted, from a foe, quest reward, bought, traded, mail, gathered). [HIGHLIGHT] a moment the player marked: give it a scene.
+   [SHOT N] a screenshot taken at that moment; the "Screenshots" list in the header numbers them. Put the marker [Shot N] on its own line in the story where that picture fits best (each number once, in order), plain and outside any color code: close every |c...|r before it. A marker changes nothing else: after it, keep coloring every name exactly as before. RPCopy hides the markers in game and the exporter shows the pictures there.
    Chat lines ([Party], [Say], [Emote], [Whisper]) are real quotes: weave them in verbatim.
 5. Do not shrink the run into a dry summary. Messy moments (wipes, near deaths, panicked chat, lucky loot) are what make it memorable.
 6. No Icons: never write |T or |A texture codes. RPCopy adds boss icons itself.
@@ -73,19 +111,23 @@ READING THE LOG (HIDDEN CONTEXT)
 STORY BOOK HEADER AND FOOTER (REQUIRED, RPCopy reads them)
 
 Line 1: the story title only, in gold, e.g. |cffffd100Shadows Over Pyrewood|r
-Line 2: |cff9e9e9e<dungeon, raid or region> | <duration from the log header> | <zone>|r
+Line 2: |cff9e9e9e<dungeon, raid or region> | <duration from the log header> | <zone or the places visited>|r (never the same name twice: if the zone is the region, list the main places instead)
 Line 3: |cff9e9e9eDate: <date from the log header> | Party: <names, comma separated>|r
 Then a blank line and the story. Start each chapter with a gold header line: |cffffd100Chapter 1: <chapter name>|r
-Last line (footer): |cff9e9e9eBosses: <N> | Wipes: <N> | Deaths: <N>|r
+Last line (footer), dungeon or raid: |cff9e9e9eBosses: <N> | Wipes: <N> | Deaths: <N>|r
+Last line (footer), open world: |cff9e9e9eFoes: <N> | Quests: <N> | Levels: <from> -> <to> | Deaths: <N>|r and leave out any part that is zero or missing.
 The header and footer are the only place where the duration and the counts may appear.
 
 RPCOPY COLOR PALETTE (|cffRRGGBB...|r)
+
+COLOR EVERY MENTION, IN EVERY CHAPTER: each time a player, pet, place, foe, NPC or item is named, wrap it in its color, not only the first time. Chapter 5 must be as colorful as chapter 1. After a colored name, go back to the prose color.
 
 - Title and chapter headers: |cffffd100 (Gold)
 - Places and scene subheaders: |cff40e0d0 (Teal) or |cffb39ddb (Lavender)
 - Narrative prose: |cffeceff1 (Bright Off-White)
 - Player names in their class color: Warrior |cffC79C6E, Paladin |cffF58CBA, Hunter |cffABD473, Rogue |cffFFF569, Priest |cffC0C0C0 (gray, not white), Death Knight |cffC41F3B, Shaman |cff0070DE, Mage |cff69CCF0, Warlock |cff9482C9, Monk |cff00FF96, Druid |cffFF7D0A, Demon Hunter |cffA330C9, Evoker |cff33937F
-- Bosses, elites and named foes: |cffdc143c (Crimson). Never use the Druid orange for a foe.
+- Pets: |cff80cbc4 (Sea Green)
+- Bosses, elites, named foes and every foe type ("Windsong Crawler"): |cffdc143c (Crimson). Never use the Druid orange for a foe.
 - Wipes, deaths and danger: |cffff5252 (Red)
 - Victories, saves and healing: |cff66bb6a (Green)
 - Loot: |cffffd700 (Loot Gold) or |cffe066ff (Epic Purple)
@@ -215,8 +257,8 @@ function UI.OpenSkillTemplateModal(mode)
         tpl.editBox:SetText(EscapeForEditBox(ADVENTURE_STORY_TEMPLATE_TEXT))
     else
         tpl.title:SetText("|cffffd100Character RP Skill Template (press Ctrl+C to copy)|r")
-        tpl.sub:SetText("|cffb0bac5Paste this into your AI to build a character skill that matches your Skill Call.|r")
-        tpl.editBox:SetText(EscapeForEditBox(RP_SKILL_TEMPLATE_TEXT))
+        tpl.sub:SetText("|cffb0bac5A simple starter: fill in the <...> fields and make it your character before you paste it into your AI.|r")
+        tpl.editBox:SetText(EscapeForEditBox(UI.GetRpSkillTemplate()))
     end
     tpl.frame:Show()
     tpl.editBox:SetFocus()
@@ -309,7 +351,11 @@ local PAGE_ORDER = {
     { key = "SLICES", label = "Slice Tabs" },
     { key = "ADVENTURES", label = "Recording" },
     { key = "FULLLOG", label = "Full Log" },
+    { key = "SUMMARY", label = "Summary" },
+    { key = "COMPANIONS", label = "Companions" },
+    { key = "STORIES", label = "Stories & Export" },
     { key = "AI", label = "AI Setup" },
+    { key = "PRIVACY", label = "Privacy" },
     { key = "DEBUG", label = "Debug" },
 }
 
@@ -488,7 +534,8 @@ do
     local modeBtn = UI.CreateSleekButton(p, 146, 20, "", "tool")
     modeBtn:SetPoint("TOPLEFT", 140, -56)
     modeBtn:SetScript("OnClick", function()
-        RPCopyDB.copyMode = (RPCopyDB.copyMode == "INSTANT") and "TWOPRESS" or "INSTANT"
+        local nextMode = { INSTANT = "TWOPRESS", TWOPRESS = "BOX", BOX = "INSTANT" }
+        RPCopyDB.copyMode = nextMode[RPCopyDB.copyMode] or "INSTANT"
         if UI.DisarmCtrlCopy then UI.DisarmCtrlCopy() end
         UI.RefreshOptionsPage()
     end)
@@ -534,12 +581,16 @@ do
         local isCtrlC = RPCopyDB.quickCopyKey == "CTRL-C"
         if RPCopyDB.copyMode == "INSTANT" then
             modeBtn:SetText("|cffc2d8ffInstant (hold Ctrl)|r")
+        elseif RPCopyDB.copyMode == "BOX" then
+            modeBtn:SetText("|cffc2d8ffCopy box|r")
         else
             modeBtn:SetText("|cffc2d8ffTwo-press|r")
         end
         UI.SetToggleLook(combatBtn, RPCopyDB.instantInCombat, "Instant in combat: ON", "Instant in combat: OFF")
         if not isCtrlC then
             modeNote:SetText("|cff8f9ba8Your Quick Copy key arms the copy; then press Ctrl+C to copy. Copy style only applies to CTRL-C.|r")
+        elseif RPCopyDB.copyMode == "BOX" then
+            modeNote:SetText("|cff8f9ba8Copy box: Ctrl+C shows the snapshot selected in a small box. Press Ctrl+C there to copy, and it closes by itself. The safest style if the others do not copy.|r")
         elseif RPCopyDB.copyMode == "INSTANT" then
             modeNote:SetText("|cff8f9ba8Instant: hold Ctrl a moment, press C, done. Quick Ctrl+key combos still reach your keybinds. A very fast Ctrl+C asks for a second press.|r")
         else
@@ -817,11 +868,15 @@ do
           after = function() if UI.RefreshRecordIcon then UI.RefreshRecordIcon() end end },
         { field = "autoScreenshots", label = "Auto-screenshots",
           tip = "Takes a screenshot on boss kills, level ups and marked moments while a run records." },
+        { field = "worldAutoShots", label = "Auto-screenshots in open world",
+          tip = "OFF (default): auto-screenshots only happen in dungeons and raids. Open-world runs still take a shot when you Mark Moment." },
+        { field = "recordManualShots", invert = true, label = "Add my own screenshots to runs",
+          tip = "Your Print Screen shots during a run join its screenshot list with a caption, so Export_Stories.bat can place them in the story." },
     })
-    local status = Note(p, "", 0, -180)
-    Note(p, "|cff8f9ba8Open-world runs: click Start Recording in Adventures, use the RP icon's right-click menu, or a keybind. A run cut short by a logout or disconnect is saved as interrupted, never lost.|r", 0, -206)
+    local status = Note(p, "", 0, -228)
+    Note(p, "|cff8f9ba8Open-world runs: click Start Recording in Adventures, use the RP icon's right-click menu, or a keybind. A run cut short by a logout or disconnect is saved as interrupted, never lost.|r", 0, -254)
     local dBtn = UI.CreateSleekButton(p, 160, 24, "Dungeon/Raid Template", "gold")
-    dBtn:SetPoint("TOPLEFT", 0, -254)
+    dBtn:SetPoint("TOPLEFT", 0, -300)
     dBtn:SetIcon(UI.ICONS.STORY, 16)
     dBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("STORY") end)
     local aBtn = UI.CreateSleekButton(p, 150, 24, "Adventure Template", "gold")
@@ -986,6 +1041,183 @@ do
     end)
 end
 
+-- A grid of check boxes bound to a table of booleans (missing = on)
+local function CheckGrid(p, y, defs, store, prefix, colW)
+    local checks = {}
+    local half = math.ceil(#defs / 2)
+    for i, d in ipairs(defs) do
+        local cb = CreateFrame("CheckButton", prefix .. d.key, p, "UICheckButtonTemplate")
+        cb:SetSize(18, 18)
+        local col = (i <= half) and 0 or 1
+        local row = (i <= half) and (i - 1) or (i - half - 1)
+        cb:SetPoint("TOPLEFT", col * (colW or 210), y - row * 18)
+        local lbl = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        lbl:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+        lbl:SetText(d.label)
+        cb:SetScript("OnClick", function(self)
+            local t = store()
+            t[d.key] = self:GetChecked() and true or false
+            if d.after then pcall(d.after) end
+        end)
+        checks[d.key] = cb
+    end
+    return function()
+        local t = store()
+        for key, cb in pairs(checks) do cb:SetChecked(t[key] ~= false) end
+    end, y - half * 18
+end
+UI.OptionsCheckGrid = CheckGrid
+
+-- A number box bound to an RPCopyDB field
+local function NumberBox(p, x, y, label, field, lo, hi, default, tip)
+    UI.Label(p, label, "GameFontHighlightSmall"):SetPoint("TOPLEFT", x, y - 4)
+    local eb = CreateFrame("EditBox", "RPCopyOptNum_" .. field, p, "InputBoxTemplate")
+    eb:SetSize(44, 20)
+    eb:SetPoint("TOPLEFT", x + 170, y)
+    eb:SetAutoFocus(false)
+    eb:SetNumeric(true)
+    eb:SetMaxLetters(4)
+    local function Commit(self)
+        local v = tonumber(self:GetText() or "") or default
+        RPCopyDB[field] = math.max(lo, math.min(hi, math.floor(v)))
+        self:SetText(tostring(RPCopyDB[field]))
+        self:ClearFocus()
+    end
+    eb:SetScript("OnEnterPressed", Commit)
+    eb:SetScript("OnEditFocusLost", Commit)
+    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    eb:SetScript("OnEnter", function(self) UI.Tooltip(self, "|cffffd100" .. label .. "|r", (tip or "") .. string.format(" From %d to %d. Default %d.", lo, hi, default)) end)
+    eb:SetScript("OnLeave", UI.HideTooltip)
+    return function() eb:SetText(tostring(RPCopyDB[field] or default)) end, eb
+end
+
+-- ---------------------------------------------------------
+-- Summary (0.5.0): which stats the run Summary and top bar show
+-- ---------------------------------------------------------
+do
+    local p = NewPage("SUMMARY", "Summary")
+    Note(p, "|cff8f9ba8What the Summary of a recording shows. Stats that are zero are always hidden. Bosses and wipes only show for dungeons and raids, places only for the open world.|r", 0, -20)
+    local refreshGrid = CheckGrid(p, -56, ns.SUMMARY_STATS, function() return RPCopyDB.summaryStats end, "RPCopyOptSum_")
+    O.refresh.SUMMARY = function()
+        ns.EnsureDB()
+        refreshGrid()
+    end
+end
+
+-- ---------------------------------------------------------
+-- Companions (0.5.0)
+-- ---------------------------------------------------------
+do
+    local p = NewPage("COMPANIONS", "Companions")
+    local toggles = ToggleRows(p, -24, {
+        { field = "knownPlayerBlocks", invert = true, label = "[Known Player] blocks",
+          tip = "Adds your notes on the people in the scene to the snapshot you copy." },
+        { field = "autoUpdateKnown", label = "Update companions from chat",
+          tip = "Keeps a companion's level, class and latest chat up to date when they talk near you." },
+        { field = "companionMenu", invert = true, label = "Add as companion (right-click)",
+          tip = "Adds 'Add as RPCopy companion' to the game's player right-click menu (where the game allows it). Takes effect after /reload." },
+        { field = "nearbyChip", invert = true, label = "Nearby companions on Copy",
+          tip = "Shows companions you target, group with or chat with, at the bottom of the Copy view." },
+        { field = "runCompanions", invert = true, label = "Companions in the Full Log",
+          tip = "Companions you chat with during a run are listed as Known companions in its Full Log, with their notes." },
+    })
+    local maxRefresh = NumberBox(p, 0, -152, "Known Player blocks per copy", "knownPlayerMax", 0, 10, 3,
+        "How many companion blocks one snapshot can have.")
+    local noteRefresh = NumberBox(p, 0, -178, "Note length in a block", "knownNoteMax", 40, 1000, 300,
+        "Longer notes are cut at a sentence or word.")
+    Note(p, "|cff8f9ba8Per companion, the Include button in Companions picks Auto, Always or Never. Auto adds a companion when they are your target, in your group, or in the copied chat.|r", 0, -210)
+    O.refresh.COMPANIONS = function()
+        toggles()
+        maxRefresh()
+        noteRefresh()
+    end
+end
+
+-- ---------------------------------------------------------
+-- Stories & Export (0.5.0)
+-- ---------------------------------------------------------
+do
+    local p = NewPage("STORIES", "Stories & Export")
+    local toggles = ToggleRows(p, -24, {
+        { field = "autoColorStory", invert = true, label = "Auto-color imported stories",
+          tip = "On import, names the AI left plain are colored from the run: party in class colors, pets, places, foes, NPCs and items." },
+        { field = "exportTip", invert = true, label = "Export tip in the Story Book",
+          tip = "Shows how to make HTML pages with screenshots using Export_Stories.bat." },
+    })
+    Note(p, "|cff8f9ba8Export_Stories.bat (in the RPCopy AddOns folder) reads these after a /reload or logout. Leave a box empty for the default.|r", 0, -80)
+    local function PathBox(y, label, field, tip)
+        UI.Label(p, label, "GameFontHighlightSmall"):SetPoint("TOPLEFT", 0, y - 4)
+        local eb = CreateFrame("EditBox", "RPCopyOptPath_" .. field, p, "InputBoxTemplate")
+        eb:SetHeight(20)
+        eb:SetPoint("TOPLEFT", 150, y)
+        eb:SetPoint("RIGHT", p, "RIGHT", -8, 0)
+        eb:SetAutoFocus(false)
+        eb:SetMaxLetters(260)
+        local function Commit(self)
+            local v = (self:GetText() or ""):gsub("||", "|"):match("^%s*(.-)%s*$")
+            RPCopyDB[field] = v
+            self:ClearFocus()
+        end
+        eb:SetScript("OnEnterPressed", Commit)
+        eb:SetScript("OnEditFocusLost", Commit)
+        eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        eb:SetScript("OnEnter", function(self) UI.Tooltip(self, "|cffffd100" .. label .. "|r", tip) end)
+        eb:SetScript("OnLeave", UI.HideTooltip)
+        return function() eb:SetText(RPCopyDB[field] or "") end
+    end
+    local r1 = PathBox(-112, "Image folder", "exportImageDir",
+        "Where the exporter copies screenshots for the pages. Empty: an 'images' folder next to the HTML.")
+    local r2 = PathBox(-140, "Screenshots folder", "exportShotsDir",
+        "Where WoW saves screenshots. Empty: found by itself (the _forever_\\Screenshots folder).")
+    Note(p, "|cff8f9ba8How to export: /reload or log out so the game saves your stories, then double-click Export_Stories.bat in Interface\\AddOns\\RPCopy. The pages open from the RPCopy Stories folder it makes in _forever_.|r", 0, -176)
+    local dBtn = UI.CreateSleekButton(p, 160, 24, "Dungeon/Raid Template", "gold")
+    dBtn:SetPoint("TOPLEFT", 0, -236)
+    dBtn:SetIcon(UI.ICONS.STORY, 16)
+    dBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("STORY") end)
+    local aBtn = UI.CreateSleekButton(p, 150, 24, "Adventure Template", "gold")
+    aBtn:SetPoint("LEFT", dBtn, "RIGHT", 6, 0)
+    aBtn:SetIcon(UI.ICONS.STORY, 16)
+    aBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("ADVENTURE") end)
+    O.refresh.STORIES = function()
+        toggles()
+        r1()
+        r2()
+    end
+end
+
+-- ---------------------------------------------------------
+-- Privacy (0.5.0): the disclaimer, what is captured, setup and wipe
+-- ---------------------------------------------------------
+do
+    local p = NewPage("PRIVACY", "Privacy")
+    Note(p, (ns.PRIVACY_TEXT or "") .. "\n|cffffd100Chat RPCopy keeps:|r", 0, -20)
+    local refreshGrid = CheckGrid(p, -164, ns.CAPTURE_TYPES, function() return RPCopyDB.capture end, "RPCopyOptCap_")
+    local setupBtn = UI.CreateSleekButton(p, 150, 24, "Open Setup Again", "gold")
+    setupBtn:SetPoint("TOPLEFT", 0, -230)
+    setupBtn.tipTitle = "|cffffd100Setup|r"
+    setupBtn.tipText = "Shows the first-run disclaimer and setup choices again (/rp setup)."
+    setupBtn:SetScript("OnClick", function() if UI.OpenSetup then UI.OpenSetup(true) end end)
+    local wipeBtn = UI.CreateSleekButton(p, 150, 24, "Delete All Data", "danger")
+    wipeBtn:SetPoint("LEFT", setupBtn, "RIGHT", 6, 0)
+    wipeBtn.tipTitle = "|cffff6b6bDelete all RPCopy data|r"
+    wipeBtn.tipText = "Click twice. Deletes every recording, story, companion and setting, then reloads the UI (/rp wipe)."
+    wipeBtn:SetScript("OnClick", function(self)
+        if not self.armedAt or GetTime() - self.armedAt > 4 then
+            self.armedAt = GetTime()
+            self:SetText("|cffff6b6bSure? Click again|r")
+            return
+        end
+        self.armedAt = nil
+        if ns.WipeAllData then ns.WipeAllData() end
+    end)
+    O.refresh.PRIVACY = function()
+        ns.EnsureDB()
+        refreshGrid()
+        wipeBtn.armedAt = nil
+        wipeBtn:SetText("Delete All Data")
+    end
+end
+
 -- ---------------------------------------------------------
 -- AI setup
 -- ---------------------------------------------------------
@@ -994,13 +1226,27 @@ do
     Note(p,
         "|cffffd100Your character skill (one time)|r\n" ..
         "|cffd8dee91. Click RP Template and copy it with Ctrl+C.\n" ..
-        "2. Paste it into your AI (Gemini, ChatGPT, Claude) and fill in your character.\n" ..
-        "3. Use the skill's trigger (like |cff69ccf0use aloria|cffd8dee9) as the Skill Call in Slice Tabs.|r",
+        "2. It is a simple starter: fill in your character (personality, backstory, voice, quirks, moods, how they talk). The more of you in it, the better the replies.\n" ..
+        "3. Make it a Skill in Gemini, a Project in ChatGPT, or a Skill or Project in Claude.\n" ..
+        "4. Use the skill's trigger (like |cff69ccf0use aloria|cffd8dee9) as the Skill Call in Slice Tabs.|r",
         0, -28)
     local rpBtn = UI.CreateSleekButton(p, 150, 24, "RP Template", "gold")
     rpBtn:SetPoint("TOPLEFT", 0, -104)
     rpBtn:SetIcon(UI.ICONS.COPY, 16)
     rpBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("RP") end)
+    local LENGTHS = { "SHORT", "MEDIUM", "LONG" }
+    local LEN_LABEL = { SHORT = "Replies: Short", MEDIUM = "Replies: Medium", LONG = "Replies: Long" }
+    local lenBtn = UI.CreateSleekButton(p, 130, 24, "", "tool")
+    lenBtn:SetPoint("LEFT", rpBtn, "RIGHT", 6, 0)
+    lenBtn.tipTitle = "|cffffd100Reply length|r"
+    lenBtn.tipText = "How long the RP template asks replies to be. Short is like real chat (about 5 to 14 words). Copy the template again after changing it."
+    lenBtn:SetScript("OnClick", function()
+        local idx = 1
+        for i, k in ipairs(LENGTHS) do if k == RPCopyDB.rpReplyLength then idx = i end end
+        RPCopyDB.rpReplyLength = LENGTHS[(idx % #LENGTHS) + 1]
+        lenBtn:SetText(LEN_LABEL[RPCopyDB.rpReplyLength])
+    end)
+    O.refresh.AI = function() lenBtn:SetText(LEN_LABEL[RPCopyDB.rpReplyLength or "SHORT"] or LEN_LABEL.SHORT) end
 
     Note(p,
         "|cffffd100Your storyteller skills (one time each)|r\n" ..
@@ -1030,11 +1276,13 @@ do
         "Found a bug? Click |cffffd100Copy Debug Report|cffd8dee9 (or type |cff69ccf0/rp debug|cffd8dee9), press Ctrl+C, and paste it into your report. See 'Reporting bugs' in the README.|r",
         0, -28)
     local verbose = ToggleRows(p, -120, {
+        { field = "debugEnabled", invert = true, label = "Debug log",
+          tip = "OFF: only RPCopy's own errors and blocked actions are kept." },
         { field = "debugVerbose", label = "Verbose debug log",
-          tip = "Also logs extra detail. Leave it off unless you are chasing a bug." },
+          tip = "Also logs extra detail (every quick copy, for example). Leave it off unless you are chasing a bug." },
     })
     local reportBtn = UI.CreateSleekButton(p, 150, 24, "Copy Debug Report", "gold")
-    reportBtn:SetPoint("TOPLEFT", 0, -156)
+    reportBtn:SetPoint("TOPLEFT", 0, -180)
     reportBtn:SetScript("OnClick", function() SlashCmdList["RPCOPY"]("debug") end)
     local clearBtn = UI.CreateSleekButton(p, 120, 24, "Clear Debug Log", "danger")
     clearBtn:SetPoint("LEFT", reportBtn, "RIGHT", 6, 0)
@@ -1043,7 +1291,7 @@ do
         UI.SetStatus("Debug log cleared.", "good")
         UI.RefreshOptionsPage()
     end)
-    local count = Note(p, "", 0, -192)
+    local count = Note(p, "", 0, -216)
     O.refresh.DEBUG = function()
         verbose()
         count:SetText(string.format("|cff8f9ba8%d lines in the debug log.|r", #(RPCopyDB.debugLog or {})))

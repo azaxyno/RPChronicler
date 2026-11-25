@@ -134,14 +134,24 @@ function ns.GetPartyLine()
         end
     end
 
-    for i = 1, 4 do
-        AddMember("party" .. i)
+    -- 0.5.0: raid members count too (raid1-40, yourself left out)
+    local inRaid = IsInRaid and IsInRaid()
+    if inRaid then
+        local me = ns.SafeStr(UnitName("player"))
+        for i = 1, 40 do
+            local u = "raid" .. i
+            if UnitExists(u) and ns.SafeStr(UnitName(u)) ~= me then AddMember(u) end
+        end
+    else
+        for i = 1, 4 do
+            AddMember("party" .. i)
+        end
     end
 
     if #members == 0 then
         return nil
     end
-    return ns.ColorText("[Party]", ns.COLORS.header) .. " " .. table.concat(members, ", ")
+    return ns.ColorText(inRaid and "[Raid]" or "[Party]", ns.COLORS.header) .. " " .. table.concat(members, ", ")
 end
 
 function ns.GetStatusLine()
@@ -178,8 +188,8 @@ function ns.GetStatusLine()
     end
 
     if UnitExists("pet") then
-        local petName = ns.SafeStr(UnitName("pet")) or "Pet"
-        local petInfo = petName
+        -- 0.5.0: name plus species, e.g. "Snips (Crab, hunter pet)"
+        local petInfo = (ns.GetPetDescriptor and ns.GetPetDescriptor("pet")) or ns.SafeStr(UnitName("pet")) or "Pet"
         if UnitIsDead("pet") then
             petInfo = petInfo .. " " .. ns.ColorText("[Dead]", ns.COLORS.death)
         else
@@ -222,8 +232,10 @@ local function GroupNames()
     local names = {}
     local me = ns.StripRealm(UnitName("player"))
     if me then names[me] = true end
-    for i = 1, 4 do
-        local u = "party" .. i
+    local prefix, count = "party", 4
+    if IsInRaid and IsInRaid() then prefix, count = "raid", 40 end
+    for i = 1, count do
+        local u = prefix .. i
         if UnitExists(u) then
             local n = ns.StripRealm(UnitName(u))
             if n then names[n] = true end
@@ -285,6 +297,16 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
     local limit = isExpanded and (RPCopyDB.expandMessages or 6) or (RPCopyDB.defaultMessages or 3)
 
     local lines = {}
+    -- 0.5.0: the people in this scene, most relevant first, for the
+    -- [Known Player] blocks (no more matching every "Bob" in the text)
+    local people, seenPeople = {}, {}
+    local function AddPerson(name)
+        name = ns.SafeStr(name)
+        if name and name ~= "" and not seenPeople[name] then
+            seenPeople[name] = true
+            table.insert(people, name)
+        end
+    end
     if tabCfg and tabCfg.prefix and tabCfg.prefix ~= "" then
         -- Line 1 invokes the character skill in the AI, e.g. "[Skill Call] use aloria"
         table.insert(lines, ns.ColorText("[Skill Call]", ns.COLORS.header) .. " " .. tabCfg.prefix)
@@ -309,15 +331,23 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
         if tabCfg.incDirect and not directInline and ns.state.lastDirectMsg and ns.state.lastDirectMsg ~= "" then
             table.insert(lines, ns.ColorText("[Direct]", ns.COLORS.direct) .. " " .. ns.state.lastDirectMsg)
         end
+        if tabCfg.incDirect and ns.state.lastDirectAuthor then AddPerson(ns.state.lastDirectAuthor) end
 
         if tabCfg.incTarget then
             local tLine = ns.GetTargetLine()
             if tLine then table.insert(lines, tLine) end
+            if UnitExists("target") then AddPerson(ns.UnitCompanionName and ns.UnitCompanionName("target")) end
         end
 
         if tabCfg.incParty then
             local pLine = ns.GetPartyLine()
             if pLine then table.insert(lines, pLine) end
+            local prefix, count = "party", 4
+            if IsInRaid and IsInRaid() then prefix, count = "raid", 40 end
+            for i = 1, count do
+                local u = prefix .. i
+                if UnitExists(u) then AddPerson(ns.UnitCompanionName and ns.UnitCompanionName(u)) end
+            end
         end
 
         if tabCfg.incStatus then
@@ -327,6 +357,14 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
 
         if tabCfg.incQuest and ns.state.lastQuestInfo and ns.state.lastQuestInfo ~= "" then
             table.insert(lines, ns.ColorText("[Quest]", ns.COLORS.quest) .. " " .. ns.state.lastQuestInfo)
+        end
+
+        for i = #timeline, 1, -1 do
+            local e = timeline[i]
+            if type(e) == "table" then
+                AddPerson(e.author)
+                if e.to then AddPerson(e.to) end
+            end
         end
 
         for _, e in ipairs(timeline) do
@@ -339,7 +377,7 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
     end
 
     local bodyText = table.concat(lines, "\n")
-    local kpBlocks = ns.GetKnownPlayerBlocks(bodyText)
+    local kpBlocks = ns.GetKnownPlayerBlocks(people, bodyText)
     if #kpBlocks > 0 then
         bodyText = bodyText .. "\n" .. table.concat(kpBlocks, "\n")
     end

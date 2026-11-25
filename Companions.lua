@@ -194,7 +194,7 @@ end
 local function NewEntry(kind)
     return {
         cid = NewCid(), kind = kind or "player",
-        note = "", history = "", relationship = "", tone = "",
+        note = "", relationship = "", tone = "",
         level = "", race = "", class = "", classFile = nil, guild = "",
         chatHistory = {}, lastSeen = "", include = "auto",
         firstMet = ns.NowStamp(), firstMetPlace = ns.GetCurrentWhere(),
@@ -202,8 +202,20 @@ local function NewEntry(kind)
 end
 ns.NewCompanionEntry = NewEntry
 
--- When companions talk: the time, for the "Nearby companions" chip
+-- When companions talk, and (0.6.1) when they were last on screen: the
+-- time, for the "Nearby companions" chip and the snapshot. Kept for this
+-- session only, and only while RP Copy is on.
 ns.companionChatAt = {}
+ns.companionSeenAt = {}
+ns.COMPANION_NOTE_MAX = 2000   -- letters in the one companion note
+local SEEN_WINDOW = 300        -- seconds a companion stays "nearby"
+
+-- Notes that a unit on screen (target, mouseover, nameplate) is a companion
+function ns.NoteCompanionUnit(unit)
+    if not ns.RpCopyOn() or not unit or not UnitExists(unit) then return end
+    local key = ns.CompanionByName(ns.UnitCompanionName(unit))
+    if key then ns.companionSeenAt[key] = GetTime() end
+end
 
 function ns.AppendConvoForPlayer(name, line)
     if not name or name == "" or name == "Unknown" then return end
@@ -217,8 +229,8 @@ function ns.AppendConvoForPlayer(name, line)
     local key = ns.CompanionByName(canonical)
     if not key then return end
     ns.companionChatAt[key] = GetTime()
-    if ns.NoteRunCompanion then ns.NoteRunCompanion(key) end
-    if RPChroniclerDB and RPChroniclerDB.autoUpdateKnown then
+    ns.NoteRunCompanion(key)
+    if ns.Get("autoUpdateKnown") then
         local entry = RPChroniclerDB.players[key]
         entry.chatHistory = entry.chatHistory or {}
         ns.PushBounded(entry.chatHistory, line, ns.MAX_PLAYER_CHAT)
@@ -230,7 +242,7 @@ end
 
 function ns.HandleConversationCapture(channelLabel, rawAuthor, cleanMsg, isOutgoingWhisper, whisperRecipient)
     if not CONVO_CHANNELS[channelLabel] then return end
-    if ns.IsOocText and (ns.IsOocText(cleanMsg) or ns.IsOocText(channelLabel)) then return end
+    if ns.IsOocText(cleanMsg) or ns.IsOocText(channelLabel) then return end
     local selfShort = ns.StripRealm(UnitName("player")) or ""
     local selfFull = ns.GetUnitFullName("player") or selfShort
     local author = ns.StripRealm(rawAuthor) or "Unknown"
@@ -303,7 +315,50 @@ function ns.SaveOrUpdatePlayer(name, unit)
     end
     entry.lastSeen = ns.NowStamp()
     RPChroniclerDB.players[key] = entry
+    -- 0.6.1: someone you just added from a unit is around you right now
+    if u then ns.companionSeenAt[key] = GetTime() end
+    ns.Notify("companionChanged", key)
     return key, isNew
+end
+
+-- A companion typed in by hand (Companions view). Returns key, or nil and why.
+function ns.CreateCompanion(name, fields)
+    ns.EnsureDB()
+    name = Trim(name)
+    if name == "" then return nil, "Type a name first." end
+    for k in pairs(RPChroniclerDB.players) do
+        if k:lower() == name:lower() then
+            return nil, "A companion named " .. k .. " already exists. Pick them in the list to edit."
+        end
+    end
+    local entry = NewEntry("player")
+    RPChroniclerDB.players[name] = entry
+    ns.UpdateCompanion(name, fields)
+    return name
+end
+
+-- Saves the editable fields of a companion (relationship, tone, note)
+function ns.UpdateCompanion(key, fields)
+    local entry = RPChroniclerDB.players[key]
+    if not entry then return false end
+    fields = fields or {}
+    if fields.relationship then entry.relationship = Trim(fields.relationship) end
+    if fields.tone then entry.tone = Trim(fields.tone) end
+    if fields.note then entry.note = Trim(fields.note):sub(1, ns.COMPANION_NOTE_MAX) end
+    if fields.include then entry.include = fields.include end
+    if (entry.lastSeen or "") == "" then entry.lastSeen = ns.NowStamp() end
+    local u = ns.FindVisibleUnitForPlayer(key)
+    if u then ns.CaptureVisibleUnitFields(u, entry) end
+    ns.Notify("companionChanged", key)
+    return true
+end
+
+function ns.DeleteCompanion(key)
+    if not key or not RPChroniclerDB.players[key] then return false end
+    RPChroniclerDB.players[key] = nil
+    ns.companionSeenAt[key], ns.companionChatAt[key] = nil, nil
+    ns.Notify("companionChanged", nil)
+    return true
 end
 
 -- The companion a unit is (or the name to save it under)
@@ -329,6 +384,8 @@ function ns.RenameCompanion(oldKey, newName)
     if oldKey ~= newName then
         players[oldKey] = nil
         players[newName] = entry
+        ns.companionSeenAt[newName], ns.companionSeenAt[oldKey] = ns.companionSeenAt[oldKey], nil
+        ns.companionChatAt[newName], ns.companionChatAt[oldKey] = ns.companionChatAt[oldKey], nil
     end
     return true, newName
 end
@@ -348,7 +405,7 @@ end
 ns.ClipCompanionNote = ClipNote
 
 function ns.GetKnownPlayerBlocks(people, bodyText)
-    if not RPChroniclerDB or not RPChroniclerDB.players or RPChroniclerDB.knownPlayerBlocks == false then return {} end
+    if not ns.Get("knownPlayerBlocks") then return {} end
     local players = RPChroniclerDB.players
     local haystack = ns.StripColors(bodyText or ""):lower()
     local picked, order = {}, {}
@@ -370,7 +427,7 @@ function ns.GetKnownPlayerBlocks(people, bodyText)
         return a < b
     end)
 
-    local max, noteMax = RPChroniclerDB.knownPlayerMax or 3, RPChroniclerDB.knownNoteMax or 300
+    local max, noteMax = ns.KNOWN_PLAYER_MAX, ns.KNOWN_NOTE_MAX
     local blocks = {}
     for _, key in ipairs(order) do
         if #blocks >= max then break end
@@ -386,12 +443,9 @@ function ns.GetKnownPlayerBlocks(people, bodyText)
         if #rel > 0 then
             table.insert(lines, ns.ColorText("Relationship:", ns.COLORS.lootType) .. " " .. ns.ColorText(table.concat(rel, ", "), ns.COLORS.softWhite))
         end
-        local who, hist = ClipNote(d.note, noteMax), ClipNote(d.history, noteMax)
+        local who = ClipNote(d.note, noteMax)
         table.insert(lines, ns.ColorText("Who they are:", ns.COLORS.lootType) .. " "
             .. (who ~= "" and ns.ColorText(who, ns.COLORS.softWhite) or ns.ColorText("None", ns.COLORS.muted)))
-        if hist ~= "" then
-            table.insert(lines, ns.ColorText("Our history:", ns.COLORS.lootType) .. " " .. ns.ColorText(hist, ns.COLORS.softWhite))
-        end
         -- Skip chat lines the copy already shows, so nothing is pasted twice
         local fresh = {}
         for _, line in ipairs(type(d.chatHistory) == "table" and d.chatHistory or {}) do
@@ -409,30 +463,46 @@ function ns.GetKnownPlayerBlocks(people, bodyText)
     return blocks
 end
 
--- Companions around you right now: targeted, in the group, or who chatted
+-- Companions around you right now: targeted, in the group, on a
+-- nameplate, or seen (target, mouseover, nameplate, just added) or chatting
 -- in the last 5 minutes. Returns a list of { key, why }.
 function ns.NearbyCompanions()
     local out, seen = {}, {}
+    if not ns.RpCopyOn() then return out end
     local function Add(key, why)
         if key and not seen[key] and RPChroniclerDB.players[key] then
             seen[key] = true
             table.insert(out, { key = key, why = why })
         end
     end
-    if UnitExists("target") then Add(ns.CompanionByName(ns.UnitCompanionName("target")), "targeted") end
-    ns.ForEachKnownUnit(function(u)
-        if (u:match("^party") or u:match("^raid")) and UnitIsPlayer(u) then
-            Add(ns.CompanionByName(ns.GetUnitFullName(u)), "in your group")
-        end
-        return false
+    local function UnitKey(u) return ns.CompanionByName(ns.UnitCompanionName(u)) end
+    if UnitExists("target") then Add(UnitKey("target"), "targeted") end
+    ns.ForEachGroupUnit(function(u)
+        if UnitIsPlayer(u) then Add(UnitKey(u), "in your group") end
     end)
+    for i = 1, 40 do
+        local u = "nameplate" .. i
+        if UnitExists(u) then
+            local key = UnitKey(u)
+            if key then ns.companionSeenAt[key] = GetTime(); Add(key, "nearby") end
+        end
+    end
     local now = GetTime()
     for key, at in pairs(ns.companionChatAt) do
-        if now - at <= 300 then Add(key, "chatting") end
+        if now - at <= SEEN_WINDOW then Add(key, "chatting") end
+    end
+    for key, at in pairs(ns.companionSeenAt) do
+        if now - at <= SEEN_WINDOW then Add(key, "seen nearby") end
     end
     table.sort(out, function(a, b) return a.key < b.key end)
     return out
 end
+
+ns.On({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED" }, function(event, unit)
+    if event == "PLAYER_TARGET_CHANGED" then unit = "target"
+    elseif event == "UPDATE_MOUSEOVER_UNIT" then unit = "mouseover" end
+    ns.NoteCompanionUnit(unit)
+end)
 
 -- Runs and stories you shared with a companion (by cid, then by name)
 function ns.CompanionSharedAdventures(key)
@@ -457,7 +527,7 @@ function ns.CompanionSharedAdventures(key)
         end
         return false
     end
-    local active = ns.GetActiveAdventure and ns.GetActiveAdventure()
+    local active = ns.GetActiveAdventure()
     if active and Scan(active) then table.insert(list, { title = active.title, date = active.startDate, runId = active.id, live = true }) end
     for _, adv in ipairs(RPChroniclerDB.adventures or {}) do
         if Scan(adv) then
@@ -482,10 +552,8 @@ end
 
 -- 0.5.0 migration: ids, class tokens, honor-rank and case duplicates merged
 local function MergeInto(dst, src)
-    for _, f in ipairs({ "note", "history" }) do
-        local a, b = Trim(dst[f]), Trim(src[f])
-        if a == "" then dst[f] = b elseif b ~= "" and a ~= b then dst[f] = a .. " / " .. b end
-    end
+    local a, b = Trim(dst.note), Trim(src.note)
+    if a == "" then dst.note = b elseif b ~= "" and a ~= b then dst.note = a .. " / " .. b end
     for _, f in ipairs({ "relationship", "tone", "level", "race", "class", "classFile", "guild" }) do
         if (dst[f] or "") == "" and (src[f] or "") ~= "" then dst[f] = src[f] end
     end
@@ -517,7 +585,6 @@ function ns.MigrateCompanions()
         if type(e) == "table" then
             e.cid = e.cid or NewCid()
             e.kind = e.kind or "player"
-            e.history = e.history or ""
             e.relationship = e.relationship or ""
             e.tone = e.tone or ""
             e.include = e.include or "auto"
@@ -528,6 +595,27 @@ function ns.MigrateCompanions()
     end
 end
 
+-- 0.6.1: one companion note. "Our history" joins the end of "Who they
+-- are" (in the Companion book and in the copies runs and stories keep).
+local function MergeHistory(e)
+    if type(e) ~= "table" or e.history == nil then return end
+    local note, hist = Trim(e.note), Trim(e.history)
+    if hist ~= "" and note ~= hist then e.note = (note ~= "" and (note .. " ") or "") .. hist end
+    e.history = nil
+end
+
+function ns.MergeCompanionNotes()
+    for _, e in pairs(RPChroniclerDB.players or {}) do MergeHistory(e) end
+    local function Run(adv)
+        if type(adv) ~= "table" then return end
+        for _, p in ipairs(adv.participants or {}) do MergeHistory(p) end
+        for _, m in pairs(adv.metCompanions or {}) do MergeHistory(m) end
+    end
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do Run(adv) end
+    Run(RPChroniclerDB.activeRun)
+    for _, st in ipairs(RPChroniclerDB.stories or {}) do Run(st) end
+end
+
 -- =========================================================
 -- "Add as RP Chronicler companion" in the game's own unit right-click menus.
 -- Only where the modern Menu API exists; Options can hide the entry.
@@ -536,7 +624,7 @@ do
     local MENUS = { "MENU_UNIT_PLAYER", "MENU_UNIT_PARTY", "MENU_UNIT_RAID_PLAYER", "MENU_UNIT_FRIEND",
         "MENU_UNIT_TARGET", "MENU_UNIT_FOCUS" }
     local function Add(owner, root, ctx)
-        if not RPChroniclerDB or RPChroniclerDB.companionMenu == false or type(root) ~= "table" or not root.CreateButton then return end
+        if not ns.Get("companionMenu") or type(root) ~= "table" or not root.CreateButton then return end
         local unit = type(ctx) == "table" and ctx.unit or nil
         local name = (unit and ns.UnitCompanionName(unit)) or (type(ctx) == "table" and ns.SafeStr(ctx.name)) or nil
         if not name or name == "" then return end
@@ -545,9 +633,7 @@ do
             local key, isNew = ns.SaveOrUpdatePlayer(name, unit)
             if key then
                 print("|cffffd100RP Chronicler|r " .. (isNew and "Added companion: " or "Updated companion: ") .. key)
-                if ns.UI and ns.UI.OpenCompanion and ns.UI.frame and ns.UI.frame:IsShown() and ns.state.section == "PLAYERS" then
-                    ns.UI.OpenCompanion(key)
-                end
+                ns.Notify("companionAdded", key)
             end
         end)
     end
@@ -558,9 +644,8 @@ do
 end
 
 -- =========================================================
--- Pet name vs species (0.5.0): "Snips (Crab, hunter pet)". When the name
--- is the species itself it reads "Crab (Crab, hunter pet)", so the AI
--- knows Crab is both the name and what it is.
+-- Pet name vs species (0.5.0): "Snips (Crab, hunter pet)". 0.6.1: when
+-- the name is the species itself it reads "Crab (hunter pet)".
 -- =========================================================
 function ns.GetPetKind(unit)
     unit = unit or "pet"
@@ -594,6 +679,7 @@ function ns.GetPetDescriptor(unit)
     local name = ns.SafeStr(UnitName(unit)) or "Pet"
     local species = ns.GetPetSpecies(unit)
     local kind = ns.GetPetKind(unit)
-    local info = species and (species .. ", " .. kind) or kind
+    local same = species and species:lower() == name:lower()
+    local info = (species and not same) and (species .. ", " .. kind) or kind
     return name .. " (" .. info .. ")"
 end

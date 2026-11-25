@@ -32,13 +32,17 @@ local function RestoreUI()
     end
 end
 
+-- 0.6.1: one setting, autoShots: OFF (none), INSTANCE (dungeons and raids,
+-- plus Mark Moment anywhere, since that is your own choice) or ALL
+local function ShotsOn()
+    return ns.Get("autoShots") ~= "OFF"
+end
+
 local function Capture(kind, description)
-    if not RPChroniclerDB or not RPChroniclerDB.autoScreenshots then return end
-    local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+    if not ShotsOn() then return end
+    local run = ns.GetActiveAdventure()
     if not run then return end
-    -- 0.5.1: no automatic shots in open-world runs unless switched on
-    -- (Options > Recording). Mark Moment is your own choice, so it still shoots.
-    if run.kind == "world" and kind ~= "mark" and not RPChroniclerDB.worldAutoShots then return end
+    if run.kind == "world" and kind ~= "mark" and ns.Get("autoShots") ~= "ALL" then return end
     -- 0.5.0: the per-run cap (Options > Full Log limits) stops new shots
     -- instead of dropping the oldest ones
     if not ns.RecordAdventureScreenshot(kind, description) then return end
@@ -71,7 +75,7 @@ end
 local function FirePending(tries)
     local p = pending
     if not p then return end
-    if not RPChroniclerDB or not RPChroniclerDB.autoScreenshots then
+    if not ShotsOn() then
         pending = nil
         return
     end
@@ -88,8 +92,8 @@ local function FirePending(tries)
 end
 
 function ns.RequestScreenshot(kind, description)
-    if not RPChroniclerDB or not RPChroniclerDB.autoScreenshots then return end
-    if not (ns.GetActiveAdventure and ns.GetActiveAdventure()) then return end
+    if not ShotsOn() then return end
+    if not (ns.GetActiveAdventure()) then return end
     if not ALWAYS_SHOOT[kind] and lastShotAt and (GetTime() - lastShotAt) < DEBOUNCE then return end
     if pending then
         if (PRIORITY[kind] or 0) > (PRIORITY[pending.kind] or 0) then
@@ -103,31 +107,25 @@ function ns.RequestScreenshot(kind, description)
     end
 end
 
-local shotFrame = CreateFrame("Frame")
-for _, ev in ipairs({
-    "SCREENSHOT_SUCCEEDED", "SCREENSHOT_FAILED",
-    "PLAYER_REGEN_DISABLED", "LOADING_SCREEN_ENABLED", "LOADING_SCREEN_DISABLED",
-}) do
-    pcall(shotFrame.RegisterEvent, shotFrame, ev)
-end
-
 -- 0.5.0: your own Print Screen shots join the run too (with a caption),
--- so the exporter can place them in the story. Options > Recording.
+-- so the exporter can place them in the story
 local function OnManualShot()
-    if not RPChroniclerDB or RPChroniclerDB.recordManualShots == false then return end
     if ownShotAt and (GetTime() - ownShotAt) < OWN_WINDOW then
         ownShotAt = nil
         return
     end
-    local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+    local run = ns.GetActiveAdventure()
     if not run or run.paused then return end
-    local foe = ns.FightCurrentFoe and ns.FightCurrentFoe()
+    local foe = ns.FightCurrentFoe()
     local where = ns.GetCurrentWhere()
     local caption = foe and string.format("Fighting %s in %s", foe, where) or ("A view of " .. where)
     ns.RecordAdventureScreenshot("manual", caption)
 end
 
-shotFrame:SetScript("OnEvent", function(_, event)
+ns.On({
+    "SCREENSHOT_SUCCEEDED", "SCREENSHOT_FAILED",
+    "PLAYER_REGEN_DISABLED", "LOADING_SCREEN_ENABLED", "LOADING_SCREEN_DISABLED",
+}, function(event)
     if event == "SCREENSHOT_SUCCEEDED" then pcall(OnManualShot) end
     if event == "LOADING_SCREEN_ENABLED" then
         loading = true

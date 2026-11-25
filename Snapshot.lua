@@ -1,10 +1,8 @@
 local ADDON_NAME, ns = ...
 
 local function FormatHealthPercent(unit)
-    local hp = ns.SafeNum(UnitHealth(unit))
-    local hpMax = ns.SafeNum(UnitHealthMax(unit))
-    if hp and hpMax and hpMax > 0 then
-        local pct = math.floor((hp / hpMax) * 100)
+    local pct = ns.HealthPct(unit)
+    if pct then
         local hex = ns.COLORS.friendly
         if pct <= 25 then
             hex = ns.COLORS.hostile
@@ -117,7 +115,7 @@ function ns.GetPartyLine()
         clsLoc = ns.SafeStr(clsLoc) or ""
         clsFile = ns.SafeStr(clsFile) or ""
         -- Assigned role, or a guess from forms, talents, aggro and class
-        local role = ns.GetUnitRole and ns.GetUnitRole(unit) or "NONE"
+        local role = ns.GetUnitRole(unit) or "NONE"
         local roleTag = ns.GetRoleTag(role, false)
 
         local coloredName = (clsFile ~= "") and ns.ColorizeClass(name, clsFile) or ns.ColorText(name, ns.COLORS.speaker)
@@ -136,17 +134,7 @@ function ns.GetPartyLine()
 
     -- 0.5.0: raid members count too (raid1-40, yourself left out)
     local inRaid = IsInRaid and IsInRaid()
-    if inRaid then
-        local me = ns.SafeStr(UnitName("player"))
-        for i = 1, 40 do
-            local u = "raid" .. i
-            if UnitExists(u) and ns.SafeStr(UnitName(u)) ~= me then AddMember(u) end
-        end
-    else
-        for i = 1, 4 do
-            AddMember("party" .. i)
-        end
-    end
+    ns.ForEachGroupUnit(AddMember)
 
     if #members == 0 then
         return nil
@@ -166,7 +154,7 @@ function ns.GetStatusLine()
     if lvl and lvl > 0 then
         whoStr = whoStr .. " (Lvl " .. lvl .. (clsLoc ~= "" and (" " .. clsLoc) or "") .. ")"
     end
-    local myRole = ns.GetUnitRole and ns.GetUnitRole("player") or "NONE"
+    local myRole = ns.GetUnitRole("player") or "NONE"
     local myRoleTag = ns.GetRoleTag(myRole, false)
     if myRoleTag ~= "" then whoStr = whoStr .. " " .. myRoleTag end
     table.insert(parts, whoStr)
@@ -189,7 +177,7 @@ function ns.GetStatusLine()
 
     if UnitExists("pet") then
         -- 0.5.0: name plus species, e.g. "Snips (Crab, hunter pet)"
-        local petInfo = (ns.GetPetDescriptor and ns.GetPetDescriptor("pet")) or ns.SafeStr(UnitName("pet")) or "Pet"
+        local petInfo = (ns.GetPetDescriptor("pet")) or ns.SafeStr(UnitName("pet")) or "Pet"
         if UnitIsDead("pet") then
             petInfo = petInfo .. " " .. ns.ColorText("[Dead]", ns.COLORS.death)
         else
@@ -232,15 +220,10 @@ local function GroupNames()
     local names = {}
     local me = ns.StripRealm(UnitName("player"))
     if me then names[me] = true end
-    local prefix, count = "party", 4
-    if IsInRaid and IsInRaid() then prefix, count = "raid", 40 end
-    for i = 1, count do
-        local u = prefix .. i
-        if UnitExists(u) then
-            local n = ns.StripRealm(UnitName(u))
-            if n then names[n] = true end
-        end
-    end
+    ns.ForEachGroupUnit(function(u)
+        local n = ns.StripRealm(UnitName(u))
+        if n then names[n] = true end
+    end)
     return names
 end
 
@@ -258,23 +241,22 @@ local function TakeRecent(out, buf, limit, keep)
     end
 end
 
+-- Filters a chat source can name in ns.CHAT_SOURCES (Core.lua)
+local FILTERS = {
+    partySay = function()
+        local group = GroupNames()
+        return function(e) return e.author and group[e.author] and SAY_LIKE[e.chan] or false end
+    end,
+}
+
 -- All chat sources the tab includes, merged into one time-ordered list
 local function BuildTimeline(tabCfg, limit)
     local picked = {}
-    if tabCfg.incSocial then
-        TakeRecent(picked, ns.logs.social, limit)
-    elseif tabCfg.incPartySay then
-        local group = GroupNames()
-        TakeRecent(picked, ns.logs.social, limit, function(e)
-            return e.author and group[e.author] and SAY_LIKE[e.chan] or false
-        end)
+    for _, src in ipairs(ns.CHAT_SOURCES) do
+        if tabCfg[src.key] and not (src.unless and tabCfg[src.unless]) then
+            TakeRecent(picked, ns.logs[src.buffer], limit, src.filter and FILTERS[src.filter]() or nil)
+        end
     end
-    if tabCfg.incPartyChat then TakeRecent(picked, ns.logs.party, limit) end
-    if tabCfg.incNpc then TakeRecent(picked, ns.logs.npc, limit) end
-    if tabCfg.incLoot then TakeRecent(picked, ns.logs.loot, limit) end
-    if tabCfg.incOoc then TakeRecent(picked, ns.logs.ooc, limit) end
-    if tabCfg.incWorld then TakeRecent(picked, ns.logs.world, limit) end
-    if tabCfg.incGuild then TakeRecent(picked, ns.logs.guild, limit) end
 
     local seen, list = {}, {}
     for _, e in ipairs(picked) do
@@ -294,7 +276,8 @@ end
 function ns.BuildSnapshot(filterId, note, isExpanded)
     ns.EnsureDB()
     local tabCfg = ns.GetTabConfig(filterId)
-    local limit = isExpanded and (RPChroniclerDB.expandMessages or 6) or (RPChroniclerDB.defaultMessages or 3)
+    -- 0.6.1: one "messages" setting; the expanded copy takes twice as many
+    local limit = ns.Get("messages") * (isExpanded and 2 or 1)
 
     local lines = {}
     -- 0.5.0: the people in this scene, most relevant first, for the
@@ -336,18 +319,13 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
         if tabCfg.incTarget then
             local tLine = ns.GetTargetLine()
             if tLine then table.insert(lines, tLine) end
-            if UnitExists("target") then AddPerson(ns.UnitCompanionName and ns.UnitCompanionName("target")) end
+            if UnitExists("target") then AddPerson(ns.UnitCompanionName("target")) end
         end
 
         if tabCfg.incParty then
             local pLine = ns.GetPartyLine()
             if pLine then table.insert(lines, pLine) end
-            local prefix, count = "party", 4
-            if IsInRaid and IsInRaid() then prefix, count = "raid", 40 end
-            for i = 1, count do
-                local u = prefix .. i
-                if UnitExists(u) then AddPerson(ns.UnitCompanionName and ns.UnitCompanionName(u)) end
-            end
+            ns.ForEachGroupUnit(function(u) AddPerson(ns.UnitCompanionName(u)) end)
         end
 
         if tabCfg.incStatus then
@@ -375,6 +353,10 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
             table.insert(lines, text)
         end
     end
+
+    -- 0.6.1: companions around you (on screen, seen or chatting lately)
+    -- come after the people the copy names
+    for _, c in ipairs(ns.NearbyCompanions()) do AddPerson(c.key) end
 
     local bodyText = table.concat(lines, "\n")
     local kpBlocks = ns.GetKnownPlayerBlocks(people, bodyText)

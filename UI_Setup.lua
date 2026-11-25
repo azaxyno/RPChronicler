@@ -2,53 +2,50 @@ local ADDON_NAME, ns = ...
 local UI = ns.UI
 
 -- =========================================================
--- First-run setup (0.5.0): a privacy note and the recording choices.
--- Shown once after install, and again only when a later version adds new
--- recording or capture features (each choice has a "since" setup
--- version; only the new ones are listed then). Never shown in combat:
--- it waits until you leave combat. Re-open with /rp setup or
--- Options > Privacy.
+-- First-run setup (0.6.1 redesign): the logo, two privacy sentences and
+-- a few simple choices, with one Start button.
+-- Shown once after install, and again only when a later version adds a
+-- new choice (each choice has a "since" setup version; only the new ones
+-- are listed then). Never shown in combat: it waits until you leave
+-- combat. Re-open with /rp setup or Options > Privacy.
+-- Everything here can be changed later in Options.
 -- =========================================================
-local SETUP_VERSION = 1
+local SETUP_VERSION = 2
 ns.SETUP_VERSION = SETUP_VERSION
 
-local function Get(field, invert)
-    local v = RPChroniclerDB[field]
-    if invert then return v ~= false end
-    return v and true or false
-end
+local W = 440              -- frame width
+local TEXT_W = W - 48      -- wrapped text width
 
--- Each choice: label, one-line why, read and write of the saved value
-local CHOICES = {
-    { since = 1, label = "Auto-record dungeons and raids", why = "A run starts when you enter an instance and ends when you leave.",
-      get = function() return Get("autoRecord", true) end, set = function(v) RPChroniclerDB.autoRecord = v end },
-    { since = 1, label = "Ask to record in the open world", why = "Joining a group asks 'Start recording?'.",
-      get = function() return Get("promptOnGroup", true) end, set = function(v) RPChroniclerDB.promptOnGroup = v end },
-    { since = 1, label = "Auto screenshots", why = "Boss kills, level ups and marked moments in a run.",
-      get = function() return Get("autoScreenshots") end, set = function(v) RPChroniclerDB.autoScreenshots = v end },
-    { since = 1, label = "Auto screenshots in open world", why = "Off: auto shots only in dungeons and raids.",
-      get = function() return Get("worldAutoShots") end, set = function(v) RPChroniclerDB.worldAutoShots = v end },
-    { since = 1, label = "Add my own screenshots", why = "Your Print Screen shots join the run, with a caption.",
-      get = function() return Get("recordManualShots", true) end, set = function(v) RPChroniclerDB.recordManualShots = v end },
-    { since = 1, label = "Update companions from chat", why = "Level, class and latest chat of people you saved.",
-      get = function() return Get("autoUpdateKnown") end, set = function(v) RPChroniclerDB.autoUpdateKnown = v end },
-    { since = 1, label = "Debug log", why = "RP Chronicler's own errors and run events, never chat (/rp debug).",
-      get = function() return Get("debugEnabled", true) end, set = function(v) RPChroniclerDB.debugEnabled = v end },
+-- "What do you want to use?" (0.6.1: the RP Copy master switch)
+local USES = {
+    { key = "COPY", label = "RP Copy", why = "Copy the live scene for your AI character." },
+    { key = "STORIES", label = "Stories", why = "Record runs and keep the AI's stories." },
+    { key = "BOTH", label = "Both", why = "Everything RP Chronicler does." },
 }
-for _, c in ipairs(ns.CAPTURE_TYPES or {}) do
-    local key = c.key
-    table.insert(CHOICES, { since = 1, capture = true, label = c.label,
-        why = (key == "whisper") and "Private messages to and from you." or nil,
-        get = function() return RPChroniclerDB.capture[key] ~= false end,
-        set = function(v) RPChroniclerDB.capture[key] = v end })
-end
 
-local S = { rows = {}, pending = {} }
+-- Each choice: kind "use" (the three buttons above) or a switch with a
+-- label, a one-line why, and how it reads and writes the settings.
+local CHOICES = {
+    { since = 2, kind = "use" },
+    { since = 2, key = "autoRecord", label = "Auto-record dungeons and raids",
+      why = "A run starts when you enter an instance and ends when you leave.",
+      get = function() return ns.Get("autoRecord") end,
+      set = function(v) ns.Set("autoRecord", v) end },
+    { since = 2, key = "shots", label = "Screenshots in dungeons and raids",
+      why = "On boss kills, level ups and moments you mark.",
+      get = function() return ns.Get("autoShots") ~= "OFF" end,
+      set = function(v)
+          if not v then ns.Set("autoShots", "OFF")
+          elseif ns.Get("autoShots") == "OFF" then ns.Set("autoShots", "INSTANCE") end
+      end },
+}
+
+local S = { rows = {} }
 UI.setup = S
 
 local f = CreateFrame("Frame", "RPChroniclerSetupFrame", UIParent, UI.BACKDROP)
-f:SetSize(580, 470)
-f:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+f:SetSize(W, 420)
+f:SetPoint("CENTER", UIParent, "CENTER", 0, 30)
 f:SetFrameStrata("FULLSCREEN_DIALOG")
 f:SetMovable(true)
 f:EnableMouse(true)
@@ -60,169 +57,201 @@ f:Hide()
 UI.ApplyDarkGlass(f, 0.05, 0.06, 0.08, 0.98, 0.85, 0.68, 0.30, 0.90)
 S.frame = f
 
-S.title = UI.Label(f, "|cffffd100Welcome to RP Chronicler|r", "GameFontNormalLarge")
-S.title:SetPoint("TOPLEFT", 16, -14)
+S.logo = f:CreateTexture(nil, "ARTWORK")
+S.logo:SetSize(96, 96)
+S.logo:SetPoint("TOP", 0, -14)
+S.logo:SetTexture("Interface\\AddOns\\RPChronicler\\Media\\logo")
+
+S.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+S.title:SetPoint("TOP", S.logo, "BOTTOM", 0, -8)
+S.title:SetWidth(TEXT_W)
+S.title:SetJustifyH("CENTER")
 
 S.privacy = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-S.privacy:SetPoint("TOPLEFT", 16, -40)
-S.privacy:SetPoint("TOPRIGHT", -16, -40)
-S.privacy:SetJustifyH("LEFT")
-S.privacy:SetJustifyV("TOP")
+S.privacy:SetPoint("TOP", S.title, "BOTTOM", 0, -8)
+S.privacy:SetWidth(TEXT_W)
+S.privacy:SetJustifyH("CENTER")
 S.privacy:SetSpacing(2)
+S.privacy:SetText("|cffd8dee9Everything stays on your PC: RP Chronicler has no internet access and sends nothing. " ..
+    "Chat and logs only leave when you paste them into your own AI.|r")
 
-S.choiceHead = UI.Label(f, "", "GameFontNormal")
+-- The "use" buttons
+S.useHead = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+S.useHead:SetWidth(TEXT_W)
+S.useHead:SetJustifyH("CENTER")
+S.useHead:SetText("|cffffd100What do you want to use?|r")
+S.useBtns = {}
+S.useWhy = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+S.useWhy:SetWidth(TEXT_W)
+S.useWhy:SetJustifyH("CENTER")
+local USE_W = math.floor((TEXT_W - 12) / 3)
+for i, u in ipairs(USES) do
+    local b = UI.CreateSleekButton(f, USE_W, 26, u.label)
+    b:SetScript("OnClick", function()
+        S.use = u.key
+        S.SyncUse()
+    end)
+    S.useBtns[i] = b
+end
 
-S.copyBtn = UI.CreateSleekButton(f, 210, 20, "", "tool")
-S.copyBtn.tipTitle = "|cffffd100Ctrl+C copy mode|r"
-S.copyBtn.tipText = "Instant: hold Ctrl a moment and press C, one press copies. Two-press: Ctrl+C arms, a second Ctrl+C copies. Copy box: Ctrl+C shows the text selected in a small box, Ctrl+C there copies."
-S.copyWhy = UI.Label(f, "|cff8f9ba8How Ctrl+C copies the scene in the game world.|r", "GameFontHighlightSmall")
+function S.SyncUse()
+    for i, u in ipairs(USES) do
+        local b = S.useBtns[i]
+        if u.key == S.use then
+            b:LockHighlight()
+            b:SetText("|cffffd100" .. u.label .. "|r")
+            S.useWhy:SetText("|cff8f9ba8" .. u.why .. "|r")
+        else
+            b:UnlockHighlight()
+            b:SetText("|cffd8dee9" .. u.label .. "|r")
+        end
+    end
+    -- recording switches mean nothing with RP Copy alone
+    for _, row in ipairs(S.rows) do
+        if row.btn:IsShown() then
+            if S.use == "COPY" then row.btn:Disable() else row.btn:Enable() end
+        end
+    end
+end
 
--- 0.6.0: where to get the story exporter (not in the CurseForge download)
-S.exportTip = UI.Label(f, "|cffffd100Story web pages:|r |cff8f9ba8Export_Stories.bat turns your stories into web pages with your screenshots in place. " ..
-    "It is not in the CurseForge download: get it from |cffeceff1github.com/azaxyno/RPChronicler/releases|cff8f9ba8 and put it in Interface\\AddOns\\RPChronicler.|r", "GameFontHighlightSmall")
-S.exportTip:SetJustifyH("LEFT")
-S.exportTip:SetJustifyV("TOP")
+S.later = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+S.later:SetWidth(TEXT_W)
+S.later:SetJustifyH("CENTER")
+S.later:SetText("|cff8f9ba8Change any of this later in Options. Which chat is kept: Options > Privacy.|r")
 
-S.later = UI.Label(f, "|cff8f9ba8You can change all of this later in Options > Privacy and Options > Recording.|r", "GameFontHighlightSmall")
-S.later:SetPoint("BOTTOMLEFT", 16, 44)
-
-S.accept = UI.CreateSleekButton(f, 130, 24, "Accept & Save", "good")
-S.accept:SetPoint("BOTTOMLEFT", 16, 12)
-S.skip = UI.CreateSleekButton(f, 150, 24, "Skip (keep defaults)")
-S.skip:SetPoint("LEFT", S.accept, "RIGHT", 6, 0)
+S.start = UI.CreateSleekButton(f, 160, 28, "Start", "good")
+S.start:SetPoint("BOTTOM", 0, 14)
 
 local function RowLook(row)
-    local on = S.pending[row.idx]
-    UI.SetToggleLook(row.btn, on and true or false, row.choice.label .. ": ON", row.choice.label .. ": OFF")
+    UI.SetToggleLook(row.btn, row.on and true or false, row.choice.label .. ": ON", row.choice.label .. ": OFF")
 end
 
+local function TextH(fs, min)
+    return math.max(min or 12, math.floor((fs:GetStringHeight() or min or 12) + 0.5))
+end
+
+-- Lays out the shown choices under the privacy text and sizes the frame
 local function Layout(list)
     for _, r in ipairs(S.rows) do r.btn:Hide(); r.why:Hide() end
-    local y = -40 - math.max(70, (S.privacy:GetStringHeight() or 60)) - 12
-    S.choiceHead:ClearAllPoints()
-    S.choiceHead:SetPoint("TOPLEFT", 16, y)
-    S.choiceHead:SetText(#list > 0 and "|cffffd100Your choices|r" or "")
-    y = y - 20
-    local capCol = 0
-    for i, item in ipairs(list) do
-        local row = S.rows[i]
-        if not row then
-            row = { btn = UI.CreateSleekButton(f, 230, 20, ""), why = UI.Label(f, "", "GameFontHighlightSmall") }
-            row.btn:SetScript("OnClick", function(self)
-                S.pending[self.row.idx] = not S.pending[self.row.idx]
-                RowLook(self.row)
-            end)
-            row.btn.row = row
-            S.rows[i] = row
+    local y = -14 - 96 - 8 - TextH(S.title, 18) - 8 - TextH(S.privacy, 26) - 16
+    local showUse = false
+    for _, item in ipairs(list) do if item.kind == "use" then showUse = true end end
+    if showUse then
+        S.useHead:ClearAllPoints()
+        S.useHead:SetPoint("TOP", 0, y)
+        y = y - 20
+        for i, b in ipairs(S.useBtns) do
+            b:ClearAllPoints()
+            b:SetPoint("TOPLEFT", 24 + (i - 1) * (USE_W + 6), y)
+            b:Show()
         end
-        row.idx, row.choice = item.idx, item.choice
-        row.btn:ClearAllPoints()
-        row.why:ClearAllPoints()
-        if item.choice.capture and not item.choice.why then
-            -- chat types sit two to a line
-            row.btn:SetWidth(262)
-            row.btn:SetPoint("TOPLEFT", 16 + capCol * 274, y)
-            capCol = capCol + 1
-            if capCol > 1 then capCol, y = 0, y - 24 end
-            row.why:SetText("")
-        else
-            if capCol > 0 then capCol, y = 0, y - 24 end
-            row.btn:SetWidth(230)
-            row.btn:SetPoint("TOPLEFT", 16, y)
-            row.why:SetPoint("LEFT", row.btn, "RIGHT", 8, 0)
-            row.why:SetPoint("RIGHT", f, "RIGHT", -16, 0)
-            row.why:SetJustifyH("LEFT")
-            row.why:SetWordWrap(false)
-            row.why:SetText("|cff8f9ba8" .. (item.choice.why or "") .. "|r")
-            y = y - 24
-        end
-        row.btn:Show()
-        row.why:Show()
-        RowLook(row)
-    end
-    if capCol > 0 then y = y - 24 end
-    S.copyBtn:ClearAllPoints()
-    S.copyBtn:SetPoint("TOPLEFT", 16, y)
-    S.copyWhy:ClearAllPoints()
-    S.copyWhy:SetPoint("LEFT", S.copyBtn, "RIGHT", 8, 0)
-    if S.showCopy then S.copyBtn:Show(); S.copyWhy:Show(); y = y - 24 else S.copyBtn:Hide(); S.copyWhy:Hide() end
-    S.exportTip:ClearAllPoints()
-    if S.showCopy then
-        S.exportTip:SetPoint("TOPLEFT", 16, y - 6)
-        S.exportTip:SetPoint("TOPRIGHT", -16, y - 6)
-        S.exportTip:Show()
-        y = y - 6 - math.max(24, (S.exportTip:GetStringHeight() or 24)) - 4
+        y = y - 30
+        S.useWhy:ClearAllPoints()
+        S.useWhy:SetPoint("TOP", 0, y)
+        y = y - 22
+        S.useHead:Show()
+        S.useWhy:Show()
     else
-        S.exportTip:Hide()
+        S.useHead:Hide()
+        S.useWhy:Hide()
+        for _, b in ipairs(S.useBtns) do b:Hide() end
     end
-    f:SetHeight(math.max(260, -y + 80))
-end
-
-local function SyncCopyBtn()
-    S.copyBtn:SetText((S.copyMode == "TWOPRESS" and "Ctrl+C: Two-press") or (S.copyMode == "BOX" and "Ctrl+C: Copy box") or "Ctrl+C: Instant")
-end
-S.copyBtn:SetScript("OnClick", function()
-    S.copyMode = ({ INSTANT = "TWOPRESS", TWOPRESS = "BOX", BOX = "INSTANT" })[S.copyMode] or "INSTANT"
-    SyncCopyBtn()
-end)
-
-local function Finish(save)
-    if save then
-        for i, c in ipairs(CHOICES) do
-            if S.pending[i] ~= nil then pcall(c.set, S.pending[i]) end
+    local n = 0
+    for _, item in ipairs(list) do
+        if item.kind ~= "use" then
+            n = n + 1
+            local row = S.rows[n]
+            if not row then
+                row = { btn = UI.CreateSleekButton(f, TEXT_W, 22, ""), why = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") }
+                row.why:SetWidth(TEXT_W)
+                row.why:SetJustifyH("LEFT")
+                row.btn:SetScript("OnClick", function()
+                    row.on = not row.on
+                    RowLook(row)
+                end)
+                S.rows[n] = row
+            end
+            row.choice, row.on = item, item.get() and true or false
+            row.btn:ClearAllPoints()
+            row.btn:SetPoint("TOPLEFT", 24, y)
+            row.why:ClearAllPoints()
+            row.why:SetPoint("TOPLEFT", 26, y - 25)
+            row.why:SetText("|cff8f9ba8" .. item.why .. "|r")
+            row.btn:Show()
+            row.why:Show()
+            RowLook(row)
+            y = y - 25 - TextH(row.why, 12) - 10
         end
-        if S.showCopy and S.copyMode then RPChroniclerDB.copyMode = S.copyMode end
-        if UI.SyncCopyChip then pcall(UI.SyncCopyChip) end
     end
+    S.later:ClearAllPoints()
+    S.later:SetPoint("TOP", 0, y - 4)
+    y = y - 4 - TextH(S.later, 12) - 12
+    f:SetHeight(-y + 28 + 14)
+    S.SyncUse()
+end
+
+local function Finish()
+    if S.showUse then
+        ns.Set("rpCopy", S.use ~= "STORIES")
+    end
+    for _, row in ipairs(S.rows) do
+        if row.btn:IsShown() then
+            -- RP Copy alone: no automatic recording and no screenshots
+            local v = row.on
+            if S.use == "COPY" then v = false end
+            pcall(row.choice.set, v)
+        end
+    end
+    if S.use == "COPY" then ns.Set("promptOnGroup", false) end
     RPChroniclerDB.setupVersion = SETUP_VERSION
     f:Hide()
-    print("|cffffd100RP Chronicler|r " .. (save and "Setup saved." or "Setup skipped, defaults kept.") .. " |cff9aa5b4Change it any time in Options > Privacy (/rp setup).|r")
-    if ns.Debug then ns.Debug("info", "setup " .. (save and "saved" or "skipped") .. " (v" .. SETUP_VERSION .. ")") end
+    UI.SyncCopyChip()
+    UI.UpdateOverrideBindings()
+    print("|cffffd100RP Chronicler|r Setup saved. |cff9aa5b4Change it any time in Options (/rp setup shows this again).|r")
+    ns.Debug("info", "setup saved (v" .. SETUP_VERSION .. ", use " .. tostring(S.use) .. ")")
 end
-S.accept:SetScript("OnClick", function() Finish(true) end)
-S.skip:SetScript("OnClick", function() Finish(false) end)
-
-local waitFrame = CreateFrame("Frame")
+S.start:SetScript("OnClick", Finish)
 
 -- force: show every choice (from Options or /rp setup)
 function UI.OpenSetup(force)
     ns.EnsureDB()
     if InCombatLockdown and InCombatLockdown() then
-        waitFrame.force = force
-        waitFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        S.waitForce = force
+        S.waiting = true
         print("|cffffd100RP Chronicler|r Setup opens when you leave combat.")
         return
     end
     local seen = tonumber(RPChroniclerDB.setupVersion) or 0
     local list = {}
-    S.pending = {}
-    for i, c in ipairs(CHOICES) do
+    S.showUse = false
+    for _, c in ipairs(CHOICES) do
         if force or (c.since or 1) > seen then
-            S.pending[i] = c.get() and true or false
-            table.insert(list, { idx = i, choice = c })
+            table.insert(list, c)
+            if c.kind == "use" then S.showUse = true end
         end
     end
-    S.showCopy = force or seen < 1
-    S.copyMode = (RPChroniclerDB.copyMode == "TWOPRESS" or RPChroniclerDB.copyMode == "BOX") and RPChroniclerDB.copyMode or "INSTANT"
-    SyncCopyBtn()
-    S.title:SetText((seen < 1 or force) and "|cffffd100Welcome to RP Chronicler - privacy and setup|r" or "|cffffd100RP Chronicler - new recording options|r")
-    S.privacy:SetText(ns.PRIVACY_TEXT or "")
-    if UI.frame and UI.frame:IsShown() then UI.frame:Hide() end
+    if #list == 0 then return end
+    S.use = ns.RpCopyOn() and "BOTH" or "STORIES"
+    if seen < 1 or force then
+        S.title:SetText("|cffffd100Welcome to RP Chronicler|r")
+    else
+        S.title:SetText("|cffffd100RP Chronicler " .. tostring(ns.VERSION) .. ": a few new choices|r")
+    end
+    if UI.frame:IsShown() then UI.frame:Hide() end
     f:Show()
     Layout(list)
 end
 
-waitFrame:SetScript("OnEvent", function(self, event)
+ns.On({ "PLAYER_REGEN_ENABLED", "PLAYER_LOGIN" }, function(event)
     if event == "PLAYER_REGEN_ENABLED" then
-        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        UI.OpenSetup(self.force)
-    elseif event == "PLAYER_LOGIN" then
-        if C_Timer and C_Timer.After then
-            C_Timer.After(5, function()
-                ns.EnsureDB()
-                if (tonumber(RPChroniclerDB.setupVersion) or 0) < SETUP_VERSION then UI.OpenSetup(false) end
-            end)
+        if S.waiting then
+            S.waiting = false
+            UI.OpenSetup(S.waitForce)
         end
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(5, function()
+            ns.EnsureDB()
+            if (tonumber(RPChroniclerDB.setupVersion) or 0) < SETUP_VERSION then UI.OpenSetup(false) end
+        end)
     end
 end)
-waitFrame:RegisterEvent("PLAYER_LOGIN")

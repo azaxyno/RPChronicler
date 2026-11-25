@@ -1,17 +1,21 @@
 ## Interface: 16001
 ## Title: RP Chronicler
 ## Notes: AI roleplay snapshots, companion notes and colored adventure stories
-## Version: 0.6.0
+## Version: 0.6.1
 ## SavedVariables: RPChroniclerDB
 # CurseForge: once the project exists, change the next line to
 # "## X-Curse-Project-ID: <project id>" (two #, no space before X)
 # ## X-Curse-Project-ID: 000000
 
 Core.lua
+Game.lua
 Debug.lua
 Companions.lua
 Snapshot.lua
-Adventures.lua
+Runs.lua
+RunReport.lua
+Stories.lua
+Templates.lua
 Screenshots.lua
 Events.lua
 Chronicle.lua

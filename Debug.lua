@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 -- =========================================================
 -- Debug log (0.4.0)
--- A ring buffer of about 200 lines in RPCopyDB.debugLog. It holds RPCopy's
+-- A ring buffer of about 200 lines in RPChroniclerDB.debugLog. It holds RP Chronicler's
 -- own Lua errors, blocked-action events and lifecycle events (load,
 -- recording start / pause / end, imports). It never stores chat text.
 -- "/rp debug" shows it with version, client and settings for bug reports.
@@ -16,9 +16,9 @@ local function Stamp()
 end
 
 local function Push(line)
-    if ready and RPCopyDB then
-        RPCopyDB.debugLog = type(RPCopyDB.debugLog) == "table" and RPCopyDB.debugLog or {}
-        local log = RPCopyDB.debugLog
+    if ready and RPChroniclerDB then
+        RPChroniclerDB.debugLog = type(RPChroniclerDB.debugLog) == "table" and RPChroniclerDB.debugLog or {}
+        local log = RPChroniclerDB.debugLog
         table.insert(log, line)
         while #log > MAX_LINES do table.remove(log, 1) end
     else
@@ -30,14 +30,14 @@ end
 -- kind: "info", "run", "error", "blocked", "copy", "verbose"
 -- 0.5.0: Options > Debug can switch the log off (errors are still kept).
 function ns.Debug(kind, msg)
-    if kind == "verbose" and not (RPCopyDB and RPCopyDB.debugVerbose) then return end
-    if RPCopyDB and RPCopyDB.debugEnabled == false and kind ~= "error" and kind ~= "blocked" then return end
+    if kind == "verbose" and not (RPChroniclerDB and RPChroniclerDB.debugVerbose) then return end
+    if RPChroniclerDB and RPChroniclerDB.debugEnabled == false and kind ~= "error" and kind ~= "blocked" then return end
     local text = tostring(msg or ""):gsub("[\r\n]+", " / ")
     if #text > 400 then text = text:sub(1, 400) .. "..." end
     Push(string.format("[%s] %s: %s", Stamp(), kind or "info", text))
 end
 
--- Called once RPCopyDB is loaded (PLAYER_LOGIN): pending lines join the saved log
+-- Called once RPChroniclerDB is loaded (PLAYER_LOGIN): pending lines join the saved log
 function ns.DebugReady()
     if ready then return end
     ready = true
@@ -52,7 +52,7 @@ do
     if seterrorhandler and type(prev) == "function" then
         local ok = pcall(seterrorhandler, function(msg, ...)
             local text = tostring(msg or "")
-            if text:find("RPCopy", 1, true) then
+            if text:find("RPChronicler", 1, true) then
                 pcall(ns.Debug, "error", text)
             end
             return prev(msg, ...)
@@ -61,7 +61,7 @@ do
     end
 end
 
--- Blocked actions that name RPCopy
+-- Blocked actions that name RP Chronicler
 do
     local f = CreateFrame("Frame")
     pcall(f.RegisterEvent, f, "ADDON_ACTION_BLOCKED")
@@ -77,14 +77,14 @@ end
 function ns.BuildDebugReport()
     local out = {}
     local function add(s) table.insert(out, s) end
-    add("RPCopy debug report")
+    add("RP Chronicler debug report")
     add("Version: " .. tostring(ns.VERSION or "?"))
     if GetBuildInfo then
         local ok, ver, build, bdate, iface = pcall(GetBuildInfo)
         if ok then add(string.format("Client: %s (build %s, %s), interface %s", tostring(ver), tostring(build), tostring(bdate), tostring(iface))) end
     end
     if GetLocale then add("Locale: " .. tostring(GetLocale())) end
-    local db = RPCopyDB or {}
+    local db = RPChroniclerDB or {}
     add(string.format("Settings: copy %s, instant in combat %s, auto-record %s, group prompt %s, login prompt %s, resume after reload %s, verbose %s",
         tostring(db.copyMode), tostring(db.instantInCombat), tostring(db.autoRecord), tostring(db.promptOnGroup),
         tostring(db.promptOnLogin), tostring(db.resumeAfterReload), tostring(db.debugVerbose)))

@@ -33,12 +33,12 @@ local function RestoreUI()
 end
 
 local function Capture(kind, description)
-    if not RPCopyDB or not RPCopyDB.autoScreenshots then return end
+    if not RPChroniclerDB or not RPChroniclerDB.autoScreenshots then return end
     local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
     if not run then return end
     -- 0.5.1: no automatic shots in open-world runs unless switched on
     -- (Options > Recording). Mark Moment is your own choice, so it still shoots.
-    if run.kind == "world" and kind ~= "mark" and not RPCopyDB.worldAutoShots then return end
+    if run.kind == "world" and kind ~= "mark" and not RPChroniclerDB.worldAutoShots then return end
     -- 0.5.0: the per-run cap (Options > Full Log limits) stops new shots
     -- instead of dropping the oldest ones
     if not ns.RecordAdventureScreenshot(kind, description) then return end
@@ -71,7 +71,7 @@ end
 local function FirePending(tries)
     local p = pending
     if not p then return end
-    if not RPCopyDB or not RPCopyDB.autoScreenshots then
+    if not RPChroniclerDB or not RPChroniclerDB.autoScreenshots then
         pending = nil
         return
     end
@@ -88,7 +88,7 @@ local function FirePending(tries)
 end
 
 function ns.RequestScreenshot(kind, description)
-    if not RPCopyDB or not RPCopyDB.autoScreenshots then return end
+    if not RPChroniclerDB or not RPChroniclerDB.autoScreenshots then return end
     if not (ns.GetActiveAdventure and ns.GetActiveAdventure()) then return end
     if not ALWAYS_SHOOT[kind] and lastShotAt and (GetTime() - lastShotAt) < DEBOUNCE then return end
     if pending then
@@ -114,7 +114,7 @@ end
 -- 0.5.0: your own Print Screen shots join the run too (with a caption),
 -- so the exporter can place them in the story. Options > Recording.
 local function OnManualShot()
-    if not RPCopyDB or RPCopyDB.recordManualShots == false then return end
+    if not RPChroniclerDB or RPChroniclerDB.recordManualShots == false then return end
     if ownShotAt and (GetTime() - ownShotAt) < OWN_WINDOW then
         ownShotAt = nil
         return

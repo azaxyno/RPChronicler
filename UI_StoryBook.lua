@@ -7,7 +7,7 @@ local UI = ns.UI
 -- from the story (title, instance, duration, zone, date, party, stats,
 -- chapters), Share as plain text, Edit Details, Re-Import, Delete and a
 -- jump to the recording while it still exists. Stories live in
--- RPCopyDB.stories, so deleting a recording never deletes its story.
+-- RPChroniclerDB.stories, so deleting a recording never deletes its story.
 -- =========================================================
 local B = { cards = {} }
 UI.storyBook = B
@@ -30,7 +30,7 @@ end
 function UI.OpenStoryBook(storyId)
     if storyId then ns.state.bookStoryId = storyId end
     if not UI.frame:IsShown() then
-        RPCopy_Open("", "BOOK")
+        RPChronicler_Open("", "BOOK")
     elseif ns.state.section ~= "BOOK" then
         UI.ShowSection("BOOK")
     else
@@ -56,7 +56,7 @@ B.importBtn:SetIcon(UI.ICONS.STORY, 14)
 B.importBtn.tipTitle = "|cffffd100Import Story from AI|r"
 B.importBtn.tipText = "Paste the colored story your AI wrote and pick the run it belongs to."
 
-B.listScroll = CreateFrame("ScrollFrame", "RPCopyBookListScroll", B.list, "UIPanelScrollFrameTemplate")
+B.listScroll = CreateFrame("ScrollFrame", "RPChroniclerBookListScroll", B.list, "UIPanelScrollFrameTemplate")
 B.listScroll:SetPoint("TOPLEFT", 6, -26)
 B.listScroll:SetPoint("BOTTOMRIGHT", -26, 36)
 B.listChild = CreateFrame("Frame", nil, B.listScroll)
@@ -113,7 +113,7 @@ B.delBtn.tipText = "Click twice. Removes the story only; the recording stays."
 
 -- 0.5.0: a dismissible tip on making HTML pages outside the game
 B.tip = CreateFrame("Frame", nil, B.right, UI.BACKDROP)
-B.tip:SetHeight(44)
+B.tip:SetHeight(58)
 B.tip:SetPoint("TOPLEFT", 0, -102)
 B.tip:SetPoint("TOPRIGHT", 0, -102)
 UI.ApplyDarkGlass(B.tip, 0.10, 0.09, 0.06, 0.92, 0.60, 0.48, 0.22, 0.70)
@@ -123,14 +123,15 @@ do
     t:SetPoint("BOTTOMRIGHT", -30, 5)
     t:SetJustifyH("LEFT")
     t:SetJustifyV("TOP")
-    t:SetText("|cffffd100Web pages with screenshots:|r |cffd7c4a3/reload or log out first so the game saves your stories, then double-click " ..
-        "|cfff5e6c8Export_Stories.bat|cffd7c4a3 in Interface\\AddOns\\RPCopy. The pages appear in the |cfff5e6c8RPCopy Stories|cffd7c4a3 folder of _forever_.|r")
+    t:SetText("|cffffd100Web pages with screenshots:|r |cffd7c4a3get |cfff5e6c8Export_Stories.bat|cffd7c4a3 from |cfff5e6c8github.com/azaxyno/RPChronicler/releases|cffd7c4a3 " ..
+        "(CurseForge downloads leave it out) and put it in Interface\\AddOns\\RPChronicler. /reload or log out so the game saves your stories, then double-click it. " ..
+        "The pages appear in the |cfff5e6c8RP Chronicler Stories|cffd7c4a3 folder of _forever_.|r")
     local x = UI.CreateSleekButton(B.tip, 20, 18, "x", "danger")
     x:SetPoint("TOPRIGHT", -5, -5)
     x.tipTitle = "|cffffd100Hide this tip|r"
     x.tipText = "Bring it back in Options > Stories & Export."
     x:SetScript("OnClick", function()
-        RPCopyDB.exportTip = false
+        RPChroniclerDB.exportTip = false
         UI.RefreshStoryBook()
     end)
 end
@@ -147,7 +148,7 @@ do
     inner:SetPoint("BOTTOMRIGHT", -5, 5)
     UI.ApplyDarkGlass(inner, 0.11, 0.08, 0.06, 0.82, 0.82, 0.65, 0.30, 0.50)
 
-    B.scroll = CreateFrame("ScrollFrame", "RPCopyBookReadScroll", inner, "UIPanelScrollFrameTemplate")
+    B.scroll = CreateFrame("ScrollFrame", "RPChroniclerBookReadScroll", inner, "UIPanelScrollFrameTemplate")
     B.scroll:SetPoint("TOPLEFT", 14, -12)
     B.scroll:SetPoint("BOTTOMRIGHT", -28, 12)
     B.child = CreateFrame("Frame", nil, B.scroll)
@@ -321,18 +322,19 @@ function UI.RefreshStoryBook()
 
     B.readBg:ClearAllPoints()
     B.readBg:SetPoint("BOTTOMRIGHT", 0, 0)
-    if RPCopyDB.exportTip ~= false then
+    if RPChroniclerDB.exportTip ~= false then
         B.tip:Show()
-        B.readBg:SetPoint("TOPLEFT", 0, -150)
+        B.readBg:SetPoint("TOPLEFT", 0, -164)
     else
         B.tip:Hide()
         B.readBg:SetPoint("TOPLEFT", 0, -104)
     end
 
     local shown = ns.NormalizeStoryText(adv.story)
+    if ns.CleanStoryHeader then shown = ns.CleanStoryHeader(shown) end
     -- 0.5.3: auto-color the stored text once (markers kept), so the
     -- exporter gets the same colors after a /reload
-    if RPCopyDB.autoColorStory ~= false and ns.AutoColorStory and adv.autoColored ~= ns.AUTOCOLOR_VERSION then
+    if RPChroniclerDB.autoColorStory ~= false and ns.AutoColorStory and adv.autoColored ~= ns.AUTOCOLOR_VERSION then
         local ok, colored = pcall(ns.AutoColorStory, shown, adv)
         if ok and type(colored) == "string" then
             shown = colored
@@ -407,7 +409,7 @@ do
         { key = "date", label = "Date" },
         { key = "party", label = "Party" },
     }
-    local f = CreateFrame("Frame", "RPCopyBookDetailsFrame", UIParent, UI.BACKDROP)
+    local f = CreateFrame("Frame", "RPChroniclerBookDetailsFrame", UIParent, UI.BACKDROP)
     f:SetSize(420, 70 + #FIELDS * 28)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 30)
     f:SetFrameStrata("FULLSCREEN_DIALOG")

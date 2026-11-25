@@ -16,35 +16,35 @@ end
 
 local function NotTyping()
     local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
-    return not focused or focused == _G.RPCopySilentArmBox
+    return not focused or focused == _G.RPChroniclerSilentArmBox
 end
 
-SilentButton("RPCopySilentCaptureBtn", function() RPCopy_CaptureTarget() end)
-SilentButton("RPCopySilentMarkBtn", function()
-    if NotTyping() and RPCopy_MarkMoment then RPCopy_MarkMoment() end
+SilentButton("RPChroniclerSilentCaptureBtn", function() RPChronicler_CaptureTarget() end)
+SilentButton("RPChroniclerSilentMarkBtn", function()
+    if NotTyping() and RPChronicler_MarkMoment then RPChronicler_MarkMoment() end
 end)
-SilentButton("RPCopySilentOpenBtn", function()
-    if NotTyping() then RPCopy_Toggle() end
+SilentButton("RPChroniclerSilentOpenBtn", function()
+    if NotTyping() then RPChronicler_Toggle() end
 end)
-SilentButton("RPCopySilentRunStartBtn", function()
-    if NotTyping() then RPCopy_StartRun() end
+SilentButton("RPChroniclerSilentRunStartBtn", function()
+    if NotTyping() then RPChronicler_StartRun() end
 end)
-SilentButton("RPCopySilentRunPauseBtn", function()
-    if NotTyping() then RPCopy_ToggleRunPause() end
+SilentButton("RPChroniclerSilentRunPauseBtn", function()
+    if NotTyping() then RPChronicler_ToggleRunPause() end
 end)
-SilentButton("RPCopySilentRunEndBtn", function()
-    if NotTyping() then RPCopy_EndRun() end
+SilentButton("RPChroniclerSilentRunEndBtn", function()
+    if NotTyping() then RPChronicler_EndRun() end
 end)
 
 local KEY_TO_BUTTON = {
-    { field = "markMomentKey", button = "RPCopySilentMarkBtn" },
-    { field = "openWindowKey", button = "RPCopySilentOpenBtn" },
-    { field = "runStartKey", button = "RPCopySilentRunStartBtn" },
-    { field = "runPauseKey", button = "RPCopySilentRunPauseBtn" },
-    { field = "runEndKey", button = "RPCopySilentRunEndBtn" },
+    { field = "markMomentKey", button = "RPChroniclerSilentMarkBtn" },
+    { field = "openWindowKey", button = "RPChroniclerSilentOpenBtn" },
+    { field = "runStartKey", button = "RPChroniclerSilentRunStartBtn" },
+    { field = "runPauseKey", button = "RPChroniclerSilentRunPauseBtn" },
+    { field = "runEndKey", button = "RPChroniclerSilentRunEndBtn" },
 }
 
-local bindOwner = CreateFrame("Frame", "RPCopyBindManagerFrame", UIParent)
+local bindOwner = CreateFrame("Frame", "RPChroniclerBindManagerFrame", UIParent)
 
 function UI.UpdateOverrideBindings()
     if InCombatLockdown and InCombatLockdown() then
@@ -55,14 +55,14 @@ function UI.UpdateOverrideBindings()
     UI.EnsureOptions()
     if ClearOverrideBindings then ClearOverrideBindings(bindOwner) end
     if not SetOverrideBindingClick then return end
-    local db = RPCopyDB
+    local db = RPChroniclerDB
     -- Quick Copy: Ctrl+C (both copy styles) or a custom key. When the hidden
     -- copy box already has focus, the keystroke goes to it and copies.
     if db.quickCtrlC and db.quickCopyKey and db.quickCopyKey ~= "" then
-        SetOverrideBindingClick(bindOwner, false, db.quickCopyKey, "RPCopySilentCopyBtn")
+        SetOverrideBindingClick(bindOwner, false, db.quickCopyKey, "RPChroniclerSilentCopyBtn")
     end
     if db.quickCapture and db.captureTargetKey and db.captureTargetKey ~= "" then
-        SetOverrideBindingClick(bindOwner, false, db.captureTargetKey, "RPCopySilentCaptureBtn")
+        SetOverrideBindingClick(bindOwner, false, db.captureTargetKey, "RPChroniclerSilentCaptureBtn")
     end
     for _, kb in ipairs(KEY_TO_BUTTON) do
         local key = db[kb.field]
@@ -99,7 +99,7 @@ UI.miniBtn = miniBtn
 -- Right-click menu (0.4.0): Start/Stop, Pause/Resume, Mark Moment, Story
 -- Book, Clear logs. A plain frame, so it works in combat too.
 do
-    local menu = CreateFrame("Frame", "RPCopyIconMenu", UIParent, UI.BACKDROP)
+    local menu = CreateFrame("Frame", "RPChroniclerIconMenu", UIParent, UI.BACKDROP)
     menu:SetSize(170, 10)
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:Hide()
@@ -107,9 +107,9 @@ do
     UI.iconMenu = menu
 
     local items = {
-        { key = "run", fn = function() RPCopy_ToggleRun() end },
-        { key = "pause", fn = function() RPCopy_ToggleRunPause() end },
-        { key = "mark", label = "Mark Moment", fn = function() if RPCopy_MarkMoment then RPCopy_MarkMoment() end end },
+        { key = "run", fn = function() RPChronicler_ToggleRun() end },
+        { key = "pause", fn = function() RPChronicler_ToggleRunPause() end },
+        { key = "mark", label = "Mark Moment", fn = function() if RPChronicler_MarkMoment then RPChronicler_MarkMoment() end end },
         -- 0.5.0: straight to the live run's Full Log
         { key = "open", label = "Open current recording", fn = function()
             local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
@@ -118,7 +118,7 @@ do
         { key = "book", label = "Story Book", fn = function() if UI.OpenStoryBook then UI.OpenStoryBook() end end },
         { key = "clear", label = "Clear chat logs", fn = function()
             ns.ClearSessionLogs()
-            print("|cff00ff00[RPCopy]|r All logs cleared.")
+            print("|cff00ff00[RP Chronicler]|r All logs cleared.")
         end },
     }
     for i, it in ipairs(items) do
@@ -173,7 +173,7 @@ miniBtn:SetScript("OnClick", function(_, button)
     if button == "RightButton" then
         UI.ToggleIconMenu()
     else
-        RPCopy_Toggle()
+        RPChronicler_Toggle()
     end
 end)
 
@@ -215,7 +215,7 @@ do
         acc = acc + elapsed
         local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
         local want = run and (run.paused and "paused" or "rec") or nil
-        if RPCopyDB and RPCopyDB.iconState == false then want = nil end
+        if RPChroniclerDB and RPChroniclerDB.iconState == false then want = nil end
         if want ~= state then Apply(want) end
         if state == "rec" then
             local a = 0.55 + 0.45 * math.sin(GetTime() * 4)
@@ -232,7 +232,7 @@ do
     miniBtn:HookScript("OnEnter", function(self)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
-        GameTooltip:SetText("|cffffd100RPCopy|r", 1, 1, 1)
+        GameTooltip:SetText("|cffffd100RP Chronicler|r", 1, 1, 1)
         local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
         if run and run.paused then
             GameTooltip:AddLine("|cffffb74dRecording paused:|r " .. (run.title or "Adventure"), 1, 1, 1)
@@ -257,42 +257,53 @@ end
 -- =========================================================
 -- Slash commands
 -- =========================================================
-SLASH_RPCOPY1 = "/rp"
-SLASH_RPCOPY2 = "/rpcopy"
-SlashCmdList["RPCOPY"] = function(msg)
+SLASH_RPCHRONICLER1 = "/rp"
+SLASH_RPCHRONICLER2 = "/rpchronicler"
+SlashCmdList["RPCHRONICLER"] = function(msg)
     local trimmed = (msg or ""):match("^%s*(.-)%s*$")
     local low = trimmed:lower()
     if low == "clear" then
         ns.ClearSessionLogs()
-        print("|cff00ff00[RPCopy]|r All logs cleared.")
+        print("|cff00ff00[RP Chronicler]|r All logs cleared.")
     elseif low == "quick" then
-        RPCopy_QuickCopy()
+        RPChronicler_QuickCopy()
     elseif low == "capture" then
-        RPCopy_CaptureTarget()
+        RPChronicler_CaptureTarget()
     elseif low == "btn" then
         if miniBtn:IsShown() then miniBtn:Hide() else miniBtn:Show() end
     elseif low == "options" or low == "config" then
-        UI.OpenOptionsPage(RPCopyDB and RPCopyDB.optionsPage or "GENERAL")
+        UI.OpenOptionsPage(RPChroniclerDB and RPChroniclerDB.optionsPage or "GENERAL")
     elseif low == "companions" then
-        RPCopy_Open("", "PLAYERS")
+        RPChronicler_Open("", "PLAYERS")
     elseif low == "adventures" or low == "runs" then
-        RPCopy_Open("", "ADVENTURES")
+        RPChronicler_Open("", "ADVENTURES")
     elseif low == "start" then
-        RPCopy_StartRun()
+        RPChronicler_StartRun()
     elseif low == "book" or low == "stories" then
         UI.OpenStoryBook()
     elseif low == "setup" or low == "privacy" then
         if UI.OpenSetup then UI.OpenSetup(true) end
     elseif low == "wipe" then
-        UI.ShowPrompt("|cffff6b6bDelete ALL RPCopy data?|r\nEvery recording, story, companion and setting is removed, then the UI reloads. This cannot be undone.",
+        UI.ShowPrompt("|cffff6b6bDelete ALL RP Chronicler data?|r\nEvery recording, story, companion and setting is removed, then the UI reloads. This cannot be undone.",
             "Delete everything", function() ns.WipeAllData() end, "Cancel", nil)
+    elseif low == "import rpcopy" or low == "importold" then
+        -- 0.6.0: copy the old RPCopy data again by hand (it needs the old
+        -- RPCopy addon installed and loaded this session)
+        if type(_G.RPCopyDB) == "table" and next(_G.RPCopyDB) ~= nil then
+            UI.ShowPrompt("|cffffd100Copy your old RPCopy data?|r\nYour current RP Chronicler data is replaced by the RPCopy data, then the UI reloads.",
+                "Copy and reload", function()
+                    if ns.MigrateFromRPCopy(true) and ReloadUI then ReloadUI() end
+                end, "Cancel", nil)
+        else
+            print("|cffffd100RP Chronicler|r No RPCopy data is loaded. Put the RPCopy folder from the 0.6.0 zip back in Interface\\AddOns, turn it on in the AddOns list, log in and type /rp import rpcopy again. See the README (Moving from RPCopy).")
+        end
     elseif low == "debug" then
-        UI.ShowCopyBox("|cffffd100RPCopy debug report|r",
+        UI.ShowCopyBox("|cffffd100RP Chronicler debug report|r",
             "|cffb0bac5Select All, Ctrl+C, and paste it into your bug report. It holds no chat.|r",
             ns.BuildDebugReport and ns.BuildDebugReport() or "Debug module not loaded.")
     elseif low == "debug clear" then
-        if RPCopyDB then RPCopyDB.debugLog = {} end
-        print("|cff00ff00[RPCopy]|r Debug log cleared.")
+        if RPChroniclerDB then RPChroniclerDB.debugLog = {} end
+        print("|cff00ff00[RP Chronicler]|r Debug log cleared.")
     elseif low == "pause" or low == "resume" then
         local ok, status
         if low == "pause" then
@@ -300,26 +311,26 @@ SlashCmdList["RPCOPY"] = function(msg)
         else
             ok, status = ns.ResumeAdventure and ns.ResumeAdventure()
         end
-        print("|cff00ff00[RPCopy]|r " .. tostring(status or "Adventures module not loaded."))
+        print("|cff00ff00[RP Chronicler]|r " .. tostring(status or "Adventures module not loaded."))
         if UI.RefreshRunViews then pcall(UI.RefreshRunViews) end
     elseif low == "end" or low == "stop" then
         local saved = ns.GetActiveAdventure() and ns.EndAdventure("Ended Manually")
-        print("|cff00ff00[RPCopy]|r " .. (saved and ("Saved adventure: " .. (saved.title or "Adventure")) or "No active adventure running."))
+        print("|cff00ff00[RP Chronicler]|r " .. (saved and ("Saved adventure: " .. (saved.title or "Adventure")) or "No active adventure running."))
         if UI.RefreshRunViews then pcall(UI.RefreshRunViews) end
     elseif low == "diag" then
         if ns.DiagnoseTarget then
             for _, line in ipairs(ns.DiagnoseTarget()) do
-                print("|cffffd100[RPCopy diag]|r " .. line)
+                print("|cffffd100[RP Chronicler diag]|r " .. line)
             end
         end
     elseif low:match("^mark") then
         local noteArg = trimmed:match("^mark%s+(.+)$")
         local ok, status = ns.MarkAdventureHighlight(noteArg)
-        print("|cff00ff00[RPCopy]|r " .. status)
+        print("|cff00ff00[RP Chronicler]|r " .. status)
         if ok and ns.RequestScreenshot then
             ns.RequestScreenshot("mark", noteArg or "Marked moment")
         end
     else
-        RPCopy_Open(trimmed)
+        RPChronicler_Open(trimmed)
     end
 end

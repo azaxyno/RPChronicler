@@ -738,7 +738,7 @@ function ns.ChronicleNpc(npcName, msg, event)
 
     local loud = event == "CHAT_MSG_MONSTER_YELL" or event == "CHAT_MSG_RAID_BOSS_EMOTE"
         or event == "CHAT_MSG_RAID_BOSS_WHISPER" or event == "CHAT_MSG_MONSTER_WHISPER"
-    local boss = (RPCopyDB and RPCopyDB.knownBosses and RPCopyDB.knownBosses[npcName or ""])
+    local boss = (RPChroniclerDB and RPChroniclerDB.knownBosses and RPChroniclerDB.knownBosses[npcName or ""])
         or (ns.GetActiveBossName and ns.GetActiveBossName() == npcName)
     local named = boss or (UnitExists("target") and ns.SafeStr(UnitName("target")) == npcName)
         or (UnitExists("npc") and ns.SafeStr(UnitName("npc")) == npcName)
@@ -837,23 +837,23 @@ local function Prompt(text, b1, f1, b2, f2)
     if ns.UI and ns.UI.ShowPrompt then
         ns.UI.ShowPrompt(text, b1, f1, b2, f2)
     else
-        print("|cffffd100RPCopy|r " .. text)
+        print("|cffffd100RP Chronicler|r " .. text)
     end
 end
 
 local function OfferStart(reason)
     if Run() or (ns.GetActiveAdventure and ns.GetActiveAdventure()) or InInstance() then return end
-    Prompt("|cffffd100RPCopy|r " .. reason .. "\nStart recording an adventure?", "Start recording", function()
+    Prompt("|cffffd100RP Chronicler|r " .. reason .. "\nStart recording an adventure?", "Start recording", function()
         if ns.UI and ns.UI.StartRunFromUI then ns.UI.StartRunFromUI() else ns.StartAdventure(nil, false) end
     end, "Not now", nil)
 end
 
 function ns.OfferInterruptedRun(run)
     if not run then return end
-    Prompt(string.format("|cffffd100RPCopy|r Your run |cffeceff1%s|r was cut short by a logout or disconnect. It is saved.\nResume recording it, or keep it as it is?",
+    Prompt(string.format("|cffffd100RP Chronicler|r Your run |cffeceff1%s|r was cut short by a logout or disconnect. It is saved.\nResume recording it, or keep it as it is?",
         tostring(run.title or "Adventure")), "Resume", function()
         local ok, msg = ns.ResumeInterruptedRun(run.id)
-        print("|cffffd100RPCopy|r " .. tostring(msg))
+        print("|cffffd100RP Chronicler|r " .. tostring(msg))
         if ns.UI and ns.UI.RefreshAdventuresTab then pcall(ns.UI.RefreshAdventuresTab) end
         if ns.UI and ns.UI.RefreshRecordIcon then pcall(ns.UI.RefreshRecordIcon) end
     end, "Keep saved", nil)
@@ -905,14 +905,14 @@ do
             if not loginChecked then
                 loginChecked = true
                 After(4, function()
-                    if RPCopyDB and RPCopyDB.promptOnLogin and not (IsInGroup and IsInGroup()) then
+                    if RPChroniclerDB and RPChroniclerDB.promptOnLogin and not (IsInGroup and IsInGroup()) then
                         OfferStart("Welcome back.")
                     end
                 end)
             end
         elseif event == "GROUP_ROSTER_UPDATE" or event == "GROUP_JOINED" then
             local grouped = (IsInGroup and IsInGroup()) and true or false
-            if grouped and wasGrouped == false and RPCopyDB and RPCopyDB.promptOnGroup ~= false then
+            if grouped and wasGrouped == false and RPChroniclerDB and RPChroniclerDB.promptOnGroup ~= false then
                 After(1.5, function() OfferStart("You joined a group.") end)
             end
             wasGrouped = grouped

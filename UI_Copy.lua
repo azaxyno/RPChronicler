@@ -10,7 +10,7 @@ local UI = ns.UI
 -- with the snapshot highlighted, so the C of your Ctrl+C copies on the FIRST
 -- press. Quick Ctrl+<key> combos (pressed before the short delay) pass
 -- straight through to your keybinds, and once you have pressed another key
--- with Ctrl in a hold, RPCopy stays out of the way until Ctrl is released.
+-- with Ctrl in a hold, RP Chronicler stays out of the way until Ctrl is released.
 -- In combat it switches to two-press unless "Instant in combat" is on.
 --
 -- TWO-PRESS mode: Ctrl+C arms the box, a second Ctrl+C copies (3s window).
@@ -25,7 +25,7 @@ local ARM_DELAY = 0.1
 -- its native copy of the highlighted text (0.05s was too short on some PCs).
 local DISARM_DELAY = 0.25
 
-local armEditBox = CreateFrame("EditBox", "RPCopySilentArmBox", UIParent)
+local armEditBox = CreateFrame("EditBox", "RPChroniclerSilentArmBox", UIParent)
 -- 0.5.1: a real size. A 1x1 multi-line box lays out no text on the modern
 -- client, so nothing is selected and Ctrl+C copies nothing. The box is
 -- still invisible (alpha), sits behind everything and takes no mouse.
@@ -67,12 +67,12 @@ local function FocusName()
 end
 
 function UI.IsCtrlCCopy()
-    return RPCopyDB and RPCopyDB.quickCtrlC and RPCopyDB.quickCopyKey == "CTRL-C"
+    return RPChroniclerDB and RPChroniclerDB.quickCtrlC and RPChroniclerDB.quickCopyKey == "CTRL-C"
 end
 
 function UI.IsInstantCopyActive()
-    if not UI.IsCtrlCCopy() or RPCopyDB.copyMode ~= "INSTANT" then return false end
-    if InCombat() and not RPCopyDB.instantInCombat then return false end
+    if not UI.IsCtrlCCopy() or RPChroniclerDB.copyMode ~= "INSTANT" then return false end
+    if InCombat() and not RPChroniclerDB.instantInCombat then return false end
     return true
 end
 
@@ -92,14 +92,14 @@ function UI.BuildQuickCopyText(sliceId)
     local ok, snap = pcall(ns.BuildSnapshot, sliceId or "CHAT", "", false)
     if not ok then
         CopyLog("error", "Quick copy: snapshot failed: " .. tostring(snap))
-        UI.ShowToast("|cffff6b6bRPCopy:|r the snapshot failed to build. See /rp debug.", 3.0, 0.75, 0.28, 0.28)
+        UI.ShowToast("|cffff6b6bRP Chronicler:|r the snapshot failed to build. See /rp debug.", 3.0, 0.75, 0.28, 0.28)
         return nil
     end
     if type(snap) ~= "string" or (ns.IsSecret and ns.IsSecret(snap)) then
         CopyLog("error", "Quick copy: snapshot was not plain text")
         return nil
     end
-    if snap == "" then snap = "[RPCopy] (nothing to copy yet)" end
+    if snap == "" then snap = "[RP Chronicler] (nothing to copy yet)" end
     return snap
 end
 
@@ -109,13 +109,13 @@ end
 function UI.ShowQuickCopyBox(reason)
     UI.EnsureOptions()
     if UI.frame:IsShown() then UI.frame:Hide() end
-    local tabCfg = ns.GetTabConfig(RPCopyDB.lastSliceId)
+    local tabCfg = ns.GetTabConfig(RPChroniclerDB.lastSliceId)
     Q.label = (tabCfg and tabCfg.label) or "Chat"
     local snap = UI.BuildQuickCopyText(tabCfg and tabCfg.id)
     if not snap then return false end
     UI.DisarmCtrlCopy()
     CopyLog("copy", "copy box shown (" .. (reason or "style") .. "): len " .. #snap)
-    UI.ShowCopyBox("|cffffd100RPCopy|r |cff69ccf0[" .. Q.label .. "]|r",
+    UI.ShowCopyBox("|cffffd100RP Chronicler|r |cff69ccf0[" .. Q.label .. "]|r",
         "|cff9aa5b4Selected. Press|r |cffffd100Ctrl+C|r |cff9aa5b4to copy, it closes by itself.|r", snap, true)
     return true
 end
@@ -128,7 +128,7 @@ function UI.ArmCtrlCopy(mode)
     local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     if focused and focused ~= armEditBox then return false end
 
-    local tabCfg = ns.GetTabConfig(RPCopyDB.lastSliceId)
+    local tabCfg = ns.GetTabConfig(RPChroniclerDB.lastSliceId)
     Q.label = (tabCfg and tabCfg.label) or "Chat"
     local snap = UI.BuildQuickCopyText(tabCfg and tabCfg.id)
     if not snap then return false end
@@ -207,7 +207,7 @@ end)
 
 -- Ctrl watcher (polls modifier state; no protected calls)
 do
-    local watcher = CreateFrame("Frame", "RPCopyCtrlWatcher", UIParent)
+    local watcher = CreateFrame("Frame", "RPChroniclerCtrlWatcher", UIParent)
     watcher:SetScript("OnUpdate", function()
         if IsControlKeyDown() then
             local now = GetTime()
@@ -242,7 +242,7 @@ do
     -- (propagation is switched on once, out of combat, and never toggled).
     -- It only notes "another key was pressed with Ctrl" so instant mode
     -- does not arm in the middle of your Ctrl+1, Ctrl+2... presses.
-    local listener = CreateFrame("Frame", "RPCopyKeyListener", UIParent)
+    local listener = CreateFrame("Frame", "RPChroniclerKeyListener", UIParent)
     listener:SetSize(1, 1)
     listener:SetPoint("BOTTOMLEFT", 0, 0)
     listener:SetScript("OnKeyDown", function(_, key)
@@ -274,7 +274,7 @@ end
 
 -- Clicked by the Ctrl+C (or custom) override binding
 do
-    local silentCopyBtn = CreateFrame("Button", "RPCopySilentCopyBtn", UIParent)
+    local silentCopyBtn = CreateFrame("Button", "RPChroniclerSilentCopyBtn", UIParent)
     silentCopyBtn:SetSize(1, 1)
     silentCopyBtn:SetPoint("BOTTOMLEFT", 0, 0)
     silentCopyBtn:SetScript("OnClick", function()
@@ -287,7 +287,7 @@ do
             CopyLog("copy", "binding fired while armed but unfocused (focused frame " .. FocusName() .. "); re-arming")
             Q.isArmed = false
         end
-        if RPCopyDB.copyMode == "BOX" then
+        if RPChroniclerDB.copyMode == "BOX" then
             UI.ShowQuickCopyBox("style")
         elseif not Q.isArmed then
             if UI.ArmCtrlCopy("timed") then
@@ -296,7 +296,7 @@ do
                     CopyLog("copy", "instant: Ctrl+C came before the hold armed; asking for a second press")
                     UI.ShowToast(string.format("|cffffd100Ready|r |cff69ccf0[%s]|r - Ctrl+C again. |cff9aa5b4Tip: hold Ctrl a blink before C for one press.|r", Q.label), 3.0, 0.85, 0.68, 0.30)
                 else
-                    if RPCopyDB.copyMode == "INSTANT" then
+                    if RPChroniclerDB.copyMode == "INSTANT" then
                         CopyLog("copy", "instant is off right now (" .. (InCombat() and "in combat" or "custom key") .. "); two-press")
                     end
                     UI.ShowToast(string.format("|cffffd100Ready|r |cff69ccf0[%s]|r - press |cffffd100CTRL-C|r again to copy", Q.label), 2.5, 0.85, 0.68, 0.30)
@@ -311,10 +311,10 @@ do
     end)
 end
 
-function RPCopy_QuickCopy()
+function RPChronicler_QuickCopy()
     UI.EnsureOptions()
     if UI.frame:IsShown() then UI.frame:Hide() end
-    if RPCopyDB.copyMode == "BOX" then
+    if RPChroniclerDB.copyMode == "BOX" then
         UI.ShowQuickCopyBox("style")
     elseif UI.ArmCtrlCopy("timed") then
         UI.ShowToast(string.format("|cffffd100Ready:|r Press |cffffd100CTRL-C|r now for |cff69ccf0[%s]|r", Q.label), 2.5, 0.85, 0.68, 0.30)
@@ -323,7 +323,7 @@ function RPCopy_QuickCopy()
     end
 end
 
-function RPCopy_CaptureTarget()
+function RPChronicler_CaptureTarget()
     UI.EnsureOptions()
     local focused = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     if focused then return end
@@ -339,13 +339,13 @@ function RPCopy_CaptureTarget()
     end
 
     if not targetName or targetName == "" then
-        UI.ShowToast("|cffff6b6bRPCopy:|r Target someone (or hover/whisper) first!", 2.0, 0.75, 0.28, 0.28)
+        UI.ShowToast("|cffff6b6bRP Chronicler:|r Target someone (or hover/whisper) first!", 2.0, 0.75, 0.28, 0.28)
         return
     end
 
     local key, isNew = ns.SaveOrUpdatePlayer(targetName, unit)
     if key then
-        local entry = RPCopyDB.players[key]
+        local entry = RPChroniclerDB.players[key]
         local detail = ""
         if entry and entry.level ~= "" and entry.class ~= "" then
             detail = string.format(" |cff8f9ba8(Lvl %s %s)|r", entry.level, entry.class)
@@ -402,7 +402,7 @@ C.nearby:SetScript("OnClick", function(self)
 end)
 
 function UI.RefreshNearbyChip()
-    local on = RPCopyDB and RPCopyDB.nearbyChip ~= false
+    local on = RPChroniclerDB and RPChroniclerDB.nearbyChip ~= false
     local list = on and ns.NearbyCompanions and ns.NearbyCompanions() or {}
     C.nearby.list = list
     if not on then
@@ -419,7 +419,7 @@ function UI.RefreshNearbyChip()
     local names = {}
     for i, n in ipairs(list) do
         if i > 4 then break end
-        local e = RPCopyDB.players[n.key]
+        local e = RPChroniclerDB.players[n.key]
         local cf = e and (e.classFile or ns.ClassToken(e.class))
         table.insert(names, cf and ns.ColorizeClass(n.key, cf) or ("|cff80d8ff" .. n.key .. "|r"))
     end
@@ -428,11 +428,11 @@ function UI.RefreshNearbyChip()
 end
 UI.ApplyPanelLook(C.boxBg)
 
-C.scroll = CreateFrame("ScrollFrame", "RPCopyScrollFrame", C.boxBg, "UIPanelScrollFrameTemplate")
+C.scroll = CreateFrame("ScrollFrame", "RPChroniclerScrollFrame", C.boxBg, "UIPanelScrollFrameTemplate")
 C.scroll:SetPoint("TOPLEFT", 8, -8)
 C.scroll:SetPoint("BOTTOMRIGHT", -28, 8)
 
-C.editBox = CreateFrame("EditBox", "RPCopyEditBox", C.scroll)
+C.editBox = CreateFrame("EditBox", "RPChroniclerEditBox", C.scroll)
 C.editBox:SetMultiLine(true)
 C.editBox:SetFontObject(ChatFontNormal)
 C.editBox:SetWidth(500)
@@ -450,7 +450,7 @@ C.chip:SetPoint("BOTTOMRIGHT", 0, 2)
 C.chip.tipTitle = "|cffffd100Quick Copy|r"
 C.chip.tipText = "How Ctrl+C copies from the game world. Click to change it in Options > Keybinds."
 
-C.noteBox = CreateFrame("EditBox", "RPCopyNoteInput", view, "InputBoxTemplate")
+C.noteBox = CreateFrame("EditBox", "RPChroniclerNoteInput", view, "InputBoxTemplate")
 C.noteBox:SetHeight(20)
 C.noteBox:SetPoint("LEFT", C.expandBtn, "RIGHT", 14, 0)
 C.noteBox:SetPoint("RIGHT", C.chip, "LEFT", -10, 0)
@@ -463,21 +463,21 @@ C.notePlaceholder:SetText("Instruction for the AI (Enter to add)")
 function UI.UpdateExpandButtonLabel()
     UI.EnsureOptions()
     if ns.state.isExpanded then
-        C.expandBtn:SetText("Collapse (" .. (RPCopyDB.defaultMessages or 3) .. ")")
+        C.expandBtn:SetText("Collapse (" .. (RPChroniclerDB.defaultMessages or 3) .. ")")
         C.expandBtn:LockHighlight()
     else
-        C.expandBtn:SetText("Expand (" .. (RPCopyDB.expandMessages or 6) .. ")")
+        C.expandBtn:SetText("Expand (" .. (RPChroniclerDB.expandMessages or 6) .. ")")
         C.expandBtn:UnlockHighlight()
     end
 end
 
 function UI.SyncCopyChip()
     UI.EnsureOptions()
-    if not RPCopyDB.quickCtrlC then
+    if not RPChroniclerDB.quickCtrlC then
         C.chip:SetText("|cff9aa5b4Quick Copy: OFF|r")
-    elseif RPCopyDB.quickCopyKey ~= "CTRL-C" then
-        C.chip:SetText("|cffc2d8ff" .. RPCopyDB.quickCopyKey .. "|r")
-    elseif RPCopyDB.copyMode == "INSTANT" then
+    elseif RPChroniclerDB.quickCopyKey ~= "CTRL-C" then
+        C.chip:SetText("|cffc2d8ff" .. RPChroniclerDB.quickCopyKey .. "|r")
+    elseif RPChroniclerDB.copyMode == "INSTANT" then
         C.chip:SetText("|cffc2d8ffCtrl+C: Instant|r")
     else
         C.chip:SetText("|cffc2d8ffCtrl+C: Two-press|r")
@@ -491,7 +491,7 @@ function UI.RefreshBox()
     local ok, snap = pcall(ns.BuildSnapshot, ns.state.activeFilter, ns.state.activeNote, ns.state.isExpanded)
     if not ok then
         if ns.Debug then ns.Debug("error", "Copy view: snapshot failed: " .. tostring(snap)) end
-        snap = "[RPCopy] The snapshot failed to build. Type /rp debug and send the report."
+        snap = "[RP Chronicler] The snapshot failed to build. Type /rp debug and send the report."
     end
     C.editBox:SetText(type(snap) == "string" and snap or "")
     C.editBox:SetFocus()
@@ -502,7 +502,7 @@ function UI.SelectSlice(sliceId)
     local cfg = ns.GetTabConfig(sliceId)
     if not cfg then return end
     ns.state.activeFilter = cfg.id
-    RPCopyDB.lastSliceId = cfg.id
+    RPChroniclerDB.lastSliceId = cfg.id
     for _, b in ipairs(C.sliceButtons) do
         if b.sliceId == cfg.id then b:LockHighlight() else b:UnlockHighlight() end
     end
@@ -515,7 +515,7 @@ function UI.RebuildSliceTabs()
     for _, b in ipairs(C.sliceButtons) do b:Hide() end
     local maxW = math.max(200, (view:GetWidth() or 0) > 50 and view:GetWidth() or 560)
     local x, y, rows = 0, 0, 1
-    for idx, t in ipairs(RPCopyDB.tabs) do
+    for idx, t in ipairs(RPChroniclerDB.tabs) do
         local btn = C.sliceButtons[idx]
         if not btn then
             btn = UI.CreateSleekButton(C.strip, 60, 22, "")
@@ -577,7 +577,7 @@ end)
 
 UI.SetSectionOnShow("COPY", function()
     UI.EnsureOptions()
-    local cfg = ns.GetTabConfig(RPCopyDB.lastSliceId)
+    local cfg = ns.GetTabConfig(RPChroniclerDB.lastSliceId)
     ns.state.activeFilter = cfg and cfg.id or ns.state.activeFilter
     C.noteBox:SetText(ns.state.activeNote or "")
     ShowIf(C.notePlaceholder, (ns.state.activeNote or "") == "")

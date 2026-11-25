@@ -8,7 +8,7 @@ local UI = ns.UI
 -- in from Options > AI Setup (short, medium or long).
 local RP_SKILL_TEMPLATE_TEXT = [[---
 name: <character-name>-rp-<class>
-description: Generate short, lively World of Warcraft: Forever roleplay responses for a <gender> <Faction> <Race> <Class> (<Character Full Name>) inspired by <Persona Inspiration>. Use when the user pastes an RPCopy snapshot or a WoW chat screenshot for <First Name>, mentions <trigger> or <surname> (such as "use <trigger>"), or asks for <Class> RP replies in General, Guild, Say, Party or Whisper chat.
+description: Generate short, lively World of Warcraft: Forever roleplay responses for a <gender> <Faction> <Race> <Class> (<Character Full Name>) inspired by <Persona Inspiration>. Use when the user pastes an RP Chronicler snapshot or a WoW chat screenshot for <First Name>, mentions <trigger> or <surname> (such as "use <trigger>"), or asks for <Class> RP replies in General, Guild, Say, Party or Whisper chat.
 ---
 
 STARTER TEMPLATE: personalize it. Replace every <...> field, and make it yours: personality, backstory, voice, quirks, the 5 moods and how your character talks. The more of your character is in here, the better the replies. Delete this paragraph when you are done.
@@ -19,7 +19,7 @@ Generate 5 short, natural, in-character English chat replies for <Character Full
 
 WHEN TO USE
 
-- The user pastes an RPCopy snapshot that starts with "[Skill Call] use <trigger>" (with [Location], [Target], [Status], chat lines and maybe [Known Player] blocks), or uploads a WoW chat screenshot for <First Name>.
+- The user pastes an RP Chronicler snapshot that starts with "[Skill Call] use <trigger>" (with [Location], [Target], [Status], chat lines and maybe [Known Player] blocks), or uploads a WoW chat screenshot for <First Name>.
 - The user includes triggers like "use <trigger>", "<trigger>" or "<surname>".
 - The user asks for quick in-character <Class> responses in any WoW chat channel.
 
@@ -79,7 +79,7 @@ local RP_REPLY_LENGTH = {
 }
 
 function UI.GetRpSkillTemplate()
-    local key = (RPCopyDB and RPCopyDB.rpReplyLength) or "SHORT"
+    local key = (RPChroniclerDB and RPChroniclerDB.rpReplyLength) or "SHORT"
     local text = RP_SKILL_TEMPLATE_TEXT:gsub("<REPLY_LENGTH>", (RP_REPLY_LENGTH[key] or RP_REPLY_LENGTH.SHORT):gsub("%%", "%%%%"))
     return text
 end
@@ -103,12 +103,12 @@ READING THE LOG (HIDDEN CONTEXT)
    [NPC] [NPC Emote] lines spoken by bosses and named NPCs. [LEVEL] a level up. [SKILL] a profession skill-up. [PLACE] a new place reached.
    [ATMOSPHERE] the time of day (dawn, morning, midday, afternoon, dusk, night) and indoors or open sky: use it to set the mood of the scene.
    [LOOT] an item with who got it and where it came from (crafted, from a foe, quest reward, bought, traded, mail, gathered). [HIGHLIGHT] a moment the player marked: give it a scene.
-   [SHOT N] a screenshot taken at that moment; the "Screenshots" list in the header numbers them. Put the marker [Shot N] on its own line in the story where that picture fits best (each number once, in order), plain and outside any color code: close every |c...|r before it. A marker changes nothing else: after it, keep coloring every name exactly as before. RPCopy hides the markers in game and the exporter shows the pictures there.
+   [SHOT N] a screenshot taken at that moment; the "Screenshots" list in the header numbers them. Put the marker [Shot N] on its own line in the story where that picture fits best (each number once, in order), plain and outside any color code: close every |c...|r before it. A marker changes nothing else: after it, keep coloring every name exactly as before. RP Chronicler hides the markers in game and the exporter shows the pictures there.
    Chat lines ([Party], [Say], [Emote], [Whisper]) are real quotes: weave them in verbatim.
 5. Do not shrink the run into a dry summary. Messy moments (wipes, near deaths, panicked chat, lucky loot) are what make it memorable.
-6. No Icons: never write |T or |A texture codes. RPCopy adds boss icons itself.
+6. No Icons: never write |T or |A texture codes. RP Chronicler adds boss icons itself.
 
-STORY BOOK HEADER AND FOOTER (REQUIRED, RPCopy reads them)
+STORY BOOK HEADER AND FOOTER (REQUIRED, RP Chronicler reads them)
 
 Line 1: the story title only, in gold, e.g. |cffffd100Shadows Over Pyrewood|r
 Line 2: |cff9e9e9e<dungeon, raid or region> | <duration from the log header> | <zone or the places visited>|r (never the same name twice: if the zone is the region, list the main places instead)
@@ -118,7 +118,7 @@ Last line (footer), dungeon or raid: |cff9e9e9eBosses: <N> | Wipes: <N> | Deaths
 Last line (footer), open world: |cff9e9e9eFoes: <N> | Quests: <N> | Levels: <from> -> <to> | Deaths: <N>|r and leave out any part that is zero or missing.
 The header and footer are the only place where the duration and the counts may appear.
 
-RPCOPY COLOR PALETTE (|cffRRGGBB...|r)
+RP CHRONICLER COLOR PALETTE (|cffRRGGBB...|r)
 
 COLOR EVERY MENTION, IN EVERY CHAPTER: each time a player, pet, place, foe, NPC or item is named, wrap it in its color, not only the first time. Chapter 5 must be as colorful as chapter 1. After a colored name, go back to the prose color.
 
@@ -136,20 +136,20 @@ COLOR EVERY MENTION, IN EVERY CHAPTER: each time a player, pet, place, foe, NPC 
 
 FORMATTING RULES FOR WOW
 
-1. Output the whole colored story inside one fenced text code block, ready to paste into RPCopy (Adventures > Story Book > Import Story).
+1. Output the whole colored story inside one fenced text code block, ready to paste into RP Chronicler (Adventures > Story Book > Import Story).
 2. Close every color tag: pair each |cffRRGGBB with a closing |r.
 3. No Markdown inside the code block: no asterisks, pound-sign headers or bullet symbols. Use color tags and blank lines.
 4. ASCII only inside the code block (- ' " *), so WoW fonts never show missing-glyph boxes.
 5. Before you answer, check the story prose for any timestamp, percent sign, or HP or mana number, and rewrite those sentences in-world.]]
 
-local DUNGEON_STORY_TEMPLATE_TEXT = [[---
-name: wow-dungeon-raid-story
-description: Turn an RPCopy dungeon or raid Full Log into a vivid colored chronicle with one chapter per boss, formatted with WoW color codes (|cffRRGGBB...|r) for RPCopy's Story Book. Use when the user pastes an RPCopy log that starts with "use story" or says "Run type: Dungeon" or "Run type: Raid", or asks for a dungeon or raid story.
+-- 0.6.0: the skill names come from ns.STORY_SKILLS (Core.lua), the same
+-- names the Full Log's first line calls ("use <name>")
+local DUNGEON_STORY_TEMPLATE_TEXT = "---\nname: " .. ns.STORY_SKILLS.dungeon .. "\n" .. [[description: Turn an RP Chronicler dungeon or raid Full Log into a vivid colored chronicle with one chapter per boss, formatted with WoW color codes (|cffRRGGBB...|r) for RP Chronicler's Story Book. Use when the user pastes an RP Chronicler log that starts with "use ]] .. ns.STORY_SKILLS.dungeon .. [[" (or the older "use story") or says "Run type: Dungeon" or "Run type: Raid", or asks for a dungeon or raid story.
 ---
 
-WOW DUNGEON AND RAID STORYTELLER (RPCOPY STORY BOOK)
+WOW DUNGEON AND RAID STORYTELLER (RP CHRONICLER STORY BOOK)
 
-Turn an RPCopy dungeon or raid Full Log into an entertaining, faithful group adventure, colored for RPCopy's in-game Story Book.
+Turn an RP Chronicler dungeon or raid Full Log into an entertaining, faithful group adventure, colored for RP Chronicler's in-game Story Book.
 
 STRUCTURE
 
@@ -160,14 +160,12 @@ STRUCTURE
 - Give every party member a distinct voice and role, from the roster and their real chat quotes.
 ]] .. STORY_SHARED_RULES
 
-local ADVENTURE_STORY_TEMPLATE_TEXT = [[---
-name: wow-open-world-story
-description: Turn an RPCopy open-world Full Log (solo or small group questing, travel, gathering, taming) into an introspective colored adventure story, formatted with WoW color codes (|cffRRGGBB...|r) for RPCopy's Story Book. Use when the user pastes an RPCopy log that starts with "use adventure story" or says "Run type: Open world adventure", or asks for an adventure story.
+local ADVENTURE_STORY_TEMPLATE_TEXT = "---\nname: " .. ns.STORY_SKILLS.world .. "\n" .. [[description: Turn an RP Chronicler open-world Full Log (solo or small group questing, travel, gathering, taming) into an introspective colored adventure story, formatted with WoW color codes (|cffRRGGBB...|r) for RP Chronicler's Story Book. Use when the user pastes an RP Chronicler log that starts with "use ]] .. ns.STORY_SKILLS.world .. [[" (or the older "use adventure story") or says "Run type: Open world adventure", or asks for an adventure story.
 ---
 
-WOW OPEN WORLD STORYTELLER (RPCOPY STORY BOOK)
+WOW OPEN WORLD STORYTELLER (RP CHRONICLER STORY BOOK)
 
-Turn an RPCopy open-world Full Log into a personal, introspective adventure told close to the player's character: what they saw, fought, found and felt on the road.
+Turn an RP Chronicler open-world Full Log into a personal, introspective adventure told close to the player's character: what they saw, fought, found and felt on the road.
 
 STRUCTURE
 
@@ -184,7 +182,7 @@ STRUCTURE
 -- =========================================================
 local tpl = {}
 do
-    local f = CreateFrame("Frame", "RPCopySkillTemplateFrame", UIParent, UI.BACKDROP)
+    local f = CreateFrame("Frame", "RPChroniclerSkillTemplateFrame", UIParent, UI.BACKDROP)
     f:SetSize(610, 460)
     f:SetPoint("CENTER", UIParent, "CENTER", 20, -20)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -211,11 +209,11 @@ do
     boxBg:SetPoint("BOTTOMRIGHT", -14, 42)
     UI.ApplyPanelLook(boxBg)
 
-    local scroll = CreateFrame("ScrollFrame", "RPCopySkillTemplateScroll", boxBg, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", "RPChroniclerSkillTemplateScroll", boxBg, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 8, -8)
     scroll:SetPoint("BOTTOMRIGHT", -28, 8)
 
-    local eb = CreateFrame("EditBox", "RPCopySkillTemplateEditBox", scroll)
+    local eb = CreateFrame("EditBox", "RPChroniclerSkillTemplateEditBox", scroll)
     eb:SetMultiLine(true)
     eb:SetMaxLetters(0)
     eb:SetFontObject(ChatFontNormal)
@@ -249,11 +247,11 @@ end
 function UI.OpenSkillTemplateModal(mode)
     if mode == "STORY" then
         tpl.title:SetText("|cffffd100Dungeon/Raid Story Template (press Ctrl+C to copy)|r")
-        tpl.sub:SetText("|cffb0bac5Paste it into your AI once: one chapter per boss. Full Logs of dungeons and raids start with 'use story'.|r")
+        tpl.sub:SetText("|cffb0bac5Paste it into your AI once: one chapter per boss. Full Logs of dungeons and raids start with 'use " .. ns.STORY_SKILLS.dungeon .. "'.|r")
         tpl.editBox:SetText(EscapeForEditBox(DUNGEON_STORY_TEMPLATE_TEXT))
     elseif mode == "ADVENTURE" then
         tpl.title:SetText("|cffffd100Adventure Story Template (press Ctrl+C to copy)|r")
-        tpl.sub:SetText("|cffb0bac5Paste it into your AI once: open world, solo, by place and event. Those Full Logs start with 'use adventure story'.|r")
+        tpl.sub:SetText("|cffb0bac5Paste it into your AI once: open world, solo, by place and event. Those Full Logs start with 'use " .. ns.STORY_SKILLS.world .. "'.|r")
         tpl.editBox:SetText(EscapeForEditBox(ADVENTURE_STORY_TEMPLATE_TEXT))
     else
         tpl.title:SetText("|cffffd100Character RP Skill Template (press Ctrl+C to copy)|r")
@@ -270,7 +268,7 @@ end
 -- =========================================================
 local kc = {}
 do
-    local f = CreateFrame("Frame", "RPCopyKeyCaptureModal", UIParent, UI.BACKDROP)
+    local f = CreateFrame("Frame", "RPChroniclerKeyCaptureModal", UIParent, UI.BACKDROP)
     f:SetSize(360, 82)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -303,13 +301,13 @@ do
         combo = combo .. key
 
         UI.EnsureOptions()
-        -- One key per action: free the combo from any other RPCopy action
+        -- One key per action: free the combo from any other RP Chronicler action
         for _, field in ipairs({ "quickCopyKey", "captureTargetKey", "markMomentKey", "openWindowKey", "runStartKey", "runPauseKey", "runEndKey" }) do
-            if field ~= self.targetField and RPCopyDB[field] == combo then
-                RPCopyDB[field] = (field == "quickCopyKey") and "CTRL-C" or ""
+            if field ~= self.targetField and RPChroniclerDB[field] == combo then
+                RPChroniclerDB[field] = (field == "quickCopyKey") and "CTRL-C" or ""
             end
         end
-        RPCopyDB[self.targetField] = combo
+        RPChroniclerDB[self.targetField] = combo
         self:Hide()
         if UI.UpdateOverrideBindings then UI.UpdateOverrideBindings() end
         if UI.RefreshOptionsPage then UI.RefreshOptionsPage() end
@@ -383,14 +381,14 @@ end
 
 function UI.RefreshOptionsPage()
     UI.EnsureOptions()
-    local fn = O.refresh[RPCopyDB.optionsPage]
+    local fn = O.refresh[RPChroniclerDB.optionsPage]
     if fn then fn() end
 end
 
 function UI.ShowOptionsPage(key)
     UI.EnsureOptions()
     if not O.pages[key] then key = "GENERAL" end
-    RPCopyDB.optionsPage = key
+    RPChroniclerDB.optionsPage = key
     for k, p in pairs(O.pages) do
         if k == key then p:Show() else p:Hide() end
     end
@@ -402,11 +400,11 @@ end
 
 function UI.OpenOptionsPage(key)
     UI.EnsureOptions()
-    RPCopyDB.optionsPage = key
+    RPChroniclerDB.optionsPage = key
     if UI.frame:IsShown() then
         UI.ShowSection("OPTIONS")
     else
-        RPCopy_Open("", "OPTIONS")
+        RPChronicler_Open("", "OPTIONS")
     end
 end
 
@@ -425,13 +423,13 @@ do
 
     UI.Label(p, "Messages per log in a snapshot:"):SetPoint("TOPLEFT", 0, -28)
     UI.Label(p, "Normal"):SetPoint("TOPLEFT", 0, -50)
-    local defInput = CreateFrame("EditBox", "RPCopyOptDefMsgs", p, "InputBoxTemplate")
+    local defInput = CreateFrame("EditBox", "RPChroniclerOptDefMsgs", p, "InputBoxTemplate")
     defInput:SetSize(30, 20)
     defInput:SetPoint("TOPLEFT", 52, -46)
     defInput:SetAutoFocus(false)
     defInput:SetNumeric(true)
     UI.Label(p, "Expanded"):SetPoint("TOPLEFT", 96, -50)
-    local expInput = CreateFrame("EditBox", "RPCopyOptExpMsgs", p, "InputBoxTemplate")
+    local expInput = CreateFrame("EditBox", "RPChroniclerOptExpMsgs", p, "InputBoxTemplate")
     expInput:SetSize(30, 20)
     expInput:SetPoint("TOPLEFT", 160, -46)
     expInput:SetAutoFocus(false)
@@ -441,7 +439,7 @@ do
     saveBtn:SetScript("OnClick", function()
         local d = math.max(1, math.min(10, tonumber(defInput:GetText()) or 3))
         local e = math.max(1, math.min(20, tonumber(expInput:GetText()) or 6))
-        RPCopyDB.defaultMessages, RPCopyDB.expandMessages = d, e
+        RPChroniclerDB.defaultMessages, RPChroniclerDB.expandMessages = d, e
         defInput:SetText(tostring(d))
         expInput:SetText(tostring(e))
         defInput:ClearFocus()
@@ -452,7 +450,7 @@ do
     local autoBtn = UI.CreateSleekButton(p, 190, 22, "")
     autoBtn:SetPoint("TOPLEFT", 0, -84)
     autoBtn:SetScript("OnClick", function()
-        RPCopyDB.autoUpdateKnown = not RPCopyDB.autoUpdateKnown
+        RPChroniclerDB.autoUpdateKnown = not RPChroniclerDB.autoUpdateKnown
         UI.RefreshOptionsPage()
     end)
     Note(p, "|cff8f9ba8Refresh a saved companion's level, guild and latest chat whenever you see or hear them. Your notes are never touched.|r", 0, -110)
@@ -478,12 +476,12 @@ do
 
     local about = Note(p, "", 0, -260)
     O.refresh.GENERAL = function()
-        defInput:SetText(tostring(RPCopyDB.defaultMessages or 3))
-        expInput:SetText(tostring(RPCopyDB.expandMessages or 6))
-        UI.SetToggleLook(autoBtn, RPCopyDB.autoUpdateKnown, "Companion Auto-Update: ON", "Companion Auto-Update: OFF")
+        defInput:SetText(tostring(RPChroniclerDB.defaultMessages or 3))
+        expInput:SetText(tostring(RPChroniclerDB.expandMessages or 6))
+        UI.SetToggleLook(autoBtn, RPChroniclerDB.autoUpdateKnown, "Companion Auto-Update: ON", "Companion Auto-Update: OFF")
         clearBtn.armedAt = nil
         clearBtn:SetText("Clear Session Logs")
-        about:SetText("|cff8f9ba8RPCopy v" .. (ns.VERSION or "?") .. " (alpha). Type /rp for the window, /rp help is in the README.|r")
+        about:SetText("|cff8f9ba8RP Chronicler v" .. (ns.VERSION or "?") .. " (alpha). Type /rp for the window, /rp help is in the README.|r")
     end
 end
 
@@ -502,9 +500,9 @@ do
         keyBtn:SetScript("OnClick", function(_, button)
             if button == "RightButton" then
                 if defaultKey then
-                    RPCopyDB[field] = defaultKey
+                    RPChroniclerDB[field] = defaultKey
                 else
-                    RPCopyDB[field] = ""
+                    RPChroniclerDB[field] = ""
                 end
                 if UI.UpdateOverrideBindings then UI.UpdateOverrideBindings() end
                 UI.RefreshOptionsPage()
@@ -518,8 +516,8 @@ do
             local t = UI.CreateSleekButton(p, 48, 20, "")
             t:SetPoint("TOPLEFT", 140, y)
             t:SetScript("OnClick", function()
-                RPCopyDB[toggleField] = not RPCopyDB[toggleField]
-                if not RPCopyDB[toggleField] and UI.DisarmCtrlCopy then UI.DisarmCtrlCopy() end
+                RPChroniclerDB[toggleField] = not RPChroniclerDB[toggleField]
+                if not RPChroniclerDB[toggleField] and UI.DisarmCtrlCopy then UI.DisarmCtrlCopy() end
                 if UI.UpdateOverrideBindings then UI.UpdateOverrideBindings() end
                 UI.RefreshOptionsPage()
             end)
@@ -535,7 +533,7 @@ do
     modeBtn:SetPoint("TOPLEFT", 140, -56)
     modeBtn:SetScript("OnClick", function()
         local nextMode = { INSTANT = "TWOPRESS", TWOPRESS = "BOX", BOX = "INSTANT" }
-        RPCopyDB.copyMode = nextMode[RPCopyDB.copyMode] or "INSTANT"
+        RPChroniclerDB.copyMode = nextMode[RPChroniclerDB.copyMode] or "INSTANT"
         if UI.DisarmCtrlCopy then UI.DisarmCtrlCopy() end
         UI.RefreshOptionsPage()
     end)
@@ -544,7 +542,7 @@ do
     combatBtn.tipTitle = "|cffffd100Instant in combat|r"
     combatBtn.tipText = "OFF: in combat Ctrl+C is two-press, so Ctrl keybinds always work mid-fight."
     combatBtn:SetScript("OnClick", function()
-        RPCopyDB.instantInCombat = not RPCopyDB.instantInCombat
+        RPChroniclerDB.instantInCombat = not RPChroniclerDB.instantInCombat
         UI.RefreshOptionsPage()
     end)
     local modeNote = Note(p, "", 0, -80)
@@ -556,16 +554,16 @@ do
     KeyRow(-224, "Pause / Resume Recording", "runPauseKey")
     KeyRow(-250, "End Recording", "runEndKey")
 
-    Note(p, "|cff8f9ba8Left-click a key to change it, right-click to clear it. These actions are also listed in the game's Key Bindings under AddOns > RPCopy.|r", 0, -282)
+    Note(p, "|cff8f9ba8Left-click a key to change it, right-click to clear it. These actions are also listed in the game's Key Bindings under AddOns > RP Chronicler.|r", 0, -282)
 
     local resetBtn = UI.CreateSleekButton(p, 110, 22, "Reset All Keys", "danger")
     resetBtn:SetPoint("TOPLEFT", 0, -322)
     resetBtn:SetScript("OnClick", function()
-        RPCopyDB.quickCtrlC, RPCopyDB.quickCopyKey = true, "CTRL-C"
-        RPCopyDB.quickCapture, RPCopyDB.captureTargetKey = true, "SHIFT-C"
-        RPCopyDB.copyMode, RPCopyDB.instantInCombat = "INSTANT", false
+        RPChroniclerDB.quickCtrlC, RPChroniclerDB.quickCopyKey = true, "CTRL-C"
+        RPChroniclerDB.quickCapture, RPChroniclerDB.captureTargetKey = true, "SHIFT-C"
+        RPChroniclerDB.copyMode, RPChroniclerDB.instantInCombat = "INSTANT", false
         for _, f in ipairs({ "markMomentKey", "openWindowKey", "runStartKey", "runPauseKey", "runEndKey" }) do
-            RPCopyDB[f] = ""
+            RPChroniclerDB[f] = ""
         end
         if UI.UpdateOverrideBindings then UI.UpdateOverrideBindings() end
         UI.RefreshOptionsPage()
@@ -574,24 +572,24 @@ do
 
     O.refresh.KEYS = function()
         for _, r in ipairs(rows) do
-            local k = RPCopyDB[r.field] or ""
+            local k = RPChroniclerDB[r.field] or ""
             r.keyBtn:SetText(k ~= "" and ("|cffffd100" .. k .. "|r") or "|cff9aa5b4Set Key|r")
-            if r.toggle then UI.SetToggleLook(r.toggle, RPCopyDB[r.toggleField], "ON", "OFF") end
+            if r.toggle then UI.SetToggleLook(r.toggle, RPChroniclerDB[r.toggleField], "ON", "OFF") end
         end
-        local isCtrlC = RPCopyDB.quickCopyKey == "CTRL-C"
-        if RPCopyDB.copyMode == "INSTANT" then
+        local isCtrlC = RPChroniclerDB.quickCopyKey == "CTRL-C"
+        if RPChroniclerDB.copyMode == "INSTANT" then
             modeBtn:SetText("|cffc2d8ffInstant (hold Ctrl)|r")
-        elseif RPCopyDB.copyMode == "BOX" then
+        elseif RPChroniclerDB.copyMode == "BOX" then
             modeBtn:SetText("|cffc2d8ffCopy box|r")
         else
             modeBtn:SetText("|cffc2d8ffTwo-press|r")
         end
-        UI.SetToggleLook(combatBtn, RPCopyDB.instantInCombat, "Instant in combat: ON", "Instant in combat: OFF")
+        UI.SetToggleLook(combatBtn, RPChroniclerDB.instantInCombat, "Instant in combat: ON", "Instant in combat: OFF")
         if not isCtrlC then
             modeNote:SetText("|cff8f9ba8Your Quick Copy key arms the copy; then press Ctrl+C to copy. Copy style only applies to CTRL-C.|r")
-        elseif RPCopyDB.copyMode == "BOX" then
+        elseif RPChroniclerDB.copyMode == "BOX" then
             modeNote:SetText("|cff8f9ba8Copy box: Ctrl+C shows the snapshot selected in a small box. Press Ctrl+C there to copy, and it closes by itself. The safest style if the others do not copy.|r")
-        elseif RPCopyDB.copyMode == "INSTANT" then
+        elseif RPChroniclerDB.copyMode == "INSTANT" then
             modeNote:SetText("|cff8f9ba8Instant: hold Ctrl a moment, press C, done. Quick Ctrl+key combos still reach your keybinds. A very fast Ctrl+C asks for a second press.|r")
         else
             modeNote:SetText("|cff8f9ba8Two-press: Ctrl+C gets the snapshot ready, Ctrl+C again copies it. All other Ctrl keybinds always work.|r")
@@ -619,7 +617,7 @@ do
     resetBtn.tipTitle = "|cffff6b6bReset Tabs|r"
     resetBtn.tipText = "Click twice to restore the default slice tabs."
 
-    local scroll = CreateFrame("ScrollFrame", "RPCopyOptListScroll", list, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", "RPChroniclerOptListScroll", list, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 6, -6)
     scroll:SetPoint("BOTTOMRIGHT", -26, 6)
     local child = CreateFrame("Frame", nil, scroll)
@@ -631,7 +629,7 @@ do
     ed:SetPoint("BOTTOMRIGHT", 0, 0)
 
     UI.Label(ed, "Tab name:"):SetPoint("TOPLEFT", 0, -2)
-    S.name = CreateFrame("EditBox", "RPCopyOptTabName", ed, "InputBoxTemplate")
+    S.name = CreateFrame("EditBox", "RPChroniclerOptTabName", ed, "InputBoxTemplate")
     S.name:SetSize(130, 20)
     S.name:SetPoint("TOPLEFT", 6, -16)
     S.name:SetAutoFocus(false)
@@ -641,7 +639,7 @@ do
     S.down:SetPoint("TOPRIGHT", 0, -16)
 
     UI.Label(ed, "Skill Call (line 1, calls your AI skill):"):SetPoint("TOPLEFT", 0, -42)
-    S.prefix = CreateFrame("EditBox", "RPCopyOptTabPrefix", ed, "InputBoxTemplate")
+    S.prefix = CreateFrame("EditBox", "RPChroniclerOptTabPrefix", ed, "InputBoxTemplate")
     S.prefix:SetHeight(20)
     S.prefix:SetPoint("TOPLEFT", 6, -56)
     S.prefix:SetPoint("TOPRIGHT", -2, -56)
@@ -673,7 +671,7 @@ do
         incGuild = "Guild chat and officer chat.",
     }
     for idx, sDef in ipairs(SOURCE_DEFS) do
-        local cb = CreateFrame("CheckButton", "RPCopyOptCB_" .. sDef.key, ed, "UICheckButtonTemplate")
+        local cb = CreateFrame("CheckButton", "RPChroniclerOptCB_" .. sDef.key, ed, "UICheckButtonTemplate")
         cb:SetSize(20, 20)
         local col = (idx <= 7) and 0 or 1
         local row = (idx <= 7) and (idx - 1) or (idx - 8)
@@ -701,11 +699,11 @@ do
     S.del:SetPoint("BOTTOMRIGHT", 0, 2)
 
     local function Selected()
-        for idx, t in ipairs(RPCopyDB.tabs) do
+        for idx, t in ipairs(RPChroniclerDB.tabs) do
             if t.id == ns.state.selectedOptionTabId then return t, idx end
         end
-        ns.state.selectedOptionTabId = RPCopyDB.tabs[1].id
-        return RPCopyDB.tabs[1], 1
+        ns.state.selectedOptionTabId = RPChroniclerDB.tabs[1].id
+        return RPChroniclerDB.tabs[1], 1
     end
 
     local function Changed()
@@ -725,7 +723,7 @@ do
         resetBtn.armedAt = nil
         resetBtn:SetText("Reset")
         for _, rb in ipairs(S.rows) do rb:Hide() end
-        for idx, t in ipairs(RPCopyDB.tabs) do
+        for idx, t in ipairs(RPChroniclerDB.tabs) do
             local rb = S.rows[idx]
             if not rb then
                 rb = UI.CreateSleekButton(child, 96, 22, "")
@@ -740,7 +738,7 @@ do
             end)
             rb:Show()
         end
-        child:SetHeight(math.max(10, #RPCopyDB.tabs * 24))
+        child:SetHeight(math.max(10, #RPChroniclerDB.tabs * 24))
     end
 
     S.save:SetScript("OnClick", function()
@@ -759,8 +757,8 @@ do
 
     addBtn:SetScript("OnClick", function()
         local newId = "CUSTOM_" .. tostring(time()) .. "_" .. tostring(math.random(10, 99))
-        table.insert(RPCopyDB.tabs, {
-            id = newId, label = "Custom " .. tostring(#RPCopyDB.tabs + 1), prefix = ns.DEFAULT_TRIGGER,
+        table.insert(RPChroniclerDB.tabs, {
+            id = newId, label = "Custom " .. tostring(#RPChroniclerDB.tabs + 1), prefix = ns.DEFAULT_TRIGGER,
             incDirect = true, incTarget = true, incParty = false, incStatus = false, incQuest = false,
             incSocial = true, incPartySay = false, incOoc = false, incPartyChat = false, incNpc = false,
             incLoot = false, incWorld = false, incGuild = false,
@@ -784,21 +782,21 @@ do
     S.up:SetScript("OnClick", function()
         local _, idx = Selected()
         if idx > 1 then
-            RPCopyDB.tabs[idx], RPCopyDB.tabs[idx - 1] = RPCopyDB.tabs[idx - 1], RPCopyDB.tabs[idx]
+            RPChroniclerDB.tabs[idx], RPChroniclerDB.tabs[idx - 1] = RPChroniclerDB.tabs[idx - 1], RPChroniclerDB.tabs[idx]
             Changed()
         end
     end)
 
     S.down:SetScript("OnClick", function()
         local _, idx = Selected()
-        if idx < #RPCopyDB.tabs then
-            RPCopyDB.tabs[idx], RPCopyDB.tabs[idx + 1] = RPCopyDB.tabs[idx + 1], RPCopyDB.tabs[idx]
+        if idx < #RPChroniclerDB.tabs then
+            RPChroniclerDB.tabs[idx], RPChroniclerDB.tabs[idx + 1] = RPChroniclerDB.tabs[idx + 1], RPChroniclerDB.tabs[idx]
             Changed()
         end
     end)
 
     S.del:SetScript("OnClick", function(self)
-        if #RPCopyDB.tabs <= 1 then
+        if #RPChroniclerDB.tabs <= 1 then
             UI.SetStatus("Keep at least one slice tab.", "error")
             return
         end
@@ -808,10 +806,10 @@ do
             return
         end
         local _, idx = Selected()
-        local removed = table.remove(RPCopyDB.tabs, idx)
-        ns.state.selectedOptionTabId = RPCopyDB.tabs[1].id
-        if ns.state.activeFilter == removed.id then ns.state.activeFilter = RPCopyDB.tabs[1].id end
-        if RPCopyDB.lastSliceId == removed.id then RPCopyDB.lastSliceId = RPCopyDB.tabs[1].id end
+        local removed = table.remove(RPChroniclerDB.tabs, idx)
+        ns.state.selectedOptionTabId = RPChroniclerDB.tabs[1].id
+        if ns.state.activeFilter == removed.id then ns.state.activeFilter = RPChroniclerDB.tabs[1].id end
+        if RPChroniclerDB.lastSliceId == removed.id then RPChroniclerDB.lastSliceId = RPChroniclerDB.tabs[1].id end
         Changed()
         UI.SetStatus("Deleted slice tab '" .. (removed.label or "") .. "'.", "good")
     end)
@@ -822,7 +820,7 @@ do
     end)
 end
 
--- A list of ON/OFF buttons bound to RPCopyDB fields
+-- A list of ON/OFF buttons bound to RPChroniclerDB fields
 local function ToggleRows(p, y, defs)
     local rows = {}
     for i, d in ipairs(defs) do
@@ -831,9 +829,9 @@ local function ToggleRows(p, y, defs)
         b.tipTitle, b.tipText = "|cffffd100" .. d.label .. "|r", d.tip
         b:SetScript("OnClick", function()
             if d.invert then
-                RPCopyDB[d.field] = (RPCopyDB[d.field] == false)
+                RPChroniclerDB[d.field] = (RPChroniclerDB[d.field] == false)
             else
-                RPCopyDB[d.field] = not RPCopyDB[d.field]
+                RPChroniclerDB[d.field] = not RPChroniclerDB[d.field]
             end
             if d.after then pcall(d.after) end
             UI.RefreshOptionsPage()
@@ -842,7 +840,7 @@ local function ToggleRows(p, y, defs)
     end
     return function()
         for _, r in ipairs(rows) do
-            local on = RPCopyDB[r.def.field]
+            local on = RPChroniclerDB[r.def.field]
             if r.def.invert then on = (on ~= false) end
             UI.SetToggleLook(r.btn, on and true or false, r.def.label .. ": ON", r.def.label .. ": OFF")
         end
@@ -885,7 +883,7 @@ do
     aBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("ADVENTURE") end)
     O.refresh.ADVENTURES = function()
         refreshToggles()
-        status:SetText(RPCopyDB.autoRecord ~= false
+        status:SetText(RPChroniclerDB.autoRecord ~= false
             and "|cff5cb85cDungeons and raids record by themselves.|r"
             or "|cffffb74dAuto-record is off: start dungeon and raid runs yourself.|r")
     end
@@ -896,7 +894,7 @@ end
 -- ---------------------------------------------------------
 do
     local p = NewPage("FULLLOG", "Full Log")
-    Note(p, "|cff8f9ba8What goes into a run's Full Log. Off means RPCopy stops writing those lines (already recorded lines stay). OOC chat is never kept.|r", 0, -20)
+    Note(p, "|cff8f9ba8What goes into a run's Full Log. Off means RP Chronicler stops writing those lines (already recorded lines stay). OOC chat is never kept.|r", 0, -20)
     local CAT_TIPS = {
         fights = "One [FIGHT] line per fight: foes, length, flee, aggro swaps, who got low, outcome.",
         kills = "[KILL] lines for elites, rares and named foes, and the Foes defeated count.",
@@ -909,7 +907,7 @@ do
     local checks = {}
     local half = math.ceil(#ns.LOG_CATEGORIES / 2)
     for i, c in ipairs(ns.LOG_CATEGORIES) do
-        local cb = CreateFrame("CheckButton", "RPCopyOptLog_" .. c.key, p, "UICheckButtonTemplate")
+        local cb = CreateFrame("CheckButton", "RPChroniclerOptLog_" .. c.key, p, "UICheckButtonTemplate")
         cb:SetSize(18, 18)
         local col = (i <= half) and 0 or 1
         local row = (i <= half) and (i - 1) or (i - half - 1)
@@ -918,7 +916,7 @@ do
         lbl:SetPoint("LEFT", cb, "RIGHT", 2, 0)
         lbl:SetText(c.label)
         cb:SetScript("OnClick", function(self)
-            RPCopyDB.logCats[c.key] = self:GetChecked() and true or false
+            RPChroniclerDB.logCats[c.key] = self:GetChecked() and true or false
         end)
         if CAT_TIPS[c.key] then
             cb:SetScript("OnEnter", function(self) UI.Tooltip(self, "|cffffd100" .. c.label .. "|r", CAT_TIPS[c.key]) end)
@@ -934,7 +932,7 @@ do
         local row = math.floor((i - 1) / 2)
         local lbl = UI.Label(p, d.label, "GameFontHighlightSmall")
         lbl:SetPoint("TOPLEFT", col * 210, y - row * 24 - 4)
-        local eb = CreateFrame("EditBox", "RPCopyOptLimit_" .. d.key, p, "InputBoxTemplate")
+        local eb = CreateFrame("EditBox", "RPChroniclerOptLimit_" .. d.key, p, "InputBoxTemplate")
         eb:SetSize(40, 20)
         eb:SetPoint("TOPLEFT", col * 210 + 160, y - row * 24)
         eb:SetAutoFocus(false)
@@ -942,8 +940,8 @@ do
         eb:SetMaxLetters(4)
         local function Commit(self)
             local v = tonumber(self:GetText() or "") or d.default
-            RPCopyDB.limits[d.key] = math.max(d.min, math.min(d.max, math.floor(v)))
-            self:SetText(tostring(RPCopyDB.limits[d.key]))
+            RPChroniclerDB.limits[d.key] = math.max(d.min, math.min(d.max, math.floor(v)))
+            self:SetText(tostring(RPChroniclerDB.limits[d.key]))
             self:ClearFocus()
         end
         eb:SetScript("OnEnterPressed", Commit)
@@ -964,9 +962,9 @@ do
     nextB:SetPoint("LEFT", aiLbl, "RIGHT", 4, 0)
     local function Step(delta)
         local idx = 1
-        for i, m in ipairs(ns.AI_MODELS) do if m.key == RPCopyDB.aiModel then idx = i end end
+        for i, m in ipairs(ns.AI_MODELS) do if m.key == RPChroniclerDB.aiModel then idx = i end end
         idx = ((idx - 1 + delta) % #ns.AI_MODELS) + 1
-        RPCopyDB.aiModel = ns.AI_MODELS[idx].key
+        RPChroniclerDB.aiModel = ns.AI_MODELS[idx].key
         UI.RefreshOptionsPage()
     end
     prev:SetScript("OnClick", function() Step(-1) end)
@@ -977,7 +975,7 @@ do
 
     local customLbl = UI.Label(p, "Custom limit (chars)", "GameFontHighlightSmall")
     customLbl:SetPoint("TOPLEFT", 0, y - 30)
-    local customEb = CreateFrame("EditBox", "RPCopyOptAiCustom", p, "InputBoxTemplate")
+    local customEb = CreateFrame("EditBox", "RPChroniclerOptAiCustom", p, "InputBoxTemplate")
     customEb:SetSize(64, 20)
     customEb:SetPoint("TOPLEFT", 176, y - 26)
     customEb:SetAutoFocus(false)
@@ -985,8 +983,8 @@ do
     customEb:SetMaxLetters(7)
     local function CommitCustom(self)
         local v = tonumber(self:GetText() or "") or 40000
-        RPCopyDB.aiCustomLimit = math.max(2000, math.min(2000000, math.floor(v)))
-        self:SetText(tostring(RPCopyDB.aiCustomLimit))
+        RPChroniclerDB.aiCustomLimit = math.max(2000, math.min(2000000, math.floor(v)))
+        self:SetText(tostring(RPChroniclerDB.aiCustomLimit))
         self:ClearFocus()
     end
     customEb:SetScript("OnEnterPressed", CommitCustom)
@@ -998,7 +996,7 @@ do
     meterBtn.tipTitle = "|cffffd100Size meter|r"
     meterBtn.tipText = "Shows how big a Full Log is for your AI, with a warning when it is too long."
     meterBtn:SetScript("OnClick", function()
-        RPCopyDB.sizeMeter = (RPCopyDB.sizeMeter == false)
+        RPChroniclerDB.sizeMeter = (RPChroniclerDB.sizeMeter == false)
         UI.RefreshOptionsPage()
     end)
 
@@ -1013,25 +1011,25 @@ do
             return
         end
         self.armedAt = nil
-        for _, c in ipairs(ns.LOG_CATEGORIES) do RPCopyDB.logCats[c.key] = true end
-        for _, d in ipairs(ns.LOG_LIMITS) do RPCopyDB.limits[d.key] = d.default end
+        for _, c in ipairs(ns.LOG_CATEGORIES) do RPChroniclerDB.logCats[c.key] = true end
+        for _, d in ipairs(ns.LOG_LIMITS) do RPChroniclerDB.limits[d.key] = d.default end
         UI.RefreshOptionsPage()
         UI.SetStatus("Full Log settings reset.", "good")
     end)
 
     O.refresh.FULLLOG = function()
         ns.EnsureDB()
-        for key, cb in pairs(checks) do cb:SetChecked(RPCopyDB.logCats[key] ~= false) end
+        for key, cb in pairs(checks) do cb:SetChecked(RPChroniclerDB.logCats[key] ~= false) end
         for key, eb in pairs(inputs) do eb:SetText(tostring(ns.Limit(key))) end
         local _, label = ns.GetAiLimit()
         aiLbl:SetText(label)
-        customEb:SetText(tostring(RPCopyDB.aiCustomLimit or 40000))
-        if RPCopyDB.aiModel == "CUSTOM" then
+        customEb:SetText(tostring(RPChroniclerDB.aiCustomLimit or 40000))
+        if RPChroniclerDB.aiModel == "CUSTOM" then
             customEb:Show(); customLbl:Show()
         else
             customEb:Hide(); customLbl:Hide()
         end
-        UI.SetToggleLook(meterBtn, RPCopyDB.sizeMeter ~= false, "Size meter: ON", "Size meter: OFF")
+        UI.SetToggleLook(meterBtn, RPChroniclerDB.sizeMeter ~= false, "Size meter: ON", "Size meter: OFF")
         resetBtn.armedAt = nil
         resetBtn:SetText("Reset Full Log")
     end
@@ -1068,10 +1066,10 @@ local function CheckGrid(p, y, defs, store, prefix, colW)
 end
 UI.OptionsCheckGrid = CheckGrid
 
--- A number box bound to an RPCopyDB field
+-- A number box bound to an RPChroniclerDB field
 local function NumberBox(p, x, y, label, field, lo, hi, default, tip)
     UI.Label(p, label, "GameFontHighlightSmall"):SetPoint("TOPLEFT", x, y - 4)
-    local eb = CreateFrame("EditBox", "RPCopyOptNum_" .. field, p, "InputBoxTemplate")
+    local eb = CreateFrame("EditBox", "RPChroniclerOptNum_" .. field, p, "InputBoxTemplate")
     eb:SetSize(44, 20)
     eb:SetPoint("TOPLEFT", x + 170, y)
     eb:SetAutoFocus(false)
@@ -1079,8 +1077,8 @@ local function NumberBox(p, x, y, label, field, lo, hi, default, tip)
     eb:SetMaxLetters(4)
     local function Commit(self)
         local v = tonumber(self:GetText() or "") or default
-        RPCopyDB[field] = math.max(lo, math.min(hi, math.floor(v)))
-        self:SetText(tostring(RPCopyDB[field]))
+        RPChroniclerDB[field] = math.max(lo, math.min(hi, math.floor(v)))
+        self:SetText(tostring(RPChroniclerDB[field]))
         self:ClearFocus()
     end
     eb:SetScript("OnEnterPressed", Commit)
@@ -1088,7 +1086,7 @@ local function NumberBox(p, x, y, label, field, lo, hi, default, tip)
     eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     eb:SetScript("OnEnter", function(self) UI.Tooltip(self, "|cffffd100" .. label .. "|r", (tip or "") .. string.format(" From %d to %d. Default %d.", lo, hi, default)) end)
     eb:SetScript("OnLeave", UI.HideTooltip)
-    return function() eb:SetText(tostring(RPCopyDB[field] or default)) end, eb
+    return function() eb:SetText(tostring(RPChroniclerDB[field] or default)) end, eb
 end
 
 -- ---------------------------------------------------------
@@ -1097,7 +1095,7 @@ end
 do
     local p = NewPage("SUMMARY", "Summary")
     Note(p, "|cff8f9ba8What the Summary of a recording shows. Stats that are zero are always hidden. Bosses and wipes only show for dungeons and raids, places only for the open world.|r", 0, -20)
-    local refreshGrid = CheckGrid(p, -56, ns.SUMMARY_STATS, function() return RPCopyDB.summaryStats end, "RPCopyOptSum_")
+    local refreshGrid = CheckGrid(p, -56, ns.SUMMARY_STATS, function() return RPChroniclerDB.summaryStats end, "RPChroniclerOptSum_")
     O.refresh.SUMMARY = function()
         ns.EnsureDB()
         refreshGrid()
@@ -1115,7 +1113,7 @@ do
         { field = "autoUpdateKnown", label = "Update companions from chat",
           tip = "Keeps a companion's level, class and latest chat up to date when they talk near you." },
         { field = "companionMenu", invert = true, label = "Add as companion (right-click)",
-          tip = "Adds 'Add as RPCopy companion' to the game's player right-click menu (where the game allows it). Takes effect after /reload." },
+          tip = "Adds 'Add as RP Chronicler companion' to the game's player right-click menu (where the game allows it). Takes effect after /reload." },
         { field = "nearbyChip", invert = true, label = "Nearby companions on Copy",
           tip = "Shows companions you target, group with or chat with, at the bottom of the Copy view." },
         { field = "runCompanions", invert = true, label = "Companions in the Full Log",
@@ -1144,10 +1142,10 @@ do
         { field = "exportTip", invert = true, label = "Export tip in the Story Book",
           tip = "Shows how to make HTML pages with screenshots using Export_Stories.bat." },
     })
-    Note(p, "|cff8f9ba8Export_Stories.bat (in the RPCopy AddOns folder) reads these after a /reload or logout. Leave a box empty for the default.|r", 0, -80)
+    Note(p, "|cff8f9ba8Export_Stories.bat (in the RP Chronicler AddOns folder) reads these after a /reload or logout. Leave a box empty for the default.|r", 0, -80)
     local function PathBox(y, label, field, tip)
         UI.Label(p, label, "GameFontHighlightSmall"):SetPoint("TOPLEFT", 0, y - 4)
-        local eb = CreateFrame("EditBox", "RPCopyOptPath_" .. field, p, "InputBoxTemplate")
+        local eb = CreateFrame("EditBox", "RPChroniclerOptPath_" .. field, p, "InputBoxTemplate")
         eb:SetHeight(20)
         eb:SetPoint("TOPLEFT", 150, y)
         eb:SetPoint("RIGHT", p, "RIGHT", -8, 0)
@@ -1155,7 +1153,7 @@ do
         eb:SetMaxLetters(260)
         local function Commit(self)
             local v = (self:GetText() or ""):gsub("||", "|"):match("^%s*(.-)%s*$")
-            RPCopyDB[field] = v
+            RPChroniclerDB[field] = v
             self:ClearFocus()
         end
         eb:SetScript("OnEnterPressed", Commit)
@@ -1163,13 +1161,13 @@ do
         eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         eb:SetScript("OnEnter", function(self) UI.Tooltip(self, "|cffffd100" .. label .. "|r", tip) end)
         eb:SetScript("OnLeave", UI.HideTooltip)
-        return function() eb:SetText(RPCopyDB[field] or "") end
+        return function() eb:SetText(RPChroniclerDB[field] or "") end
     end
     local r1 = PathBox(-112, "Image folder", "exportImageDir",
         "Where the exporter copies screenshots for the pages. Empty: an 'images' folder next to the HTML.")
     local r2 = PathBox(-140, "Screenshots folder", "exportShotsDir",
         "Where WoW saves screenshots. Empty: found by itself (the _forever_\\Screenshots folder).")
-    Note(p, "|cff8f9ba8How to export: /reload or log out so the game saves your stories, then double-click Export_Stories.bat in Interface\\AddOns\\RPCopy. The pages open from the RPCopy Stories folder it makes in _forever_.|r", 0, -176)
+    Note(p, "|cff8f9ba8How to export: get Export_Stories.bat from github.com/azaxyno/RPChronicler/releases (the CurseForge download leaves it out) and put it in Interface\\AddOns\\RPChronicler. /reload or log out so the game saves your stories, then double-click it. The pages open from the RP Chronicler Stories folder it makes in _forever_.|r", 0, -176)
     local dBtn = UI.CreateSleekButton(p, 160, 24, "Dungeon/Raid Template", "gold")
     dBtn:SetPoint("TOPLEFT", 0, -236)
     dBtn:SetIcon(UI.ICONS.STORY, 16)
@@ -1190,8 +1188,8 @@ end
 -- ---------------------------------------------------------
 do
     local p = NewPage("PRIVACY", "Privacy")
-    Note(p, (ns.PRIVACY_TEXT or "") .. "\n|cffffd100Chat RPCopy keeps:|r", 0, -20)
-    local refreshGrid = CheckGrid(p, -164, ns.CAPTURE_TYPES, function() return RPCopyDB.capture end, "RPCopyOptCap_")
+    Note(p, (ns.PRIVACY_TEXT or "") .. "\n|cffffd100Chat RP Chronicler keeps:|r", 0, -20)
+    local refreshGrid = CheckGrid(p, -164, ns.CAPTURE_TYPES, function() return RPChroniclerDB.capture end, "RPChroniclerOptCap_")
     local setupBtn = UI.CreateSleekButton(p, 150, 24, "Open Setup Again", "gold")
     setupBtn:SetPoint("TOPLEFT", 0, -230)
     setupBtn.tipTitle = "|cffffd100Setup|r"
@@ -1199,7 +1197,7 @@ do
     setupBtn:SetScript("OnClick", function() if UI.OpenSetup then UI.OpenSetup(true) end end)
     local wipeBtn = UI.CreateSleekButton(p, 150, 24, "Delete All Data", "danger")
     wipeBtn:SetPoint("LEFT", setupBtn, "RIGHT", 6, 0)
-    wipeBtn.tipTitle = "|cffff6b6bDelete all RPCopy data|r"
+    wipeBtn.tipTitle = "|cffff6b6bDelete all RP Chronicler data|r"
     wipeBtn.tipText = "Click twice. Deletes every recording, story, companion and setting, then reloads the UI (/rp wipe)."
     wipeBtn:SetScript("OnClick", function(self)
         if not self.armedAt or GetTime() - self.armedAt > 4 then
@@ -1242,17 +1240,17 @@ do
     lenBtn.tipText = "How long the RP template asks replies to be. Short is like real chat (about 5 to 14 words). Copy the template again after changing it."
     lenBtn:SetScript("OnClick", function()
         local idx = 1
-        for i, k in ipairs(LENGTHS) do if k == RPCopyDB.rpReplyLength then idx = i end end
-        RPCopyDB.rpReplyLength = LENGTHS[(idx % #LENGTHS) + 1]
-        lenBtn:SetText(LEN_LABEL[RPCopyDB.rpReplyLength])
+        for i, k in ipairs(LENGTHS) do if k == RPChroniclerDB.rpReplyLength then idx = i end end
+        RPChroniclerDB.rpReplyLength = LENGTHS[(idx % #LENGTHS) + 1]
+        lenBtn:SetText(LEN_LABEL[RPChroniclerDB.rpReplyLength])
     end)
-    O.refresh.AI = function() lenBtn:SetText(LEN_LABEL[RPCopyDB.rpReplyLength or "SHORT"] or LEN_LABEL.SHORT) end
+    O.refresh.AI = function() lenBtn:SetText(LEN_LABEL[RPChroniclerDB.rpReplyLength or "SHORT"] or LEN_LABEL.SHORT) end
 
     Note(p,
         "|cffffd100Your storyteller skills (one time each)|r\n" ..
         "|cffd8dee91. Copy a story template and paste it into your AI to make the skill.\n" ..
-        "   |cffffd100Dungeon/Raid Story|cffd8dee9: one chapter per boss (logs start with 'use story').\n" ..
-        "   |cffffd100Adventure Story|cffd8dee9: open world, by place and event ('use adventure story').\n" ..
+        "   |cffffd100Dungeon/Raid Story|cffd8dee9: one chapter per boss (logs start with 'use " .. ns.STORY_SKILLS.dungeon .. "').\n" ..
+        "   |cffffd100Adventure Story|cffd8dee9: open world, by place and event ('use " .. ns.STORY_SKILLS.world .. "').\n" ..
         "2. After a run, copy its Full Log, paste it into the AI, and import the story into the Story Book.\n" ..
         "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r",
         0, -146)
@@ -1272,33 +1270,33 @@ end
 do
     local p = NewPage("DEBUG", "Debug")
     Note(p,
-        "|cffd8dee9RPCopy keeps a small debug log (about 200 lines): its own Lua errors, blocked actions, and when runs start, pause, end or get a story. It never stores chat.\n\n" ..
+        "|cffd8dee9RP Chronicler keeps a small debug log (about 200 lines): its own Lua errors, blocked actions, and when runs start, pause, end or get a story. It never stores chat.\n\n" ..
         "Found a bug? Click |cffffd100Copy Debug Report|cffd8dee9 (or type |cff69ccf0/rp debug|cffd8dee9), press Ctrl+C, and paste it into your report. See 'Reporting bugs' in the README.|r",
         0, -28)
     local verbose = ToggleRows(p, -120, {
         { field = "debugEnabled", invert = true, label = "Debug log",
-          tip = "OFF: only RPCopy's own errors and blocked actions are kept." },
+          tip = "OFF: only RP Chronicler's own errors and blocked actions are kept." },
         { field = "debugVerbose", label = "Verbose debug log",
           tip = "Also logs extra detail (every quick copy, for example). Leave it off unless you are chasing a bug." },
     })
     local reportBtn = UI.CreateSleekButton(p, 150, 24, "Copy Debug Report", "gold")
     reportBtn:SetPoint("TOPLEFT", 0, -180)
-    reportBtn:SetScript("OnClick", function() SlashCmdList["RPCOPY"]("debug") end)
+    reportBtn:SetScript("OnClick", function() SlashCmdList["RPCHRONICLER"]("debug") end)
     local clearBtn = UI.CreateSleekButton(p, 120, 24, "Clear Debug Log", "danger")
     clearBtn:SetPoint("LEFT", reportBtn, "RIGHT", 6, 0)
     clearBtn:SetScript("OnClick", function()
-        RPCopyDB.debugLog = {}
+        RPChroniclerDB.debugLog = {}
         UI.SetStatus("Debug log cleared.", "good")
         UI.RefreshOptionsPage()
     end)
     local count = Note(p, "", 0, -216)
     O.refresh.DEBUG = function()
         verbose()
-        count:SetText(string.format("|cff8f9ba8%d lines in the debug log.|r", #(RPCopyDB.debugLog or {})))
+        count:SetText(string.format("|cff8f9ba8%d lines in the debug log.|r", #(RPChroniclerDB.debugLog or {})))
     end
 end
 
 UI.SetSectionOnShow("OPTIONS", function()
     UI.EnsureOptions()
-    UI.ShowOptionsPage(RPCopyDB.optionsPage)
+    UI.ShowOptionsPage(RPChroniclerDB.optionsPage)
 end)

@@ -294,7 +294,7 @@ end
 function ns.BuildSnapshot(filterId, note, isExpanded)
     ns.EnsureDB()
     local tabCfg = ns.GetTabConfig(filterId)
-    local limit = isExpanded and (RPCopyDB.expandMessages or 6) or (RPCopyDB.defaultMessages or 3)
+    local limit = isExpanded and (RPChroniclerDB.expandMessages or 6) or (RPChroniclerDB.defaultMessages or 3)
 
     local lines = {}
     -- 0.5.0: the people in this scene, most relevant first, for the

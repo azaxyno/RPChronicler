@@ -6,7 +6,7 @@ local ADDON_NAME, ns = ...
 -- the full name. A first name alone counts only when exactly one companion
 -- has it, and a saved entry is never renamed behind your back.
 --
--- An entry (RPCopyDB.players[name]):
+-- An entry (RPChroniclerDB.players[name]):
 --   cid, kind ("player", "npc", "pet"), note ("Who they are"), history
 --   ("Our history"), relationship, tone, level, race, class, classFile,
 --   guild, chatHistory (last 5), lastSeen, firstMet, firstMetPlace,
@@ -52,7 +52,7 @@ end
 -- A first name alone matches only one companion who has it; a full name
 -- also finds an old first-name-only entry when that entry is the only one.
 function ns.CompanionByName(name)
-    local players = RPCopyDB and RPCopyDB.players
+    local players = RPChroniclerDB and RPChroniclerDB.players
     if type(name) ~= "string" or name == "" or not players then return nil end
     name = ns.StripHonorRank(Trim(name))
     if players[name] then return name end
@@ -118,7 +118,7 @@ end
 function ns.FindVisibleUnitForPlayer(name)
     if type(name) ~= "string" or name == "" then return nil end
     local low = name:lower()
-    local entry = RPCopyDB and RPCopyDB.players and RPCopyDB.players[name]
+    local entry = RPChroniclerDB and RPChroniclerDB.players and RPChroniclerDB.players[name]
     local isPlayer = not entry or (entry.kind or "player") == "player"
     local firstOnly = not HasLast(name)
     local byFirst, firstCount = nil, 0
@@ -154,7 +154,7 @@ function ns.GetPlayerClassFile(name)
         if cf then return cf end
     end
     local key = ns.CompanionByName(name)
-    local e = key and RPCopyDB.players[key]
+    local e = key and RPChroniclerDB.players[key]
     if type(e) == "table" then return e.classFile or ns.ClassToken(e.class) end
     return nil
 end
@@ -218,8 +218,8 @@ function ns.AppendConvoForPlayer(name, line)
     if not key then return end
     ns.companionChatAt[key] = GetTime()
     if ns.NoteRunCompanion then ns.NoteRunCompanion(key) end
-    if RPCopyDB and RPCopyDB.autoUpdateKnown then
-        local entry = RPCopyDB.players[key]
+    if RPChroniclerDB and RPChroniclerDB.autoUpdateKnown then
+        local entry = RPChroniclerDB.players[key]
         entry.chatHistory = entry.chatHistory or {}
         ns.PushBounded(entry.chatHistory, line, ns.MAX_PLAYER_CHAT)
         entry.lastSeen = ns.NowStamp()
@@ -293,7 +293,7 @@ function ns.SaveOrUpdatePlayer(name, unit)
     local key = ns.CompanionByName(canonical)
     local isNew = key == nil
     key = key or canonical
-    local entry = RPCopyDB.players[key] or NewEntry(kind)
+    local entry = RPChroniclerDB.players[key] or NewEntry(kind)
     local u = unit or ns.FindVisibleUnitForPlayer(key)
     if u then ns.CaptureVisibleUnitFields(u, entry) end
     local buf = ns.logs.playerRecentChat[key] or ns.logs.playerRecentChat[canonical]
@@ -302,7 +302,7 @@ function ns.SaveOrUpdatePlayer(name, unit)
         for _, line in ipairs(buf) do ns.PushBounded(entry.chatHistory, line, ns.MAX_PLAYER_CHAT) end
     end
     entry.lastSeen = ns.NowStamp()
-    RPCopyDB.players[key] = entry
+    RPChroniclerDB.players[key] = entry
     return key, isNew
 end
 
@@ -316,7 +316,7 @@ end
 -- Renames a companion. Refuses a name another companion already has
 -- (any case), so a rename never overwrites someone.
 function ns.RenameCompanion(oldKey, newName)
-    local players = RPCopyDB.players
+    local players = RPChroniclerDB.players
     newName = Trim(newName)
     if newName == "" then return false, "Type a name first." end
     local entry = players[oldKey]
@@ -348,8 +348,8 @@ end
 ns.ClipCompanionNote = ClipNote
 
 function ns.GetKnownPlayerBlocks(people, bodyText)
-    if not RPCopyDB or not RPCopyDB.players or RPCopyDB.knownPlayerBlocks == false then return {} end
-    local players = RPCopyDB.players
+    if not RPChroniclerDB or not RPChroniclerDB.players or RPChroniclerDB.knownPlayerBlocks == false then return {} end
+    local players = RPChroniclerDB.players
     local haystack = ns.StripColors(bodyText or ""):lower()
     local picked, order = {}, {}
     local function Pick(key, rank)
@@ -370,7 +370,7 @@ function ns.GetKnownPlayerBlocks(people, bodyText)
         return a < b
     end)
 
-    local max, noteMax = RPCopyDB.knownPlayerMax or 3, RPCopyDB.knownNoteMax or 300
+    local max, noteMax = RPChroniclerDB.knownPlayerMax or 3, RPChroniclerDB.knownNoteMax or 300
     local blocks = {}
     for _, key in ipairs(order) do
         if #blocks >= max then break end
@@ -414,7 +414,7 @@ end
 function ns.NearbyCompanions()
     local out, seen = {}, {}
     local function Add(key, why)
-        if key and not seen[key] and RPCopyDB.players[key] then
+        if key and not seen[key] and RPChroniclerDB.players[key] then
             seen[key] = true
             table.insert(out, { key = key, why = why })
         end
@@ -436,7 +436,7 @@ end
 
 -- Runs and stories you shared with a companion (by cid, then by name)
 function ns.CompanionSharedAdventures(key)
-    local e = RPCopyDB.players[key]
+    local e = RPChroniclerDB.players[key]
     if not e then return {} end
     local low = key:lower()
     local function IsThem(p)
@@ -445,7 +445,7 @@ function ns.CompanionSharedAdventures(key)
         return (p.name or ""):lower() == low
     end
     local list, storyByRun = {}, {}
-    for _, st in ipairs(RPCopyDB.stories or {}) do
+    for _, st in ipairs(RPChroniclerDB.stories or {}) do
         if st.runId then storyByRun[st.runId] = st end
     end
     local function Scan(adv)
@@ -459,14 +459,14 @@ function ns.CompanionSharedAdventures(key)
     end
     local active = ns.GetActiveAdventure and ns.GetActiveAdventure()
     if active and Scan(active) then table.insert(list, { title = active.title, date = active.startDate, runId = active.id, live = true }) end
-    for _, adv in ipairs(RPCopyDB.adventures or {}) do
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do
         if Scan(adv) then
             local st = storyByRun[adv.id]
             table.insert(list, { title = (st and st.book and st.book.title) or adv.title, date = adv.startDate, runId = adv.id, storyId = st and st.id })
         end
     end
     -- Stories whose recording was deleted still remember the party
-    for _, st in ipairs(RPCopyDB.stories or {}) do
+    for _, st in ipairs(RPChroniclerDB.stories or {}) do
         local m = st -- a story keeps a copy of its run's details
         if not ns.FindAdventure(st.runId) then
             for _, p in ipairs(m.participants or {}) do
@@ -495,7 +495,7 @@ local function MergeInto(dst, src)
 end
 
 function ns.MigrateCompanions()
-    local players = RPCopyDB.players
+    local players = RPChroniclerDB.players
     local keys = {}
     for k in pairs(players) do table.insert(keys, k) end
     table.sort(keys)
@@ -529,22 +529,22 @@ function ns.MigrateCompanions()
 end
 
 -- =========================================================
--- "Add as RPCopy companion" in the game's own unit right-click menus.
+-- "Add as RP Chronicler companion" in the game's own unit right-click menus.
 -- Only where the modern Menu API exists; Options can hide the entry.
 -- =========================================================
 do
     local MENUS = { "MENU_UNIT_PLAYER", "MENU_UNIT_PARTY", "MENU_UNIT_RAID_PLAYER", "MENU_UNIT_FRIEND",
         "MENU_UNIT_TARGET", "MENU_UNIT_FOCUS" }
     local function Add(owner, root, ctx)
-        if not RPCopyDB or RPCopyDB.companionMenu == false or type(root) ~= "table" or not root.CreateButton then return end
+        if not RPChroniclerDB or RPChroniclerDB.companionMenu == false or type(root) ~= "table" or not root.CreateButton then return end
         local unit = type(ctx) == "table" and ctx.unit or nil
         local name = (unit and ns.UnitCompanionName(unit)) or (type(ctx) == "table" and ns.SafeStr(ctx.name)) or nil
         if not name or name == "" then return end
         pcall(root.CreateDivider, root)
-        root:CreateButton("|cffffd100Add as RPCopy companion|r", function()
+        root:CreateButton("|cffffd100Add as RP Chronicler companion|r", function()
             local key, isNew = ns.SaveOrUpdatePlayer(name, unit)
             if key then
-                print("|cffffd100RPCopy|r " .. (isNew and "Added companion: " or "Updated companion: ") .. key)
+                print("|cffffd100RP Chronicler|r " .. (isNew and "Added companion: " or "Updated companion: ") .. key)
                 if ns.UI and ns.UI.OpenCompanion and ns.UI.frame and ns.UI.frame:IsShown() and ns.state.section == "PLAYERS" then
                     ns.UI.OpenCompanion(key)
                 end

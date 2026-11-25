@@ -1,23 +1,23 @@
 <Bindings>
-    <Binding name="RPCOPY_OPEN" header="RPCOPY" category="ADDONS">
-        RPCopy_Toggle()
+    <Binding name="RPCHRONICLER_OPEN" header="RPCHRONICLER" category="ADDONS">
+        RPChronicler_Toggle()
     </Binding>
-    <Binding name="RPCOPY_QUICK" category="ADDONS">
-        RPCopy_QuickCopy()
+    <Binding name="RPCHRONICLER_QUICK" category="ADDONS">
+        RPChronicler_QuickCopy()
     </Binding>
-    <Binding name="RPCOPY_CAPTURE" category="ADDONS">
-        RPCopy_CaptureTarget()
+    <Binding name="RPCHRONICLER_CAPTURE" category="ADDONS">
+        RPChronicler_CaptureTarget()
     </Binding>
-    <Binding name="RPCOPY_MARK" category="ADDONS">
-        RPCopy_MarkMoment()
+    <Binding name="RPCHRONICLER_MARK" category="ADDONS">
+        RPChronicler_MarkMoment()
     </Binding>
-    <Binding name="RPCOPY_RUN_START" category="ADDONS">
-        RPCopy_StartRun()
+    <Binding name="RPCHRONICLER_RUN_START" category="ADDONS">
+        RPChronicler_StartRun()
     </Binding>
-    <Binding name="RPCOPY_RUN_PAUSE" category="ADDONS">
-        RPCopy_ToggleRunPause()
+    <Binding name="RPCHRONICLER_RUN_PAUSE" category="ADDONS">
+        RPChronicler_ToggleRunPause()
     </Binding>
-    <Binding name="RPCOPY_RUN_END" category="ADDONS">
-        RPCopy_EndRun()
+    <Binding name="RPCHRONICLER_RUN_END" category="ADDONS">
+        RPChronicler_EndRun()
     </Binding>
 </Bindings>

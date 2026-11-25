@@ -1,8 +1,11 @@
 ## Interface: 16001
-## Title: RPCopy
-## Notes: AI RP Context Snapshot & Colored Adventure Chronicle Journal
-## Version: 0.5.4
-## SavedVariables: RPCopyDB
+## Title: RP Chronicler
+## Notes: AI roleplay snapshots, companion notes and colored adventure stories (formerly RPCopy)
+## Version: 0.6.0
+## SavedVariables: RPChroniclerDB
+# 0.6.0: RPCopy was renamed. When the old RPCopy addon is still installed it
+# loads first, so its saved data can be copied over once (see Core.lua).
+## OptionalDeps: RPCopy
 # CurseForge: once the project exists, change the next line to
 # "## X-Curse-Project-ID: <project id>" (two #, no space before X)
 # ## X-Curse-Project-ID: 000000

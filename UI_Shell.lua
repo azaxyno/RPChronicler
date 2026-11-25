@@ -1,7 +1,7 @@
 local ADDON_NAME, ns = ...
 
 -- =========================================================
--- RPCopy window shell (0.3.0)
+-- RP Chronicler window shell (0.3.0)
 -- The window is split into sections picked from a left rail:
 --   Copy | Companions | Adventures, plus Options behind the gear.
 -- Each section lives in its own UI_*.lua file. Shared pieces travel on
@@ -25,10 +25,10 @@ do
     if not ns.MarkAdventureHighlight then
         ns.MarkAdventureHighlight = function() return false, "Adventures module not loaded." end
     end
-    if not RPCopy_MarkMoment then
-        RPCopy_MarkMoment = function()
+    if not RPChronicler_MarkMoment then
+        RPChronicler_MarkMoment = function()
             local _, status = ns.MarkAdventureHighlight(nil)
-            print("|cff00ff00[RPCopy]|r " .. status)
+            print("|cff00ff00[RP Chronicler]|r " .. status)
         end
     end
     if not ns.BuildAdventureSummary then
@@ -52,7 +52,7 @@ do
                 active.story = cleaned
                 return true
             end
-            for _, adv in ipairs((RPCopyDB and RPCopyDB.adventures) or {}) do
+            for _, adv in ipairs((RPChroniclerDB and RPChroniclerDB.adventures) or {}) do
                 if adv.id == advId then
                     adv.story = cleaned
                     return true
@@ -79,7 +79,7 @@ UI.ICONS = {
 -- Every saved setting the window uses, with defaults
 function UI.EnsureOptions()
     ns.EnsureDB()
-    local db = RPCopyDB
+    local db = RPChroniclerDB
     if db.quickCtrlC == nil then db.quickCtrlC = true end
     if not db.quickCopyKey or db.quickCopyKey == "" then db.quickCopyKey = "CTRL-C" end
     if db.quickCapture == nil then db.quickCapture = true end
@@ -264,7 +264,7 @@ local RAIL_W = 80
 UI.DEFAULT_W, UI.DEFAULT_H = 680, 490
 UI.MIN_W, UI.MIN_H = 600, 450
 
-local copyFrame = CreateFrame("Frame", "RPCopyFrame", UIParent, UI.BACKDROP)
+local copyFrame = CreateFrame("Frame", "RPChroniclerFrame", UIParent, UI.BACKDROP)
 UI.frame = copyFrame
 copyFrame:SetSize(UI.DEFAULT_W, UI.DEFAULT_H)
 copyFrame:SetPoint("CENTER")
@@ -276,7 +276,7 @@ copyFrame:Hide()
 UI.ApplyDarkGlass(copyFrame, 0.05, 0.06, 0.08, 0.95, 0.78, 0.62, 0.28, 0.60)
 -- ESC closes the window (the game hides frames listed in UISpecialFrames)
 if type(UISpecialFrames) == "table" then
-    table.insert(UISpecialFrames, "RPCopyFrame")
+    table.insert(UISpecialFrames, "RPChroniclerFrame")
 end
 
 -- Pin the window by its top-left corner (also what stops the resize jump)
@@ -291,12 +291,12 @@ end
 
 function UI.SavePosition()
     local left, top = UI.PinTopLeft()
-    if RPCopyDB and left and top then
-        RPCopyDB.frameX, RPCopyDB.frameY = math.floor(left + 0.5), math.floor(top + 0.5)
+    if RPChroniclerDB and left and top then
+        RPChroniclerDB.frameX, RPChroniclerDB.frameY = math.floor(left + 0.5), math.floor(top + 0.5)
     end
 end
 
--- 0.5.0 (resize jumps): RPCopy saves the place itself, so the client's own
+-- 0.5.0 (resize jumps): RP Chronicler saves the place itself, so the client's own
 -- layout cache must not restore an older one on top of it
 if copyFrame.SetDontSavePosition then pcall(copyFrame.SetDontSavePosition, copyFrame, true) end
 
@@ -323,7 +323,7 @@ do
 
     UI.titleText = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     UI.titleText:SetPoint("LEFT", 12, 0)
-    UI.titleText:SetText("|cffffd100RPCopy|r")
+    UI.titleText:SetText("|cffffd100RP Chronicler|r")
 
     local closeBtn = UI.CreateSleekButton(headerBar, 22, 20, "x", "danger")
     closeBtn:SetPoint("RIGHT", -5, 0)
@@ -349,7 +349,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.5.4") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.0") .. "|r")
 end
 
 -- Left rail
@@ -487,7 +487,7 @@ function UI.ShowSection(key)
         if k == key then b:LockHighlight() else b:UnlockHighlight() end
     end
     if key == "OPTIONS" then UI.gearBtn:LockHighlight() else UI.gearBtn:UnlockHighlight() end
-    UI.titleText:SetText("|cffffd100RPCopy|r |cff8f9ba8-|r |cffd8dee9" .. (sec.title or "") .. "|r")
+    UI.titleText:SetText("|cffffd100RP Chronicler|r |cff8f9ba8-|r |cffd8dee9" .. (sec.title or "") .. "|r")
     UI.statusUntil = nil
     UI.SetHint(sec.hint)
     if sec.onShow then sec.onShow() end
@@ -559,8 +559,8 @@ do
     end
 
     local function SaveSize()
-        if not RPCopyDB then return end
-        RPCopyDB.frameW, RPCopyDB.frameH = ClampSize(copyFrame:GetWidth(), copyFrame:GetHeight())
+        if not RPChroniclerDB then return end
+        RPChroniclerDB.frameW, RPChroniclerDB.frameH = ClampSize(copyFrame:GetWidth(), copyFrame:GetHeight())
     end
 
     -- A saved place that is off screen now (another resolution or UI
@@ -596,13 +596,13 @@ do
     copyFrame:HookScript("OnShow", function()
         ApplyBounds()
         local w, h = copyFrame:GetWidth(), copyFrame:GetHeight()
-        if RPCopyDB and RPCopyDB.frameW and RPCopyDB.frameH then
-            w, h = ClampSize(RPCopyDB.frameW, RPCopyDB.frameH)
+        if RPChroniclerDB and RPChroniclerDB.frameW and RPChroniclerDB.frameH then
+            w, h = ClampSize(RPChroniclerDB.frameW, RPChroniclerDB.frameH)
             copyFrame:SetSize(w, h)
         end
-        if RPCopyDB and RPCopyDB.frameX and RPCopyDB.frameY then
-            local x, y = ClampPlace(RPCopyDB.frameX, RPCopyDB.frameY, w, h)
-            RPCopyDB.frameX, RPCopyDB.frameY = x, y
+        if RPChroniclerDB and RPChroniclerDB.frameX and RPChroniclerDB.frameY then
+            local x, y = ClampPlace(RPChroniclerDB.frameX, RPChroniclerDB.frameY, w, h)
+            RPChroniclerDB.frameX, RPChroniclerDB.frameY = x, y
             copyFrame:ClearAllPoints()
             copyFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
         end
@@ -613,15 +613,15 @@ do
         copyFrame:SetSize(UI.DEFAULT_W, UI.DEFAULT_H)
         copyFrame:ClearAllPoints()
         copyFrame:SetPoint("CENTER")
-        if RPCopyDB then
-            RPCopyDB.frameW, RPCopyDB.frameH = nil, nil
-            RPCopyDB.frameX, RPCopyDB.frameY = nil, nil
+        if RPChroniclerDB then
+            RPChroniclerDB.frameW, RPChroniclerDB.frameH = nil, nil
+            RPChroniclerDB.frameX, RPChroniclerDB.frameY = nil, nil
         end
         ReflowNow()
         UI.SetStatus("Window size and position reset.", "good")
     end
 
-    local grip = CreateFrame("Button", "RPCopyResizeGrip", copyFrame)
+    local grip = CreateFrame("Button", "RPChroniclerResizeGrip", copyFrame)
     grip:SetSize(14, 14)
     grip:SetPoint("BOTTOMRIGHT", -2, 2)
     grip:SetFrameLevel(copyFrame:GetFrameLevel() + 20)
@@ -659,7 +659,7 @@ end
 -- Toast banner (shown even when the window is closed)
 -- =========================================================
 do
-    local toast = CreateFrame("Frame", "RPCopyToastFrame", UIParent, UI.BACKDROP)
+    local toast = CreateFrame("Frame", "RPChroniclerToastFrame", UIParent, UI.BACKDROP)
     toast:SetSize(330, 30)
     toast:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 140)
     toast:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -693,7 +693,7 @@ end
 -- "Start recording?" and the interrupted-run question. Never protected.
 -- =========================================================
 do
-    local p = CreateFrame("Frame", "RPCopyPromptFrame", UIParent, UI.BACKDROP)
+    local p = CreateFrame("Frame", "RPChroniclerPromptFrame", UIParent, UI.BACKDROP)
     p:SetSize(380, 112)
     p:SetPoint("TOP", UIParent, "TOP", 0, -170)
     p:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -749,7 +749,7 @@ end
 -- story as plain text and for the /rp debug report
 -- =========================================================
 do
-    local f = CreateFrame("Frame", "RPCopyCopyBoxFrame", UIParent, UI.BACKDROP)
+    local f = CreateFrame("Frame", "RPChroniclerCopyBoxFrame", UIParent, UI.BACKDROP)
     f:SetSize(560, 400)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -760,7 +760,7 @@ do
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     f:Hide()
     UI.ApplyDarkGlass(f, 0.05, 0.06, 0.08, 0.97, 0.78, 0.62, 0.28, 0.80)
-    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "RPCopyCopyBoxFrame") end
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "RPChroniclerCopyBoxFrame") end
 
     local title = UI.Label(f, "", "GameFontNormal")
     title:SetPoint("TOPLEFT", 14, -12)
@@ -777,10 +777,10 @@ do
     boxBg:SetPoint("BOTTOMRIGHT", -14, 42)
     UI.ApplyPanelLook(boxBg)
 
-    local scroll = CreateFrame("ScrollFrame", "RPCopyCopyBoxScroll", boxBg, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", "RPChroniclerCopyBoxScroll", boxBg, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 8, -8)
     scroll:SetPoint("BOTTOMRIGHT", -28, 8)
-    local eb = CreateFrame("EditBox", "RPCopyCopyBoxEditBox", scroll)
+    local eb = CreateFrame("EditBox", "RPChroniclerCopyBoxEditBox", scroll)
     eb:SetMultiLine(true)
     eb:SetMaxLetters(0)
     eb:SetFontObject(ChatFontNormal)
@@ -820,7 +820,7 @@ do
     function UI.ShowCopyBox(titleText, subText, body, autoClose)
         f.text = body or ""
         f.autoClose = autoClose and true or false
-        title:SetText(titleText or "|cffffd100RPCopy|r")
+        title:SetText(titleText or "|cffffd100RP Chronicler|r")
         sub:SetText(subText or "")
         eb:SetText(f.text)
         f:Show()
@@ -834,7 +834,7 @@ end
 -- =========================================================
 -- Opening and closing
 -- =========================================================
-function RPCopy_Open(note, section)
+function RPChronicler_Open(note, section)
     UI.EnsureOptions()
     if UI.DisarmCtrlCopy then UI.DisarmCtrlCopy() end
     copyFrame.closeDelay = nil
@@ -845,10 +845,10 @@ function RPCopy_Open(note, section)
     UI.ShowSection(section or "COPY")
 end
 
-function RPCopy_Toggle()
+function RPChronicler_Toggle()
     if copyFrame:IsShown() then
         copyFrame:Hide()
     else
-        RPCopy_Open("")
+        RPChronicler_Open("")
     end
 end

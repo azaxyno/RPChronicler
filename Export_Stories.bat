@@ -1,32 +1,32 @@
 <# : batch section (PowerShell treats this whole block as a comment)
 @echo off
 setlocal
-set "RPCOPY_SELF=%~f0"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ([IO.File]::ReadAllText($env:RPCOPY_SELF))"
+set "RPCHRONICLER_SELF=%~f0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ([IO.File]::ReadAllText($env:RPCHRONICLER_SELF))"
 echo.
 pause
 exit /b
 #>
 
 # ---------------------------------------------------------------------
-# RPCopy story exporter
-# Reads WTF\Account\*\SavedVariables\RPCopy.lua and writes every saved
-# story and adventure to "<WoW folder>\RPCopy Stories\<account>\":
+# RP Chronicler story exporter
+# Reads WTF\Account\*\SavedVariables\RPChronicler.lua and writes every saved
+# story and adventure to "<WoW folder>\RP Chronicler Stories\<account>\":
 #   <date> - <title>.html      the colored story, readable in a browser
 #   <date> - <title>.txt       the story as plain text
 #   <date> - <title> - Full Log.txt   the raw Full Log you send to your AI
 #   images\<date> - <title>\  the run's screenshots, with ~1280px previews
 # plus index.html listing them all. Nothing in the game files is changed.
-# Screenshot folder: Options > Stories & Export, or the RPCOPY_SHOTS
+# Screenshot folder: Options > Stories & Export, or the RPCHRONICLER_SHOTS
 # environment variable, or the Screenshots folder next to WTF.
 # Tip: the game writes SavedVariables on /reload or logout, so do one of
 # those first to export your newest story.
 # ---------------------------------------------------------------------
 $ErrorActionPreference = 'Stop'
-$addonDir = Split-Path -Parent $env:RPCOPY_SELF
+$addonDir = Split-Path -Parent $env:RPCHRONICLER_SELF
 $wowDir = [IO.Path]::GetFullPath((Join-Path $addonDir '..\..\..'))
-$outRoot = Join-Path $wowDir 'RPCopy Stories'
-if ($env:RPCOPY_OUT) { $outRoot = $env:RPCOPY_OUT }
+$outRoot = Join-Path $wowDir 'RP Chronicler Stories'
+if ($env:RPCHRONICLER_OUT) { $outRoot = $env:RPCHRONICLER_OUT }
 
 # ---------- minimal Lua table reader (enough for WoW SavedVariables) ----------
 $tokRe = [regex]'"(?:\\.|[^"\\])*"|--[^\n]*|[\[\]{}=,;]|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|[A-Za-z_][A-Za-z0-9_]*'
@@ -116,6 +116,29 @@ function ConvertTo-PlainText([string]$s) {
     return $s.Replace('|r', '')
 }
 
+# 0.6.0: line 2 of a story sometimes repeats the place
+# ("Zephras Isle - Valanaar | 17m 18s | Zephras Isle - Valanaar"); drop the
+# last part when the first part already names it
+function Repair-StoryHeader([string]$s) {
+    if (-not $s) { return $s }
+    $lines = $s -split "`n"
+    $seen = 0
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ((ConvertTo-PlainText $lines[$i]).Trim() -eq '') { continue }
+        $seen++
+        if ($seen -lt 2) { continue }
+        $m = [regex]::Match($lines[$i], '^(.*?)(\s+\|{1,2}\s+)(.*?)(\s+\|{1,2}\s+)(.*?)((?:\|{1,2}r)*)(\s*)$')
+        if (-not $m.Success -or $m.Groups[5].Value -match '\s\|{1,2}\s') { break }
+        $first = (ConvertTo-PlainText $m.Groups[1].Value).Trim().ToLower()
+        $last = (ConvertTo-PlainText $m.Groups[5].Value).Trim().ToLower()
+        if ($last -ne '' -and $first.Contains($last)) {
+            $lines[$i] = $m.Groups[1].Value + $m.Groups[2].Value + $m.Groups[3].Value + $m.Groups[6].Value + $m.Groups[7].Value
+        }
+        break
+    }
+    return ($lines -join "`n")
+}
+
 function ConvertTo-StoryHtml([string]$s) {
     $s = [Net.WebUtility]::HtmlEncode((Get-CleanWowText $s))
     $sb = New-Object Text.StringBuilder
@@ -185,8 +208,8 @@ $pageStyle = 'body{background:#17120c;color:#eceff1;font-family:Georgia,serif;ma
 
 # ---------- screenshots (0.5.0) ----------
 # WoW names shots WoWScrnShot_MMDDYY_HHMMSS.jpg in local time, the same
-# clock as RPCopy's run times. A run's shots are the files between its
-# start (minus 30s) and its end (plus 2 minutes). Shots RPCopy recorded
+# clock as RP Chronicler's run times. A run's shots are the files between its
+# start (minus 30s) and its end (plus 2 minutes). Shots RP Chronicler recorded
 # (auto shots, and your own Print Screen shots during a run) carry a
 # number and a caption; the story's [Shot N] markers place them.
 function Get-ShotFiles([string]$dir) {
@@ -351,10 +374,16 @@ function Add-StoryShots([string]$html, $shots, $st) {
 }
 
 # ---------- export ----------
-$svFiles = @(Get-ChildItem -Path (Join-Path $wowDir 'WTF\Account\*\SavedVariables\RPCopy.lua') -ErrorAction SilentlyContinue)
+$svFiles = @(Get-ChildItem -Path (Join-Path $wowDir 'WTF\Account\*\SavedVariables\RPChronicler.lua') -ErrorAction SilentlyContinue)
+# 0.6.0: accounts not yet moved over from the old RPCopy addon still have
+# RPCopy.lua (with RPCopyDB); read those too
+$oldFiles = @(Get-ChildItem -Path (Join-Path $wowDir 'WTF\Account\*\SavedVariables\RPCopy.lua') -ErrorAction SilentlyContinue)
+foreach ($o in $oldFiles) {
+    if (-not (Test-Path (Join-Path $o.DirectoryName 'RPChronicler.lua'))) { $svFiles += $o }
+}
 if ($svFiles.Count -eq 0) {
-    Write-Host "No RPCopy SavedVariables found under $wowDir\WTF."
-    Write-Host 'Log in with RPCopy enabled, then /reload or log out once, and run this again.'
+    Write-Host "No RP Chronicler SavedVariables found under $wowDir\WTF."
+    Write-Host 'Log in with RP Chronicler enabled, then /reload or log out once, and run this again.'
     exit
 }
 
@@ -373,14 +402,15 @@ foreach ($sv in $svFiles) {
         Write-Host "  Could not read this file: $($_.Exception.Message)"
         continue
     }
-    $db = $g['RPCopyDB']
-    if (-not $db) { Write-Host '  No RPCopyDB in this file.'; continue }
+    $db = $g['RPChroniclerDB']
+    if (-not $db) { $db = $g['RPCopyDB'] }
+    if (-not $db) { Write-Host '  No RPChroniclerDB in this file.'; continue }
 
-    # Where the game's screenshots are: RPCOPY_SHOTS, then Options > Stories
+    # Where the game's screenshots are: RPCHRONICLER_SHOTS, then Options > Stories
     # & Export, then the Screenshots folder of this WoW install
     $shotDir = Join-Path $wowDir 'Screenshots'
     if ($db['exportShotsDir']) { $shotDir = [string]$db['exportShotsDir'] }
-    if ($env:RPCOPY_SHOTS) { $shotDir = $env:RPCOPY_SHOTS }
+    if ($env:RPCHRONICLER_SHOTS) { $shotDir = $env:RPCHRONICLER_SHOTS }
     $shotFiles = Get-ShotFiles $shotDir
 
     $outDir = Join-Path $outRoot $account
@@ -388,7 +418,7 @@ foreach ($sv in $svFiles) {
     $imgRoot = Join-Path $outDir 'images'
     if ($db['exportImageDir']) { $imgRoot = [string]$db['exportImageDir'] }
 
-    # 0.5.0: stories live in RPCopyDB.stories, apart from the recordings.
+    # 0.5.0: stories live in RPChroniclerDB.stories, apart from the recordings.
     # Older saves keep the story inside the run; both are read.
     $runs = New-Object System.Collections.ArrayList
     if ($db['activeRun']) { [void]$runs.Add($db['activeRun']) }
@@ -414,7 +444,7 @@ foreach ($sv in $svFiles) {
     if ($items.Count -eq 0) { Write-Host '  No adventures or stories saved yet.'; continue }
 
     $index = New-Object Text.StringBuilder
-    [void]$index.Append("<!doctype html><html><head><meta charset=""utf-8""><title>RPCopy Stories</title><style>$pageStyle</style></head><body><h1>RPCopy Stories</h1><ul>")
+    [void]$index.Append("<!doctype html><html><head><meta charset=""utf-8""><title>RP Chronicler Stories</title><style>$pageStyle</style></head><body><h1>RP Chronicler Stories</h1><ul>")
 
     $used = @{}
     $shotCount = 0
@@ -425,7 +455,7 @@ foreach ($sv in $svFiles) {
         $base = Get-SafeFileName "$date - $title"
         if ($used.ContainsKey($base)) { $used[$base]++; $base = "$base ($($used[$base]))" } else { $used[$base] = 1 }
 
-        $story = $it.Story
+        $story = Repair-StoryHeader $it.Story
         $log = ''
         if ($it.Run) {
             $log = [string]$it.Run['exportText']
@@ -464,10 +494,10 @@ foreach ($sv in $svFiles) {
     [void]$index.Append('</ul></body></html>')
     [IO.File]::WriteAllText((Join-Path $outDir 'index.html'), $index.ToString(), (New-Object Text.UTF8Encoding $false))
     Write-Host "  Exported $($items.Count) item(s) with $shotCount screenshot(s) to $outDir"
-    if ($shotFiles.Count -eq 0) { Write-Host "  (No screenshots found in $shotDir. Set the folder in Options > Stories & Export, or set RPCOPY_SHOTS.)" }
+    if ($shotFiles.Count -eq 0) { Write-Host "  (No screenshots found in $shotDir. Set the folder in Options > Stories & Export, or set RPCHRONICLER_SHOTS.)" }
 }
 
-if ($total -gt 0 -and -not $env:RPCOPY_NOOPEN) {
+if ($total -gt 0 -and -not $env:RPCHRONICLER_NOOPEN) {
     Write-Host ''
     Write-Host "Done. Opening $outRoot"
     Start-Process explorer.exe -ArgumentList "`"$outRoot`""

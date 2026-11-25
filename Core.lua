@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.5.5"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.5.4"
 
 BINDING_HEADER_RPCOPY = "RPCopy (RP Context & Chronicle)"
 BINDING_NAME_RPCOPY_OPEN = "Toggle RPCopy Window"

@@ -26,7 +26,7 @@ RPCopy is a free addon that sits between WoW and the AI you already use (Gemini,
                              5 short in-character options
 ```
 
-- **Version:** 0.5.5 alpha (interface `16001`, WoW: Forever)
+- **Version:** 0.5.4 alpha (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPCopyDB` (account-wide, on your PC only)
 - **License:** MIT
 

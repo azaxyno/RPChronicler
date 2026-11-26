@@ -29,6 +29,7 @@ UI_Companions.lua
 UI_Adventures.lua
 UI_Scenes.lua
 UI_StoryBook.lua
+UI_Shelf.lua
 UI_Options.lua
 UI_Setup.lua
 UI_Commands.lua

@@ -284,6 +284,8 @@ function ns.DeleteStory(storyId)
             local run = ns.StoryRun(list[i])
             if run then run.storyId = nil end
             ns.Debug("run", "story deleted: " .. tostring(list[i].title))
+            -- 0.6.6: it leaves its chronicle too
+            if ns.RemoveStoryFromChronicle then ns.RemoveStoryFromChronicle(storyId) end
             table.remove(list, i)
             return true
         end
@@ -1117,4 +1119,211 @@ function ns.StoryBosses(st, text)
     table.sort(found, function(a, b) return a.at < b.at end)
     for _, f in ipairs(found) do table.insert(list, f.name) end
     return list
+end
+
+-- =========================================================
+-- Chronicles (0.6.6, Mor): volumes of stories on the Story Book's shelf,
+-- for example the whole road of an alt you level with a friend.
+-- RPChroniclerDB.chronicles = { { id, title, color, cover, stories = { story ids } } }
+-- A story sits in at most one chronicle; the rest stand loose on the
+-- shelf. Deleting a chronicle never deletes its stories. Changed only
+-- through these functions, which say so with ns.Notify("chronicleChanged").
+-- =========================================================
+ns.CHRONICLE_TITLE_MAX = 32
+-- cover colors (r, g, b), picked in turn for new volumes
+ns.CHRONICLE_COLORS = {
+    { 0.50, 0.12, 0.12 }, { 0.12, 0.26, 0.48 }, { 0.14, 0.38, 0.18 }, { 0.46, 0.32, 0.10 },
+    { 0.34, 0.16, 0.44 }, { 0.10, 0.38, 0.40 }, { 0.28, 0.28, 0.30 }, { 0.52, 0.24, 0.08 },
+}
+
+local function Chronicles()
+    RPChroniclerDB.chronicles = type(RPChroniclerDB.chronicles) == "table" and RPChroniclerDB.chronicles or {}
+    return RPChroniclerDB.chronicles
+end
+
+local function CleanTitle(title)
+    local t = tostring(title or ""):gsub("||", "|"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("[%c|]", " ")
+    t = t:match("^%s*(.-)%s*$") or ""
+    if #t > ns.CHRONICLE_TITLE_MAX then t = t:sub(1, ns.CHRONICLE_TITLE_MAX):match("^(.-)%s*$") end
+    return t
+end
+
+local function Changed(id)
+    ns.Notify("chronicleChanged", id)
+end
+
+-- Every chronicle in shelf order; story ids whose story is gone are dropped
+function ns.GetChronicles()
+    if not RPChroniclerDB then return {} end
+    local list = Chronicles()
+    for _, c in ipairs(list) do
+        c.stories = type(c.stories) == "table" and c.stories or {}
+        for i = #c.stories, 1, -1 do
+            if not ns.FindStory(c.stories[i]) then table.remove(c.stories, i) end
+        end
+        if c.cover and not ns.FindStory(c.cover) then c.cover = nil end
+    end
+    return list
+end
+
+function ns.FindChronicle(id)
+    for _, c in ipairs(ns.GetChronicles()) do
+        if c.id == id then return c end
+    end
+    return nil
+end
+
+-- The chronicle a story is in, and its place there
+function ns.ChronicleOf(storyId)
+    for _, c in ipairs(ns.GetChronicles()) do
+        for i, sid in ipairs(c.stories) do
+            if sid == storyId then return c, i end
+        end
+    end
+    return nil
+end
+
+-- The chronicle's stories, in its order
+function ns.ChronicleStories(c)
+    local out = {}
+    for _, sid in ipairs((c and c.stories) or {}) do
+        local st = ns.FindStory(sid)
+        if st then out[#out + 1] = st end
+    end
+    return out
+end
+
+-- Stories in no chronicle, oldest first (they stand at the shelf's end)
+function ns.LooseStories()
+    local inBook = {}
+    for _, c in ipairs(ns.GetChronicles()) do
+        for _, sid in ipairs(c.stories) do inBook[sid] = true end
+    end
+    local out = {}
+    for _, st in ipairs(ns.GetStories()) do
+        if not inBook[st.id] then table.insert(out, 1, st) end
+    end
+    return out
+end
+
+-- The story whose party scene is on the cover: the chosen one, else the first
+function ns.ChronicleCover(c)
+    if not c then return nil end
+    return (c.cover and ns.FindStory(c.cover)) or ns.ChronicleStories(c)[1]
+end
+
+function ns.CreateChronicle(title)
+    if not RPChroniclerDB then return nil end
+    local list = Chronicles()
+    local t = CleanTitle(title)
+    if t == "" then t = "Chronicle " .. (#list + 1) end
+    RPChroniclerDB.chronicleSeq = (tonumber(RPChroniclerDB.chronicleSeq) or 0) + 1
+    local c = { id = "C" .. RPChroniclerDB.chronicleSeq .. "-" .. tostring(time and time() or 0), title = t,
+        color = ((#list) % #ns.CHRONICLE_COLORS) + 1, stories = {} }
+    table.insert(list, c)
+    Changed(c.id)
+    return c
+end
+
+function ns.RenameChronicle(id, title)
+    local c = ns.FindChronicle(id)
+    local t = CleanTitle(title)
+    if not c or t == "" then return false end
+    c.title = t
+    Changed(id)
+    return true
+end
+
+-- Next cover color
+function ns.CycleChronicleColor(id)
+    local c = ns.FindChronicle(id)
+    if not c then return end
+    c.color = ((tonumber(c.color) or 1) % #ns.CHRONICLE_COLORS) + 1
+    Changed(id)
+end
+
+function ns.SetChronicleCover(id, storyId)
+    local c = ns.FindChronicle(id)
+    if not c then return end
+    c.cover = storyId
+    Changed(id)
+end
+
+-- Removes the volume; its stories go back to the loose pile
+function ns.DeleteChronicle(id)
+    local list = Chronicles()
+    for i = #list, 1, -1 do
+        if list[i].id == id then table.remove(list, i) end
+    end
+    Changed(id)
+end
+
+-- Moves a volume left (-1) or right (+1) on the shelf
+function ns.MoveChronicle(id, delta)
+    local list = Chronicles()
+    for i, c in ipairs(list) do
+        if c.id == id then
+            local j = i + delta
+            if j >= 1 and j <= #list then list[i], list[j] = list[j], list[i]; Changed(id) end
+            return
+        end
+    end
+end
+
+-- A story leaves any other chronicle and joins this one at the end
+function ns.AddStoryToChronicle(storyId, id)
+    local c = ns.FindChronicle(id)
+    if not c or not ns.FindStory(storyId) then return false end
+    local old = ns.ChronicleOf(storyId)
+    if old == c then return true end
+    if old then ns.RemoveStoryFromChronicle(storyId) end
+    table.insert(c.stories, storyId)
+    Changed(id)
+    return true
+end
+
+function ns.RemoveStoryFromChronicle(storyId)
+    local c, i = ns.ChronicleOf(storyId)
+    if not c then return end
+    table.remove(c.stories, i)
+    if c.cover == storyId then c.cover = nil end
+    Changed(c.id)
+end
+
+-- Moves a story up (-1) or down (+1) in its chronicle's contents
+function ns.MoveChronicleStory(storyId, delta)
+    local c, i = ns.ChronicleOf(storyId)
+    if not c then return end
+    local j = i + delta
+    if j < 1 or j > #c.stories then return end
+    c.stories[i], c.stories[j] = c.stories[j], c.stories[i]
+    Changed(c.id)
+end
+
+-- The story before (-1) or after (+1) this one in its chronicle
+function ns.ChronicleNeighbor(storyId, delta)
+    local c, i = ns.ChronicleOf(storyId)
+    if not c then return nil end
+    local sid = c.stories[i + delta]
+    return sid and ns.FindStory(sid) or nil
+end
+
+-- Stories whose title, place, party or date holds every word of the search
+function ns.SearchStories(text)
+    local words = {}
+    for w in tostring(text or ""):lower():gmatch("%S+") do words[#words + 1] = w end
+    if #words == 0 then return {} end
+    local out = {}
+    for _, st in ipairs(ns.GetStories()) do
+        local info = ns.GetBookInfo(st)
+        local c = ns.ChronicleOf(st.id)
+        local hay = table.concat({ ns.StripColors(info.name or info.title or ""), info.instance or "", info.zone or "",
+            info.party or "", info.date or "", c and c.title or "" }, " "):lower()
+        local all = true
+        for _, w in ipairs(words) do
+            if not hay:find(w, 1, true) then all = false; break end
+        end
+        if all then out[#out + 1] = st end
+    end
+    return out
 end

@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.4"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.5"
 
 BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
 BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
@@ -18,6 +18,18 @@ ns.MAX_LINES = 25
 ns.MAX_PLAYER_CHAT = 5
 
 ns.DEFAULT_TRIGGER = "use my-character"
+
+-- 0.6.5 (Mor): a tab whose Skill Call was never changed calls the skill
+-- after the character you play: "use aloria" (first name, lowercase).
+-- Tabs are account-wide, so this is worked out per character and the
+-- saved value stays the placeholder; a Skill Call you typed is kept.
+function ns.SkillCall(prefix)
+    if prefix ~= ns.DEFAULT_TRIGGER then return prefix end
+    local name = ns.PlayerName and ns.PlayerName() or nil
+    local first = type(name) == "string" and name:match("^([^%s%-]+)") or nil
+    if not first or first == "" or first == "You" then return prefix end
+    return "use " .. first:lower()
+end
 
 -- 0.6.0: the story skills' names (the "name:" line of the two story
 -- templates in UI_Options.lua). The Full Log's first line is "use <name>".
@@ -68,8 +80,8 @@ ns.DEFAULT_TABS = {
     -- World: General, Trade, LFG and other numbered channels (the OOC channel is kept apart)
     Tab("WORLD", "World", { incStatus = true, incWorld = true }),
     -- Party: your group only (party chat plus say/emotes from party members)
-    Tab("PARTY", "Party", { incTarget = true, incParty = true, incStatus = true,
-        incPartySay = true, incPartyChat = true }),
+    -- (0.6.5: no Target or Status lines by default; Slice Tabs can add them)
+    Tab("PARTY", "Party", { incParty = true, incPartySay = true, incPartyChat = true }),
     -- Guild: guild and officer chat
     Tab("GUILD", "Guild", { incGuild = true }),
     Tab("QUEST", "Quest", { incTarget = true, incStatus = true, incQuest = true, incNpc = true }),
@@ -164,7 +176,6 @@ ns.SETTINGS = {
     { key = "partyGear",         default = true,       label = "Record party gear" },
     { key = "autoShots",         default = "INSTANCE", choices = { "OFF", "INSTANCE", "ALL" } },
     { key = "logDetail",         default = "NORMAL",   choices = { "SHORT", "NORMAL", "RICH" } },
-    { key = "logWarnChars",      default = 80000,      min = 10000, max = 2000000 },
     { key = "knownPlayerBlocks", default = true,       label = "[Known Player] blocks" },
     { key = "autoUpdateKnown",   default = true,       label = "Update companions from chat" },
     { key = "companionMenu",     default = true,       label = "Add as companion (right-click)" },
@@ -172,9 +183,6 @@ ns.SETTINGS = {
     { key = "rpReplyLength",     default = "SHORT",    choices = { "SHORT", "MEDIUM", "LONG" } },
     -- 0.6.3: Ctrl+C first asks for a one-line instruction for the AI
     { key = "quickNote",         default = false,      label = "Ask for an instruction on Ctrl+C" },
-    -- 0.6.4: OFF puts the story rules in front of every Full Log copy, so
-    -- any AI chat works; ON keeps the short copy for a storyteller skill
-    { key = "aiHasSkill",        default = false,      label = "My AI has the skill" },
     -- 0.6.3: the 3D character on a story's cover (some clients draw no models)
     { key = "storyCover",        default = true,       label = "Story scenes" },
     -- 0.6.3: RP Chronicler's own errors are kept in the saved file
@@ -199,7 +207,13 @@ ns.REMOVED_SETTINGS = {
     "recordManualShots", "autoColorStory", "knownPlayerMax", "knownNoteMax", "nearbyChip",
     "exportImageDir", "exportShotsDir", "aiModel", "aiCustomLimit", "summaryStats", "logCats", "limits",
     "autoScreenshots", "worldAutoShots",
+    -- 0.6.5: the Full Log shows the log alone and Copy for AI adds the
+    -- story rules, so the skill switch and the per-player size went
+    "aiHasSkill", "logWarnChars",
 }
+
+-- 0.6.5: the size meter's one fixed baseline (fits most free AI chats)
+ns.LOG_SIZE_BASELINE = 80000
 
 local function Coerce(d, v)
     if d.text then
@@ -980,6 +994,17 @@ function ns.EnsureDB()
         if db.autoRecord == false and db.instanceRecord == nil then db.instanceRecord = "OFF" end
         db.autoRecord, db.promptOnGroup = nil, nil
         db.migratedV064 = true
+    end
+    if not RPChroniclerDB.migratedV065 then
+        RPChroniclerDB.aiHasSkill, RPChroniclerDB.logWarnChars = nil, nil
+    end
+    -- 0.6.5: the Party tab lost its default Target and Status lines (once;
+    -- a player can switch them back on in Slice Tabs)
+    if not RPChroniclerDB.migratedV065 then
+        for _, t in ipairs(type(RPChroniclerDB.tabs) == "table" and RPChroniclerDB.tabs or {}) do
+            if t.id == "PARTY" then t.incTarget, t.incStatus = false, false end
+        end
+        RPChroniclerDB.migratedV065 = true
     end
     for _, d in ipairs(ns.SETTINGS) do
         RPChroniclerDB[d.key] = Coerce(d, RPChroniclerDB[d.key])

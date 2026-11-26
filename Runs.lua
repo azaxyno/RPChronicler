@@ -252,6 +252,11 @@ end
 -- it was held long enough, else the assigned one held longest, else the
 -- guess
 local function ChooseRole(p, final)
+    -- 0.6.5: a role the player set by hand wins until they undo it
+    if p.roleByHand then
+        p.role, p.roleGuessed = p.roleByHand, false
+        return
+    end
     local times = p.roleTime or {}
     local last = p.roleLast
     if last and ((not final and p.roleNow == last) or (times[last] or 0) >= ROLE_FINAL_SECS) then
@@ -1172,20 +1177,41 @@ function ns.RecordAdventureLoot(coloredLink, plainText, looter, source, isNotabl
     local who = looter and ns.ResolveCanonicalPlayerName(ns.StripRealm(looter)) or nil
     if not ns.LogOn("lootSource") then source = nil end
 
+    -- 0.6.5: a won roll and the loot line for the same item ("X won: Y",
+    -- then "X receives loot: Y") are one drop, not two
+    local base0 = cleanItem:match("^(.-)%s*[xX]%d+$") or cleanItem
+    local prev = lootRepeat[(who or "") .. "|" .. base0]
+    if prev and prev.run == activeRun.id and (time() - prev.at) <= 10
+        and (source == "won roll" or prev.src == " (won roll)") then
+        if source == "won roll" and prev.src ~= " (won roll)" then
+            if prev.entry then prev.entry.source = "won roll" end
+            prev.src = " (won roll)"
+            if prev.handle and who then
+                UpdateTimeline(activeRun, prev.handle, "[LOOT] " .. who .. " received " .. base0 .. (prev.n > 1 and (" x" .. prev.n) or "") .. prev.src)
+            end
+        end
+        return
+    end
+
+    local entry
     if isNotable ~= false then
         activeRun.keyLoot = activeRun.keyLoot or {}
         -- 0.6.4: quality, icon and kind, for the item's look in the story
         local d = ns.ItemDetails(coloredLink) or {}
-        table.insert(activeRun.keyLoot, {
+        entry = {
             colored = coloredLink or cleanItem,
             plain = cleanItem,
             looter = who or "",
             source = source,
             q = ns.ItemQuality(coloredLink),
             icon = d.icon, cls = d.cls, sub = d.sub,
-        })
+        }
+        table.insert(activeRun.keyLoot, entry)
     end
-    if not ns.LogOn("loot") then return end
+    if not ns.LogOn("loot") then
+        lootRepeat[(who or "") .. "|" .. base0] = { run = activeRun.id, n = 1, at = time(), src = source and (" (" .. source .. ")") or "", entry = entry }
+        return
+    end
     local src = source and (" (" .. source .. ")") or ""
     -- 0.5.0: the same item again (6x Crawler Meat) updates one line with xN
     local base, qty = cleanItem:match("^(.-)%s*[xX](%d+)$")
@@ -1193,13 +1219,13 @@ function ns.RecordAdventureLoot(coloredLink, plainText, looter, source, isNotabl
     local key = (who or "") .. "|" .. base
     local rep = lootRepeat[key]
     if rep and rep.run == activeRun.id and (time() - rep.at) < 900 then
-        rep.n, rep.at = rep.n + qty, time()
+        rep.n, rep.at, rep.entry = rep.n + qty, time(), entry
         local text = (who and ("[LOOT] " .. who .. " received " .. base) or ("[LOOT] " .. base)) .. " x" .. rep.n .. rep.src
         if UpdateTimeline(activeRun, rep.handle, text) then return end
     end
     local line = who and ("[LOOT] " .. who .. " received " .. cleanItem .. src) or ("[LOOT] " .. cleanItem .. src)
     local h = PushTimeline(activeRun, PreciseStamp(), line)
-    lootRepeat[key] = { run = activeRun.id, handle = h, n = qty, at = time(), src = src }
+    lootRepeat[key] = { run = activeRun.id, handle = h, n = qty, at = time(), src = src, entry = entry }
 end
 
 -- Coin you looted, summed for the run (and per fight by the fight tracker)
@@ -1464,6 +1490,104 @@ function RPChronicler_MarkMoment()
     if ok then
         ns.RequestScreenshot("mark", "Marked moment")
     end
+end
+
+-- =========================================================
+-- 0.6.5 (Mor): edit a run by hand (live or saved): pick its dungeon, fix
+-- a member's role. Both can be undone.
+-- =========================================================
+
+-- Sets the dungeon of a dungeon run. The recorded name is kept (the live
+-- run still compares against it), and a title that was the old name
+-- follows the new one. name nil or "" undoes the pick.
+function ns.SetRunDungeon(advId, name, ejId)
+    local adv = ns.FindAdventure(advId)
+    if not adv then return false, "Pick a recording first." end
+    if adv.kind == "world" then return false, "Only a dungeon run has a dungeon." end
+    name = name and tostring(name):match("^%s*(.-)%s*$") or ""
+    local old = adv.instanceName
+    if name == "" then
+        if not adv.instanceRecorded then return false, "Nothing to undo." end
+        name = adv.instanceRecorded
+        adv.instanceRecorded = nil
+        if adv.ejRecorded ~= nil then adv.ejInstance = adv.ejRecorded or nil end
+        adv.ejRecorded = nil
+    else
+        if not adv.instanceRecorded then
+            adv.instanceRecorded = old or ""
+            adv.ejRecorded = adv.ejInstance or false
+        end
+        adv.ejInstance = ejId or nil
+    end
+    if adv.title == old or adv.title == adv.zone or (adv.title or "") == "" then adv.title = name end
+    adv.instanceName = name
+    if adv.book and adv.book.instance == old then adv.book.instance = nil end
+    if adv.exportText then adv.exportText = ns.BuildAdventureFullLog(adv) end
+    ns.Notify("runChanged", adv)
+    return true
+end
+
+-- The roles a class can take. The game's own spec list wins when it has
+-- one; Forever's classic classes fall back to this table.
+ns.CLASS_ROLES = {
+    WARRIOR = { "TANK", "DAMAGER" },
+    PALADIN = { "TANK", "HEALER", "DAMAGER" },
+    DRUID = { "TANK", "HEALER", "DAMAGER" },
+    PRIEST = { "HEALER", "DAMAGER" },
+    SHAMAN = { "HEALER", "DAMAGER" },
+    HUNTER = { "DAMAGER" }, ROGUE = { "DAMAGER" }, MAGE = { "DAMAGER" }, WARLOCK = { "DAMAGER" },
+}
+local CLASS_IDS = { WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5, SHAMAN = 7, MAGE = 8, WARLOCK = 9, DRUID = 11 }
+local ROLE_ORDER = { TANK = 1, HEALER = 2, DAMAGER = 3 }
+local classRoleCache = {}
+function ns.ClassRoles(classFile)
+    classFile = tostring(classFile or ""):upper()
+    if classRoleCache[classFile] then return classRoleCache[classFile] end
+    local found, list = {}, {}
+    local id = CLASS_IDS[classFile]
+    if id and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
+        local ok, n = pcall(GetNumSpecializationsForClassID, id)
+        for i = 1, (ok and tonumber(n) or 0) do
+            local okI, _, _, _, _, role = pcall(GetSpecializationInfoForClassID, id, i)
+            role = okI and ns.SafeStr(role) or nil
+            if role and ROLE_ORDER[role] and not found[role] then found[role] = true table.insert(list, role) end
+        end
+    end
+    if #list == 0 then list = ns.CLASS_ROLES[classFile] or { "TANK", "HEALER", "DAMAGER" } end
+    table.sort(list, function(a, b) return ROLE_ORDER[a] < ROLE_ORDER[b] end)
+    classRoleCache[classFile] = list
+    return list
+end
+
+-- Sets a member's role by hand (it wins over what the game reports later).
+-- role nil undoes it: the recorded role comes back.
+function ns.SetMemberRole(advId, name, role)
+    local adv = ns.FindAdventure(advId)
+    if not adv then return false, "Pick a recording first." end
+    -- the member, and an older first-name-only entry of the same person
+    local hits = {}
+    for _, p in ipairs(type(adv.participants) == "table" and adv.participants or {}) do
+        if type(p) == "table" and type(p.name) == "string"
+            and (p.name == name or (not HasLastName(p.name) and FirstOf(p.name) == FirstOf(name))) then
+            table.insert(hits, p)
+        end
+    end
+    if #hits == 0 then return false, "That member is not in this run." end
+    if role then
+        local ok = false
+        local cls
+        for _, h in ipairs(hits) do cls = cls or ns.ClassToken(h.classFile) or ns.ClassToken(h.class) end
+        for _, r in ipairs(ns.ClassRoles(cls)) do if r == role then ok = true end end
+        if not ok then return false, "A " .. tostring(hits[1].class or "member") .. " can't take that role." end
+    end
+    for _, h in ipairs(hits) do
+        h.roleByHand = role or nil
+        ChooseRole(h, adv ~= activeRun)
+        h.role = h.role or "NONE"
+    end
+    if adv.exportText then adv.exportText = ns.BuildAdventureFullLog(adv) end
+    ns.Notify("runChanged", adv)
+    return true
 end
 
 -- The run with this id: the live one or a saved one

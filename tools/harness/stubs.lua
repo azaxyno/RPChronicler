@@ -59,7 +59,7 @@ TIMERS = {}
 C_Timer = { After = function(sec, fn) table.insert(TIMERS, fn) end, NewTicker = function() return magic() end, NewTimer = function() return magic() end }
 function RunTimers() local t = TIMERS; TIMERS = {}; for _, fn in ipairs(t) do fn() end end
 C_ChatInfo = { RegisterAddonMessagePrefix = function() return true end, SendAddonMessage = function() end }
-function GetAddOnMetadata(a, k) if k == "Version" then return "0.6.4" end end
+function GetAddOnMetadata(a, k) if k == "Version" then return "0.6.5" end end
 C_AddOns = { GetAddOnMetadata = GetAddOnMetadata }
 function InCombatLockdown() return false end
 function issecretvalue() return false end

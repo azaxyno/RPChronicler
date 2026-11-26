@@ -291,8 +291,8 @@ function ns.BuildSnapshot(filterId, note, isExpanded)
         end
     end
     if tabCfg and tabCfg.prefix and tabCfg.prefix ~= "" then
-        -- Line 1 invokes the character skill in the AI, e.g. "[Skill Call] use my-character"
-        table.insert(lines, ns.ColorText("[Skill Call]", ns.COLORS.header) .. " " .. tabCfg.prefix)
+        -- Line 1 invokes the character skill in the AI, e.g. "[Skill Call] use aloria"
+        table.insert(lines, ns.ColorText("[Skill Call]", ns.COLORS.header) .. " " .. ns.SkillCall(tabCfg.prefix))
     end
 
     -- "/rp <text>" is a direction for the LLM (tone, focus, what to reply to),

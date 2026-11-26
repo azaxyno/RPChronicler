@@ -63,7 +63,7 @@ end
 
 function ns.BuildAdventureSummary(adv)
     if not adv then
-        return "|cff9e9e9eNo adventure selected. Enter a dungeon/raid or click 'Start Recording' above.|r"
+        return "|cff9e9e9eNo adventure selected. Enter a dungeon or click 'Start Recording' above.|r"
     end
 
     local lines = {}
@@ -485,16 +485,17 @@ function ns.BuildAdventureFullLog(adv)
     return ns.ApplyRunFixes(adv, table.concat(out, "\n"))
 end
 
--- 0.6.4: the text the player copies for the AI. By default the story
--- template (dungeon or open world) goes in front of the log, so any AI
--- chat writes the story with no skill, and the rules always match this
--- version. With "My AI has the skill" it stays short (line 1 calls the
--- skill) and says which template version the addon expects.
-function ns.BuildAiText(adv)
+-- The text the player copies for the AI. 0.6.5: the Full Log box shows
+-- and copies the log alone (line 1 calls the storyteller skill); Copy for
+-- AI asks for withRules, which puts the story template (dungeon or open
+-- world) in front of it, so any AI chat writes the story with no skill
+-- and the rules always match this version.
+function ns.BuildAiText(adv, withRules)
     local log = ns.BuildAdventureFullLog(adv) or ""
     if not adv then return log end
     local first, rest = log:match("^([^\n]*)\n?(.*)$")
-    if ns.Get("aiHasSkill") then
+    -- the log alone is for a storyteller skill: say which rules it expects
+    if not withRules then
         return first .. "\nTemplate version: " .. tostring(ns.TEMPLATE_VERSION or "?") .. "\n" .. rest
     end
     local tpl = (adv.kind == "world") and ns.ADVENTURE_STORY_TEMPLATE or ns.DUNGEON_STORY_TEMPLATE
@@ -505,8 +506,8 @@ function ns.BuildAiText(adv)
 end
 
 -- Size of the copy, for the size meter: characters and rough tokens
-function ns.GetFullLogSize(adv)
-    local text = ns.BuildAiText(adv) or ""
+function ns.GetFullLogSize(adv, withRules)
+    local text = ns.BuildAiText(adv, withRules) or ""
     local chars = #text
     return chars, math.floor(chars / 4 + 0.5)
 end

@@ -108,6 +108,20 @@ READING THE LOG (HIDDEN CONTEXT)
 8. Quote only in-character lines. Party chat is full of gamer shorthand and out-of-character chatter; never quote it word for word. Read the intent behind it and retell it as story: "mana" or "need mana" = the speaker ran dry and called for a moment to recover ("drained, Hexer called for a breath of rest"), "oom" = out of mana, "mb" or "sry" = an apology, "ty" or "thx" = thanks, "gj" or "gg" = praise, "inc" = enemies coming, "brb" or "afk" = a short pause, "lol" = a laugh, "ready" or "r" = ready to go. Typos and misspellings are never quoted either. A full sentence that works in character ("Stay behind me, the fire burns hotter below.") may be quoted now and then, with the speaker's name.
 9. Farewells: never list everyone saying "thank you" or "gg". Turn the goodbye into one short story beat (nods exchanged, a last look back at the gate).
 
+THE CRAFT (A STORY, NOT A REPORT)
+
+1. Every chapter is a small story: someone wants something, something stands in the way, something changes. Cut whatever is only a list: of foes, of items, of quests.
+2. Feel the big moments. A death, a near death, a fallen pet, a wipe, a level up, a first great drop: slow down and give it weight. The sound, the silence after, what the characters feel and say. When a pet dies ([PET DEATH]), its owner grieves or rages, and the others notice. Never pass a death in half a sentence.
+3. Inner voice: stay close to the player's character. Let their thoughts, doubts, fears and small jokes run between the action ([NOTE] lines are their real thoughts). A short thought often says more than a paragraph.
+4. Show, don't tell: "Valeria's shield arm shook" instead of "Valeria was tired". Use the senses: the smell of the cave, the heat of the fire, the weight of a blade.
+5. Abilities belong in the action: name the real spells and skills from the log as moves in the fight ("Hexer's Shadow Bolt slammed into it", "Valeria raised Shield Wall"), never as a list.
+6. Turn mechanics into prose: interrupts, aggro, crowd control and pulls become choices, reflexes and teamwork ("the trap snapped shut before the second pack reached the healer").
+7. Vary the rhythm. Short sentences for blows and panic. Longer ones for travel, calm and wonder. Mix action, dialogue and thought; no paragraph of pure description.
+8. Trash and routine become a line of color or a quick montage. Never count foes in the prose ("six Scorched Guardians and four...").
+9. Gear: name only the items that matter (a boss drop someone won, a new weapon, a piece the character is proud of), a few in the whole story, and name them naturally in the scene ("Hexer turned the Belt of the Wind over in his hands"). Everything else is "the spoils" or "a few coins".
+10. Each companion is a person: give them a personality from their class, role, chat and notes, and let them react to each other.
+11. End a chapter on a hook or a quiet image, never on a summary.
+
 STORY BOOK HEADER AND FOOTER (REQUIRED, RP Chronicler reads them)
 
 Line 1: Title: <a story title you invent>, in gold, e.g. |cffffd100Title: Shadows Over Pyrewood|r (always start the line with "Title: ". RP Chronicler names the story from this line.)
@@ -131,7 +145,7 @@ COLOR EVERY MENTION, IN EVERY CHAPTER: each time a player, pet, place, foe, NPC 
 - Bosses, elites, named foes and every foe type ("Windsong Crawler"): |cffdc143c (Crimson). Never use the Druid orange for a foe.
 - Wipes, deaths and danger: |cffff5252 (Red)
 - Victories, saves and healing: |cff66bb6a (Green)
-- Loot: |cffffd700 (Loot Gold). Write each item's name exactly as the log spells it (whole name, no plural, no nickname): RP Chronicler finds the name and gives it the item's real icon and quality color (gray, white, green, blue, purple, orange).
+- Loot: |cffffd700 (Loot Gold). For the few items you name (craft rule 9), write the name exactly as the log spells it (whole name, no plural, no nickname): RP Chronicler finds the name and gives it the item's real icon and quality color (gray, white, green, blue, purple, orange).
 - Quoted dialogue: |cffaaaaff (Party Blue) or |cffffffff (Say White). NPC words: |cfffff0a0 (Pale Yellow)
 - Header, footer and metadata: |cff9e9e9e (Muted Gray)
 
@@ -147,7 +161,7 @@ FORMATTING RULES FOR WOW
 -- version). The templates say it in their header; a Full Log copied for
 -- an AI with the skill says it too, so the AI can tell the player that
 -- their skill is older.
-ns.TEMPLATE_VERSION = "0.6.4"
+ns.TEMPLATE_VERSION = "0.6.5"
 local VERSION_RULE = "\n\nTEMPLATE VERSION\n\nTemplate version: " .. ns.TEMPLATE_VERSION .. ". If the Full Log has a \"Template version:\" line with a newer version than this one, write the story anyway, then add one line after the code block: \"Your story skill is older than RP Chronicler " .. "<that version>: copy the template again from Options > AI & Stories.\""
 
 -- 0.6.0: the skill names come from ns.STORY_SKILLS (Core.lua), the same
@@ -164,7 +178,7 @@ STRUCTURE
 - A short opening chapter: the party gathers at the entrance (use the place and the roster).
 - One chapter per boss in the order of [BOSS ENGAGED] / [BOSS KILL] lines, named after the boss or the place. Trash fights between bosses ([FIGHT], [KILL]) belong to the chapter of the boss that follows them.
 - Every wipe gets its moment: what went wrong, and how the party came back.
-- A closing chapter: the last boss falls, the loot is shared, the party leaves in one short farewell beat (see rule 9).
+- A closing chapter: the last boss falls, the spoils that matter are shared, the party leaves in one short farewell beat (see reading rule 9).
 - Give every party member a distinct voice and role, from the roster and their real chat quotes.
 ]] .. STORY_SHARED_RULES .. VERSION_RULE
 
@@ -188,9 +202,10 @@ STRUCTURE
 ]] .. STORY_SHARED_RULES .. VERSION_RULE
 
 -- 0.6.4: one line for skill users when the story rules changed since the
--- template they last opened (nil when there is nothing to say)
+-- template they last opened (nil when there is nothing to say). 0.6.5:
+-- a skill user is anyone who ever copied a story template.
 function ns.TemplateNotice()
-    if not ns.Get("aiHasSkill") or type(RPChroniclerDB) ~= "table" then return nil end
+    if type(RPChroniclerDB) ~= "table" or RPChroniclerDB.templateCopied == nil then return nil end
     if RPChroniclerDB.templateCopied == ns.TEMPLATE_VERSION then return nil end
     return "The story template changed in " .. ns.TEMPLATE_VERSION .. ". If you use a skill, copy it again (Options > AI & Stories)."
 end

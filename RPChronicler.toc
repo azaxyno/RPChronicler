@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: RP Chronicler
 ## Notes: Record your adventures and get them back as AI-written stories you read in game, plus live RP scene copy for your AI
-## Version: 0.6.4
+## Version: 0.6.5
 ## Author: azaxyno
 ## IconTexture: Interface\AddOns\RPChronicler\Media\logo
 ## SavedVariables: RPChroniclerDB

@@ -2,7 +2,7 @@
 RPChroniclerDB = {
 	["adventures"] = {
 		[1] = {
-			["addonVersion"] = "0.6.4",
+			["addonVersion"] = "0.6.5",
 			["aggroHeld"] = {
 			},
 			["aggroSamples"] = 0,
@@ -16,11 +16,11 @@ RPChroniclerDB = {
 			["coin"] = 0,
 			["deaths"] = 0,
 			["duration"] = 1200,
-			["endDate"] = "2026-11-26 08:20",
+			["endDate"] = "2026-11-26 14:29",
 			["endTime"] = 1795651335,
 			["exportText"] = "use wow-open-world-story\
 [ADVENTURE: Durotar]\
-Run type: Open world adventure | Zone: Durotar | Date: 2026-11-26 08:20 | Duration: 20m 00s | Deaths: 0\
+Run type: Open world adventure | Zone: Durotar | Date: 2026-11-26 14:29 | Duration: 20m 00s | Deaths: 0\
 Run ID: TP30IF\
 Story length: 4 chapters at most. Group related quests and events into one chapter, sum up routine ones in a line or two, and keep the scenes for the moments that matter.\
 \
@@ -32,18 +32,18 @@ Screenshots (pick only the ones that fit the story and copy the marker exactly):
 - [Shot TP30IF-1] at 23:57:15: Sunset over Sen'jin\
 \
 Full Adventure Timeline:\
-[08:20:09] Adventure began in Durotar\
-[08:20:09] [QUEST] Aloria Sunwhisper completed Vile Familiars\
-[08:20:09] [NOTE] The wind smells of salt and old battles.\
-[08:20:09] [SHOT TP30IF-1] Sunset over Sen'jin\
-[08:20:09] Adventure ended (Completed)",
+[14:29:49] Adventure began in Durotar\
+[14:29:49] [QUEST] Aloria Sunwhisper completed Vile Familiars\
+[14:29:49] [NOTE] The wind smells of salt and old battles.\
+[14:29:49] [SHOT TP30IF-1] Sunset over Sen'jin\
+[14:29:49] Adventure ended (Completed)",
 			["foesDefeated"] = 0,
 			["fullTimeline"] = {
-				[1] = "[08:20:09] Adventure began in Durotar",
-				[2] = "[08:20:09] [QUEST] Aloria Sunwhisper completed Vile Familiars",
-				[3] = "[08:20:09] [NOTE] The wind smells of salt and old battles.",
-				[4] = "[08:20:09] [SHOT TP30IF-1] Sunset over Sen'jin",
-				[5] = "[08:20:09] Adventure ended (Completed)",
+				[1] = "[14:29:49] Adventure began in Durotar",
+				[2] = "[14:29:49] [QUEST] Aloria Sunwhisper completed Vile Familiars",
+				[3] = "[14:29:49] [NOTE] The wind smells of salt and old battles.",
+				[4] = "[14:29:49] [SHOT TP30IF-1] Sunset over Sen'jin",
+				[5] = "[14:29:49] Adventure ended (Completed)",
 			},
 			["gear"] = {
 			},
@@ -98,7 +98,7 @@ Full Adventure Timeline:\
 					["zone"] = "Durotar",
 				},
 			},
-			["startDate"] = "2026-11-26 08:20",
+			["startDate"] = "2026-11-26 14:29",
 			["startTime"] = 1795650135,
 			["storyId"] = "s1795651335_818",
 			["title"] = "Durotar",
@@ -106,7 +106,7 @@ Full Adventure Timeline:\
 			["zone"] = "Durotar",
 		},
 		[2] = {
-			["addonVersion"] = "0.6.4",
+			["addonVersion"] = "0.6.5",
 			["aggroHeld"] = {
 			},
 			["aggroSamples"] = 0,
@@ -123,11 +123,11 @@ Full Adventure Timeline:\
 			["coin"] = 0,
 			["deaths"] = 0,
 			["duration"] = 1875,
-			["endDate"] = "2026-11-26 08:20",
+			["endDate"] = "2026-11-26 14:29",
 			["endTime"] = 1795646535,
 			["exportText"] = "use wow-dungeon-raid-story\
 [ADVENTURE: Ragefire Chasm]\
-Run type: Dungeon | Zone: Ragefire Chasm | Date: 2026-11-26 08:20 | Duration: 31m 15s | Wipes: 0 | Deaths: 0\
+Run type: Dungeon | Zone: Ragefire Chasm | Date: 2026-11-26 14:29 | Duration: 31m 15s | Wipes: 0 | Deaths: 0\
 Run ID: TP2WAC\
 \
 Roster:\
@@ -145,36 +145,36 @@ Screenshots (pick only the ones that fit the story and copy the marker exactly):
 - [Shot TP2WAC-2] at 22:25:35: Defeated Taragaman the Hungerer\
 \
 Full Adventure Timeline:\
-[08:20:09] Adventure began in Ragefire Chasm\
-[08:20:09] [Party] Morai Galeclaw: Stay behind me, the fire burns hotter below.\
-[08:20:09] [NOTE] Aloria remembers the smell of the Barrens after rain.\
-[08:20:09] [BOSS ENGAGED] Oggleflint\
-[08:20:09] [BOSS KILL] Oggleflint\
-[08:20:09] [SHOT TP2WAC-1] Defeated Oggleflint\
-[08:20:09] [LOOT] Aloria Sunwhisper received Barbaric Crossbow (from Oggleflint)\
-[08:20:09] [LOOT] Morai Galeclaw received Native Vest of Stamina (looted)\
-[08:20:09] [Party] Hexer Tazira: The light holds. Onward.\
-[08:20:09] [BOSS ENGAGED] Taragaman the Hungerer\
-[08:20:09] [BOSS KILL] Taragaman the Hungerer\
-[08:20:09] [SHOT TP2WAC-2] Defeated Taragaman the Hungerer\
-[08:20:09] [BOSS KILL] Bazzalan\
-[08:20:09] Adventure ended (Left Instance)",
+[14:29:49] Adventure began in Ragefire Chasm\
+[14:29:49] [Party] Morai Galeclaw: Stay behind me, the fire burns hotter below.\
+[14:29:49] [NOTE] Aloria remembers the smell of the Barrens after rain.\
+[14:29:49] [BOSS ENGAGED] Oggleflint\
+[14:29:49] [BOSS KILL] Oggleflint\
+[14:29:49] [SHOT TP2WAC-1] Defeated Oggleflint\
+[14:29:49] [LOOT] Aloria Sunwhisper received Barbaric Crossbow (from Oggleflint)\
+[14:29:49] [LOOT] Morai Galeclaw received Native Vest of Stamina (looted)\
+[14:29:49] [Party] Hexer Tazira: The light holds. Onward.\
+[14:29:49] [BOSS ENGAGED] Taragaman the Hungerer\
+[14:29:49] [BOSS KILL] Taragaman the Hungerer\
+[14:29:49] [SHOT TP2WAC-2] Defeated Taragaman the Hungerer\
+[14:29:49] [BOSS KILL] Bazzalan\
+[14:29:49] Adventure ended (Left Instance)",
 			["foesDefeated"] = 0,
 			["fullTimeline"] = {
-				[1] = "[08:20:09] Adventure began in Ragefire Chasm",
-				[2] = "[08:20:09] [Party] Morai Galeclaw: Stay behind me, the fire burns hotter below.",
-				[3] = "[08:20:09] [NOTE] Aloria remembers the smell of the Barrens after rain.",
-				[4] = "[08:20:09] [BOSS ENGAGED] Oggleflint",
-				[5] = "[08:20:09] [BOSS KILL] Oggleflint",
-				[6] = "[08:20:09] [SHOT TP2WAC-1] Defeated Oggleflint",
-				[7] = "[08:20:09] [LOOT] Aloria Sunwhisper received Barbaric Crossbow (from Oggleflint)",
-				[8] = "[08:20:09] [LOOT] Morai Galeclaw received Native Vest of Stamina (looted)",
-				[9] = "[08:20:09] [Party] Hexer Tazira: The light holds. Onward.",
-				[10] = "[08:20:09] [BOSS ENGAGED] Taragaman the Hungerer",
-				[11] = "[08:20:09] [BOSS KILL] Taragaman the Hungerer",
-				[12] = "[08:20:09] [SHOT TP2WAC-2] Defeated Taragaman the Hungerer",
-				[13] = "[08:20:09] [BOSS KILL] Bazzalan",
-				[14] = "[08:20:09] Adventure ended (Left Instance)",
+				[1] = "[14:29:49] Adventure began in Ragefire Chasm",
+				[2] = "[14:29:49] [Party] Morai Galeclaw: Stay behind me, the fire burns hotter below.",
+				[3] = "[14:29:49] [NOTE] Aloria remembers the smell of the Barrens after rain.",
+				[4] = "[14:29:49] [BOSS ENGAGED] Oggleflint",
+				[5] = "[14:29:49] [BOSS KILL] Oggleflint",
+				[6] = "[14:29:49] [SHOT TP2WAC-1] Defeated Oggleflint",
+				[7] = "[14:29:49] [LOOT] Aloria Sunwhisper received Barbaric Crossbow (from Oggleflint)",
+				[8] = "[14:29:49] [LOOT] Morai Galeclaw received Native Vest of Stamina (looted)",
+				[9] = "[14:29:49] [Party] Hexer Tazira: The light holds. Onward.",
+				[10] = "[14:29:49] [BOSS ENGAGED] Taragaman the Hungerer",
+				[11] = "[14:29:49] [BOSS KILL] Taragaman the Hungerer",
+				[12] = "[14:29:49] [SHOT TP2WAC-2] Defeated Taragaman the Hungerer",
+				[13] = "[14:29:49] [BOSS KILL] Bazzalan",
+				[14] = "[14:29:49] Adventure ended (Left Instance)",
 			},
 			["gear"] = {
 			},
@@ -310,7 +310,7 @@ Full Adventure Timeline:\
 					["zone"] = "Orgrimmar",
 				},
 			},
-			["startDate"] = "2026-11-26 08:20",
+			["startDate"] = "2026-11-26 14:29",
 			["startTime"] = 1795644660,
 			["storyId"] = "s1795646535_454",
 			["title"] = "Ragefire Chasm",
@@ -318,7 +318,6 @@ Full Adventure Timeline:\
 			["zone"] = "Ragefire Chasm",
 		},
 	},
-	["aiHasSkill"] = false,
 	["autoShots"] = "INSTANCE",
 	["autoUpdateKnown"] = true,
 	["capture"] = {
@@ -331,17 +330,17 @@ Full Adventure Timeline:\
 	},
 	["clientChecks"] = {
 		[1] = {
-			["at"] = "2026-11-26 08:20:09",
+			["at"] = "2026-11-26 14:29:49",
 			["build"] = "1.60.1 (123)",
 			["missing"] = "Options > AddOns, Quest log, Screenshots, Right-click menu",
-			["v"] = "0.6.4",
+			["v"] = "0.6.5",
 		},
 	},
 	["companionMenu"] = true,
 	["copyMode"] = "BOX",
 	["debugLog"] = {
-		[1] = "[2026-11-26 08:20:09] info: files loaded",
-		[2] = "[2026-11-26 08:20:09] info: no Options > AddOns entry on this client",
+		[1] = "[2026-11-26 14:29:49] info: files loaded",
+		[2] = "[2026-11-26 14:29:49] info: no Options > AddOns entry on this client",
 	},
 	["exportTip"] = true,
 	["iconMode"] = "MINIMAP",
@@ -364,7 +363,6 @@ Full Adventure Timeline:\
 		["quests"] = true,
 		["travel"] = true,
 	},
-	["logWarnChars"] = 80000,
 	["messages"] = 3,
 	["migratedV031"] = true,
 	["migratedV040"] = true,
@@ -372,8 +370,10 @@ Full Adventure Timeline:\
 	["migratedV060"] = true,
 	["migratedV061"] = true,
 	["migratedV064"] = true,
+	["migratedV065"] = true,
 	["migratedV32"] = true,
 	["optionsPage"] = "GENERAL",
+	["partyGear"] = true,
 	["players"] = {
 	},
 	["quickCtrlC"] = true,
@@ -384,13 +384,13 @@ Full Adventure Timeline:\
 	["setupVersion"] = 4,
 	["stories"] = {
 		[1] = {
-			["addonVersion"] = "0.6.4",
+			["addonVersion"] = "0.6.5",
 			["autoColored"] = 2,
 			["book"] = {
 				["chapters"] = {
 					[1] = "Chapter 1: Vile Familiars",
 				},
-				["date"] = "2026-11-26 08:20",
+				["date"] = "2026-11-26 14:29",
 				["duration"] = "20m",
 				["edited"] = {
 				},
@@ -409,7 +409,7 @@ Full Adventure Timeline:\
 			["coin"] = 0,
 			["deaths"] = 0,
 			["duration"] = 1200,
-			["endDate"] = "2026-11-26 08:20",
+			["endDate"] = "2026-11-26 14:29",
 			["endTime"] = 1795651335,
 			["foesDefeated"] = 0,
 			["gear"] = {
@@ -418,7 +418,7 @@ Full Adventure Timeline:\
 			},
 			["id"] = "s1795651335_818",
 			["importedAt"] = 1795651335,
-			["importedWith"] = "0.6.4",
+			["importedWith"] = "0.6.5",
 			["instanceName"] = "Durotar",
 			["keyLoot"] = {
 			},
@@ -466,11 +466,11 @@ Full Adventure Timeline:\
 					["zone"] = "Durotar",
 				},
 			},
-			["startDate"] = "2026-11-26 08:20",
+			["startDate"] = "2026-11-26 14:29",
 			["startTime"] = 1795650135,
 			["story"] = "Salt Wind over |cff40e0d0Durotar|r\
 |cff40e0d0Durotar|r | 20m\
-Date: 2026-11-26 08:20\
+Date: 2026-11-26 14:29\
 \
 |cffffd100Chapter 1: Vile Familiars|r\
 |cffABD473Aloria Sunwhisper|r walked the red earth with |cff80cbc4Jack|r at her heel.\
@@ -482,14 +482,14 @@ Quests completed: 1",
 			["zone"] = "Durotar",
 		},
 		[2] = {
-			["addonVersion"] = "0.6.4",
+			["addonVersion"] = "0.6.5",
 			["autoColored"] = 2,
 			["book"] = {
 				["chapters"] = {
 					[1] = "Chapter 1: Beneath the City",
 					[2] = "Chapter 2: The Hungerer",
 				},
-				["date"] = "2026-11-26 08:20",
+				["date"] = "2026-11-26 14:29",
 				["deaths"] = 0,
 				["duration"] = "31m",
 				["edited"] = {
@@ -515,7 +515,7 @@ Quests completed: 1",
 			["coin"] = 0,
 			["deaths"] = 0,
 			["duration"] = 1875,
-			["endDate"] = "2026-11-26 08:20",
+			["endDate"] = "2026-11-26 14:29",
 			["endTime"] = 1795646535,
 			["foesDefeated"] = 0,
 			["gear"] = {
@@ -524,7 +524,7 @@ Quests completed: 1",
 			},
 			["id"] = "s1795646535_454",
 			["importedAt"] = 1795646535,
-			["importedWith"] = "0.6.4",
+			["importedWith"] = "0.6.5",
 			["instanceName"] = "Ragefire Chasm",
 			["keyLoot"] = {
 				[1] = {
@@ -652,11 +652,11 @@ Quests completed: 1",
 					["zone"] = "Orgrimmar",
 				},
 			},
-			["startDate"] = "2026-11-26 08:20",
+			["startDate"] = "2026-11-26 14:29",
 			["startTime"] = 1795644660,
 			["story"] = "Chronicle of |cff40e0d0Ragefire Chasm|r: Fire, Crabs, and Lazy Goblins\
 |cff40e0d0Ragefire Chasm|r | 31m | Orgrimmar\
-Date: 2026-11-26 08:20 | Party: |cffABD473Aloria Sunwhisper|r, |cffFF7D0AMorai Galeclaw|r, |cffC0C0C0Hexer Tazira|r, |cffF58CBAValeria Duskward|r, |cffC0C0C0Malagan Zuluni|r\
+Date: 2026-11-26 14:29 | Party: |cffABD473Aloria Sunwhisper|r, |cffFF7D0AMorai Galeclaw|r, |cffC0C0C0Hexer Tazira|r, |cffF58CBAValeria Duskward|r, |cffC0C0C0Malagan Zuluni|r\
 \
 |cffffd100Chapter 1: Beneath the City|r\
 The heat rose from the chasm like breath from a sleeping beast. |cffff7d0aMorai Galeclaw|r raised a hand: \"Stay behind me, the fire burns hotter below.\"\
@@ -723,8 +723,8 @@ Bosses defeated: 3 | Wipes: 0 | Deaths: 0",
 			["incPartySay"] = true,
 			["incQuest"] = false,
 			["incSocial"] = false,
-			["incStatus"] = true,
-			["incTarget"] = true,
+			["incStatus"] = false,
+			["incTarget"] = false,
 			["incWorld"] = false,
 			["label"] = "Party",
 			["prefix"] = "use my-character",

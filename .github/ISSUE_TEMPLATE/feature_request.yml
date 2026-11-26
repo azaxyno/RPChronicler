@@ -1,0 +1,16 @@
+name: Feature request
+description: An idea that would help your AI write your RP lines or your stories.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What would you like RP Chronicler to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it helps
+      description: How it would help your roleplay or your stories.

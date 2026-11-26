@@ -1,0 +1,33 @@
+name: Bug report
+description: Something in RP Chronicler does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. In game, open the RP button's right-click menu > **Feedback / bug report** (or type `/rp feedback`), Select All, Ctrl+C, and paste the report below. It holds your version and RP Chronicler's own saved errors, never chat.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you were doing, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to see it again
+      placeholder: |
+        1. Open Adventures
+        2. Click ...
+  - type: textarea
+    id: report
+    attributes:
+      label: Bug report from the game
+      description: Paste the text from Feedback / bug report (or /rp debug).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: RP Chronicler version
+      placeholder: "0.6.5"

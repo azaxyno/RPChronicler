@@ -1,6 +1,6 @@
 # RP Chronicler (formerly RPCopy)
 
-A WoW: Forever addon (Interface 16001, beta since 0.6.2, MIT). It copies the current RP scene (`Ctrl+C`) as a text "snapshot" for the player's AI character skill. It keeps notes on companions, records dungeon, raid and open-world runs as a timestamped Full Log for an AI storyteller, and keeps the imported colored stories in an in-game Story Book. It never sends chat. Full module reference: `docs/ARCHITECTURE.md` (internal: untracked by git since 0.6.0, kept locally and in the project files; never publish it). Player docs: `README.md`.
+A WoW: Forever addon (Interface 16001, beta since 0.6.2, GPL-3.0 since 0.6.5). It copies the current RP scene (`Ctrl+C`) as a text "snapshot" for the player's AI character skill. It keeps notes on companions, records dungeon, raid and open-world runs as a timestamped Full Log for an AI storyteller, and keeps the imported colored stories in an in-game Story Book. It never sends chat. Full module reference: `docs/ARCHITECTURE.md` (internal: untracked by git since 0.6.0, kept locally and in the project files; never publish it). Player docs: `README.md`.
 
 ## Working rules
 
@@ -20,7 +20,7 @@ A WoW: Forever addon (Interface 16001, beta since 0.6.2, MIT). It copies the cur
 - Keep `README.md` in step with user-visible changes, and `docs/ARCHITECTURE.md` in step with structural ones.
 - Commit only after Mor approves. Mor pushes.
 - azaxyno is the only author and contributor. Never add `Co-Authored-By: Claude`, `Claude-Session:` or any other AI attribution to commits, tags or releases.
-- Releases go to CurseForge only (Mor, 0.6.4). GitHub holds the source code alone: no GitHub Releases, tags or release zips any more. Push only when Mor says.
+- Releases go to CurseForge only (Mor, 0.6.4). GitHub holds the source code alone: no GitHub Releases, tags or release zips any more. Since 0.6.5 (Mor) each finished version's source is pushed to GitHub main (branch, PR, merge), so the next build starts from GitHub instead of pulling the local folder.
   - For each version Claude prepares, in `RPChronicler-X.Y.Z/` in the project files: the CurseForge changelog (everything since the last CurseForge upload; check the CurseForge Files tab) and `RPChronicler-vX.Y.Z-curseforge.zip`, which holds an `RPChronicler/` folder with only the addon files (toc, .lua, Bindings.xml, Media/ (logo.tga, Shadows/, Scene/), StoryViewer.html, README.md, LICENSE, CREDITS.md). Leave out docs, tools, .claude, backup, CLAUDE.md, PDFs and Export_Stories.bat (`.pkgmeta` also ignores it; never link to an outside download for it, since CurseForge forbids external download links).
   - Upload as **Beta** for game version Forever 1.60.1. `.pkgmeta` (package-as RPChronicler) is ready for the packager. Once the project exists, turn the commented `# ## X-Curse-Project-ID: 000000` line in the toc into a real `## X-Curse-Project-ID: <id>`.
 
@@ -44,7 +44,7 @@ A WoW: Forever addon (Interface 16001, beta since 0.6.2, MIT). It copies the cur
 | `UI_Shell.lua` | `ns.UI`, theme and widget helpers, prompt and copy boxes, main window: rail (`UI.LayoutRail`), gear, sections, status line, cursor-driven resize, saved position |
 | `UI_Copy.lua` | Copy view and the quick-copy engine (Instant / Copy box Ctrl+C), Nearby companions chip, `UI.SyncRpCopy` |
 | `UI_Companions.lua` | Companions view (one note box, "Who they are (note)") |
-| `UI_Adventures.lua` | Adventures view (`UI.OpenRecording`): record bar (one Start/Stop toggle), run list, size meter (`logWarnChars`), story import with a run selector |
+| `UI_Adventures.lua` | Adventures view (`UI.OpenRecording`): record bar (one Start/Stop toggle), run list with type tabs (0.6.5), size line (fixed `ns.LOG_SIZE_BASELINE`), Copy for AI / Log only, Edit run window (dungeon, roles, names), story import with a run selector |
 | `UI_Scenes.lua` | Story scenes (0.6.4): the party on the cover (you in 3D in the run's gear, companions near you as they are, everyone else as a race shadow from `Media/Shadows`), a scene per boss, zoom, the big window (`UI.OpenBigScene`) |
 | `UI_StoryBook.lua` | Story Book section (`UI.OpenStoryBook`): library (+ Import in its header), reader, export tip, Share, Details, Re-Import, Run, Delete |
 | `UI_Options.lua` | Options pages (General, Slice Tabs, Recording, Companions, AI & Stories, Privacy), rows built from `ns.SETTINGS`, the template window |

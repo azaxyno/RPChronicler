@@ -623,12 +623,12 @@ do
     local stories = CreateFrame("Frame", nil, p)
     stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
     stories:SetHeight(248)
-    -- 0.6.5: Copy for AI adds the story rules, so the skill is optional
+    -- 0.6.5: Include AI instructions adds the story rules, so the skill is optional
     Note(stories,
         "|cffffd100Your stories|r\n" ..
-        "|cffd8dee9After a run, open its Full Log and click |cffffd100Copy for AI|cffd8dee9 (it adds the story rules). Paste it into any AI chat, copy the story back and Import it in the Story Book. " ..
+        "|cffd8dee9After a run, open its Full Log, tick |cffffd100Include AI instructions|cffd8dee9 and click |cffffd100Copy for AI|cffd8dee9. Paste it into any AI chat, copy the story back and Import it in the Story Book. " ..
         "|cff9aa5b4Advanced: use a skill.|cffd8dee9 Make a template below a skill in your AI (Dungeon: 'use " .. ns.STORY_SKILLS.dungeon .. "', Adventure: 'use " .. ns.STORY_SKILLS.world .. "') " ..
-        "and click Copy for AI, then Log only, to copy the log without the rules.|r",
+        "and copy the Full Log with Include AI instructions off.|r",
         0, 0)
     local tplLayout = TemplateButtons(stories, -86)
     local tipRows = SettingRows(stories, -120, {

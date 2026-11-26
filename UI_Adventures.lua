@@ -434,7 +434,7 @@ end
 A.summaryBtn = UI.CreateSleekButton(A.right, 66, 22, "Summary")
 A.fullBtn = UI.CreateSleekButton(A.right, 62, 22, "Full Log")
 A.fullBtn.tipTitle = "|cffffd100Full Log|r"
-A.fullBtn.tipText = "The whole run for your AI storyteller. Click Copy for AI (it adds the story rules), then Ctrl+C, and paste it into any AI chat."
+A.fullBtn.tipText = "The whole run for your AI storyteller. Tick Include AI instructions, click Copy for AI, press Ctrl+C, and paste it into any AI chat."
 A.storyBtn = UI.CreateSleekButton(A.right, 56, 22, "Story", "gold")
 A.storyBtn.tipTitle = "|cffffd100Story|r"
 -- 0.6.3: correct a wrong name before the story is written
@@ -456,13 +456,34 @@ A.meter = CreateFrame("Button", nil, A.right)
 A.meter:SetHeight(16)
 A.meter:SetPoint("TOPLEFT", 2, -92)
 A.meter:SetPoint("TOPRIGHT", -2, -92)
+-- 0.6.5 (Mor): "Include AI instructions" (off by default, per run while
+-- you look at it): the story rules go in front of the log, and the size
+-- follows at once
+A.rulesCheck = CreateFrame("CheckButton", "RPChroniclerAdvRulesCheck", A.meter, "UICheckButtonTemplate")
+A.rulesCheck:SetSize(20, 20)
+A.rulesCheck:SetPoint("LEFT", -2, 0)
+A.rulesLbl = A.meter:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+A.rulesLbl:SetPoint("LEFT", A.rulesCheck, "RIGHT", 0, 0)
+A.rulesLbl:SetText("|cffd8dee9Include AI instructions|r")
+A.rulesCheck:SetScript("OnEnter", function(self)
+    UI.Tooltip(self, "|cffffd100Include AI instructions|r",
+        "Puts the story rules in front of the Full Log, so any AI chat writes the story from one paste.",
+        "Leave it off if your AI already has the storyteller skill.")
+end)
+A.rulesCheck:SetScript("OnLeave", UI.HideTooltip)
+A.rulesCheck:SetScript("OnClick", function(self)
+    local adv = UI.GetSelectedAdventure and UI.GetSelectedAdventure()
+    A.rulesFor = (self:GetChecked() and adv) and adv.id or nil
+    UI.RefreshAdventuresTab()
+end)
 A.meterText = A.meter:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-A.meterText:SetAllPoints(A.meter)
+A.meterText:SetPoint("LEFT", A.rulesLbl, "RIGHT", 10, 0)
+A.meterText:SetPoint("RIGHT", A.meter, "RIGHT", 0, 0)
 A.meterText:SetJustifyH("LEFT")
 A.meterText:SetWordWrap(false)
 A.meter:SetScript("OnEnter", function(self)
     UI.Tooltip(self, "|cffffd100Full Log size|r",
-        "The length of what you copy. " .. math.floor(ns.LOG_SIZE_BASELINE / 1000) .. "k fits most free AI chats; paid ones take much more.",
+        "The length of what you copy. " .. math.floor(ns.LOG_SIZE_BASELINE / 1000) .. "k fits most free AI chats; paid ones can fit a lot more words.",
         "Too long? Pick a shorter Log detail in Options > Recording, or turn off busy groups.")
 end)
 A.meter:SetScript("OnLeave", UI.HideTooltip)
@@ -730,27 +751,22 @@ function UI.RefreshAdventuresTab()
     if mode ~= "FULL" then mode = "SUMMARY" end
     if mode == "FULL" then
         A.fullBtn:LockHighlight()
-        -- 0.6.5: the box shows the log alone; Copy for AI adds the story
-        -- rules (until you switch runs or views, or click Log only)
+        -- 0.6.5: the box shows the log alone; Include AI instructions adds
+        -- the story rules (until you switch runs or views)
         local withRules = selected and A.rulesFor == selected.id or false
         local text = ns.BuildAiText(selected, withRules)
         A.editBox:SetText(text)
-        if withRules then
-            UI.SetButtonLabels(A.selectAllBtn, "Log only", "Log")
-            A.selectAllBtn.tipTitle = "|cffffd100Log only|r"
-            A.selectAllBtn.tipText = "Takes the story rules out again and selects the Full Log alone, for an AI that has the storyteller skill."
-        else
-            UI.SetButtonLabels(A.selectAllBtn, "Copy for AI", "Copy")
-            A.selectAllBtn.tipTitle = "|cffffd100Copy for AI|r"
-            A.selectAllBtn.tipText = "Puts the story rules in front of the Full Log and selects it all. Press Ctrl+C, paste it into any AI chat, then Import the story it writes."
-        end
+        A.rulesCheck:SetChecked(withRules and true or false)
+        UI.SetButtonLabels(A.selectAllBtn, "Copy for AI", "Copy")
+        A.selectAllBtn.tipTitle = "|cffffd100Copy for AI|r"
+        A.selectAllBtn.tipText = "Selects the Full Log (with the story rules when Include AI instructions is on). Press Ctrl+C, paste it into your AI, then Import the story it writes."
         if selected then
             -- 0.6.5: one fixed baseline; the meter counts what is copied
             local limit = ns.LOG_SIZE_BASELINE
             local chars = #text
             local pct = math.floor(chars * 100 / math.max(1, limit) + 0.5)
             local color = (pct > 100 and "ff6b6b") or (pct > 80 and "ffb74d") or "5cb85c"
-            A.meterText:SetText(string.format("|cff8f9ba8Size:|r |cff%s%.1fk chars (%d%% of %dk).|r |cff8f9ba8%dk fits most free AI chats; paid ones take much more.|r",
+            A.meterText:SetText(string.format("|cff8f9ba8Size:|r |cff%s%.1fk chars (%d%% of %dk).|r |cff8f9ba8%dk fits most free AI chats; paid ones can fit a lot more words.|r",
                 color, chars / 1000, pct, math.floor(limit / 1000), math.floor(limit / 1000)))
             A.meter:Show()
         else
@@ -814,18 +830,14 @@ UI.GetSelectedAdventure = GetSelectedAdventure
 A.selectAllBtn:SetScript("OnClick", function()
     local adv = GetSelectedAdventure()
     local full = ns.state.adventureViewMode == "FULL" and adv
-    -- 0.6.5: Copy for AI adds the story rules, Log only takes them out
-    local addRules = full and A.rulesFor ~= adv.id
-    if full then
-        A.rulesFor = addRules and adv.id or nil
-        UI.RefreshAdventuresTab()
-    end
+    -- 0.6.5: the checkbox above the box decides whether the rules go in
+    local withRules = full and A.rulesFor == adv.id
     A.editBox:SetFocus()
     A.editBox:HighlightText()
-    if addRules then
+    if withRules then
         UI.SetStatus("Full Log and story rules selected. Press Ctrl+C, paste it into any AI chat, then Import the story.", "good")
     elseif full then
-        UI.SetStatus("Full Log selected (no story rules). Press Ctrl+C to copy it.", "good")
+        UI.SetStatus("Full Log selected (no AI instructions). Press Ctrl+C to copy it.", "good")
     else
         UI.SetStatus("Text selected. Press Ctrl+C to copy it.", "good")
     end

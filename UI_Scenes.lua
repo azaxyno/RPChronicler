@@ -16,11 +16,12 @@ local UI = ns.UI
 -- Every figure is drawn at the same scale, so a gnome stands smaller than
 -- a tauren, and Real models use the camera the shadows were made with.
 --
--- Size: the row fits up to five figures in the reader's width. Ctrl +
--- mouse wheel zooms on the cover (plain wheel still scrolls the story),
--- Enlarge opens the scene in its own big window where the wheel zooms
--- and dragging pans. Nothing here is protected, so it is safe in combat,
--- and models are cleared when the scene hides.
+-- Size: the row fits up to five figures in the reader's width. 0.6.7
+-- (Mor): the mouse wheel and + / - zoom around the figures, dragging
+-- moves the camera any way (up to a face, down to the boots), and a click
+-- on the scene or Enlarge opens the whole party side by side in a big
+-- window. Nothing here is protected, so it is safe in combat, and models
+-- are cleared when the scene hides.
 -- =========================================================
 local MEDIA = "Interface\\AddOns\\RPChronicler\\Media\\"
 local SHADOW_FILE = {
@@ -36,9 +37,9 @@ local CAP_W, CAP_H = 716 / 596, 896 / 780     -- capture size / crop size
 local CAP_X = 60 / 596                        -- crop left inside the capture
 local MAX_MEMBERS = 5
 -- 0.6.7 (Mor's test): where each shadow's head is, as a share of the
--- texture's height (its feet stand at about 0.955). A live figure in the
--- party scene is fitted to its own race's shadow, so you stand exactly as
--- tall as a shadow of your race would (measured from Media/Shadows).
+-- texture's height (its feet stand at about 0.955). A live figure is
+-- fitted to its own race's shadow, so you stand exactly as tall as a
+-- shadow of your race would (measured from Media/Shadows).
 local SHADOW_TOP = {
     f_bloodelf = 0.305, f_draenei = 0.156, f_dwarf = 0.441, f_gnome = 0.531, f_goblin = 0.484,
     f_human = 0.316, f_nightelf = 0.191, f_orc = 0.242, f_skyborne_highorder = 0.312,
@@ -49,7 +50,6 @@ local SHADOW_TOP = {
     unknown = 0.152,
 }
 local SHADOW_FEET = 0.955
-local DRESS_FILL = 0.86     -- how much of a model box a full-body model fills
 
 -- Class colors, as in the story palette (Priest gray, never white)
 local CLASS_RGB = {
@@ -127,8 +127,9 @@ end
 -- =========================================================
 -- One figure slot: glow, shadow or live model, and a name
 -- =========================================================
-local function NewSlot(parent)
+local function NewSlot(parent, scene)
     local s = CreateFrame("Frame", nil, parent)
+    s.scene = scene
     s.glow = s:CreateTexture(nil, "BACKGROUND", nil, 2)
     s.glow:SetTexture(MEDIA .. "Scene\\glow.png")
     s.glow:SetBlendMode("BLEND")
@@ -147,47 +148,113 @@ local function NewSlot(parent)
         if self.tipTitle then UI.Tooltip(self, self.tipTitle, self.tipText) end
     end)
     s:SetScript("OnLeave", function() UI.HideTooltip() end)
-    -- 0.6.4: click a figure for its card (level, looks, what they wore and won)
+    -- 0.6.4: click a figure for its card (level, looks, what they wore and
+    -- won). 0.6.7: a drag that starts on a figure moves the camera instead.
+    s:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" and self.scene then self.scene:BeginDrag() end
+    end)
     s:SetScript("OnMouseUp", function(self, button)
-        if button == "LeftButton" and self.onClick then UI.HideTooltip(); self.onClick(self) end
+        if button ~= "LeftButton" then return end
+        local moved = self.scene and self.scene:EndDrag()
+        if not moved and self.onClick then UI.HideTooltip(); self.onClick(self) end
     end)
     return s
 end
 
--- A live model box for a slot, made the first time it is needed. A
--- ModelScene with the shadows' camera keeps every race at its true size;
--- it is larger than the slot (the capture box around the cut-out).
+-- =========================================================
+-- 0.6.7 (Mor's test): a live figure stands exactly as tall as its race's
+-- shadow. Its ModelScene covers the figure box, and once the model has
+-- loaded the camera is placed from the model's own bounding box: the feet
+-- on the shadows' ground line, the head where the race's shadow has its
+-- head. If the client can't measure the model, the camera the shadows
+-- were captured with is used.
+-- =========================================================
+local FOV = 0.8
+
+local function ApplyCam(s)
+    local m, c = s.model, s.cam
+    if not m or not c then return end
+    local z = s.camZoom or 1
+    -- closer in, and rising toward the face
+    pcall(m.SetCameraPosition, m, c.d / z, 0, c.z + (c.head - c.z) * (1 - 1 / z) * 0.75)
+end
+
+local function FixedCamera(s)
+    s.cam = { d = 5.5, z = 1.1, head = 1.7 }
+    s.fixed, s.framed = true, true
+    if s.fitW then
+        s.model:ClearAllPoints()
+        s.model:SetSize(s.fitW * CAP_W, s.fitH * CAP_H)
+        s.model:SetPoint("TOPLEFT", s, "TOPLEFT", -s.fitW * CAP_X, 0)
+    end
+    ApplyCam(s)
+    s.model:SetAlpha(1)
+end
+
+-- The model's feet and head heights, or nil while it isn't loaded
+local function ModelHeight(a)
+    if not a or not a.GetActiveBoundingBox then return nil end
+    local ok, b1, b2, b3, t1, t2, t3 = pcall(a.GetActiveBoundingBox, a)
+    if not ok or b1 == nil then return nil end
+    local bz, tz
+    if type(b1) == "table" or type(b1) == "userdata" then
+        bz, tz = b1.z, b2 and b2.z
+    else
+        bz, tz = b3, t3
+    end
+    if type(bz) ~= "number" or type(tz) ~= "number" or tz - bz < 0.05 or tz - bz > 50 then return nil end
+    return bz, tz
+end
+
+local function FrameActor(s)
+    local m = s.model
+    if not m or not m.actor or s.fixed then return false end
+    local bz, tz = ModelHeight(m.actor)
+    if not bz then return false end
+    -- the box shows V world units from top to bottom; the model spans the
+    -- share of it that the race's shadow spans in its texture
+    local share = math.max(0.25, SHADOW_FEET - (s.fitTop or 0.2))
+    local V = (tz - bz) / share
+    s.cam = {
+        d = (V / 2) / math.tan(FOV / 2),
+        z = bz - (1 - SHADOW_FEET) * V + V / 2,
+        head = tz - (tz - bz) * 0.08,
+    }
+    s.framed = true
+    ApplyCam(s)
+    m:SetAlpha(1)
+    return true
+end
+
+-- A live model box for a slot, made the first time it is needed
 local function SlotModel(s)
     if s.model ~= nil then return s.model or nil end
     s.model = false
-    -- 0.6.7: the party scene uses a dressing-room model, which frames the
-    -- whole figure in its box; FitModel sizes that box to the shadow
-    if s.useDress then
-        local ok, m = pcall(CreateFrame, "DressUpModel", nil, s)
-        if not ok or not m or not m.SetUnit then ok, m = pcall(CreateFrame, "PlayerModel", nil, s) end
-        if not ok or not m or not m.SetUnit then return nil end
-        m.dress = true
-        m:EnableMouse(false)
-        s.model = m
-        return m
-    end
     local ok, m = pcall(CreateFrame, "ModelScene", nil, s)
     if not ok or not m or not m.CreateActor then return nil end
     pcall(m.SetCameraNearClip, m, 0.1)
     pcall(m.SetCameraFarClip, m, 100)
-    pcall(m.SetCameraFieldOfView, m, 0.8)
+    pcall(m.SetCameraFieldOfView, m, FOV)
     pcall(m.SetCameraPosition, m, 5.5, 0, 1.1)
     pcall(m.SetCameraOrientationByYawPitchRoll, m, math.pi, 0, 0)
     local okA, actor = pcall(m.CreateActor, m)
     if not okA or not actor then return nil end
     m.actor = actor
     m:EnableMouse(false)
+    if m.EnableMouseWheel then pcall(m.EnableMouseWheel, m, false) end
     s.model = m
+    pcall(actor.SetScript, actor, "OnModelLoaded", function() if not s.framed then FrameActor(s) end end)
+    -- until the model is measured it stays invisible (no jump in size)
+    m:SetScript("OnUpdate", function(self, elapsed)
+        if s.framed then return end
+        self.wait = (self.wait or 0) + (elapsed or 0)
+        if not FrameActor(s) and self.wait > 2.5 then FixedCamera(s) end
+    end)
     return m
 end
 
 local function ClearSlotModel(s)
-    if s.model and s.model.dress then pcall(s.model.ClearModel, s.model) end
+    s.framed, s.fixed, s.cam = false, false, nil
     if s.model and s.model.actor then pcall(s.model.actor.ClearModel, s.model.actor) end
     if s.model then s.model:Hide() end
 end
@@ -197,21 +264,8 @@ end
 local function ShowReal(s, unit, gear)
     local m = SlotModel(s)
     if not m then return false end
-    if m.dress then
-        if not pcall(m.SetUnit, m, unit) then return false end
-        if gear and m.Undress and m.TryOn then
-            pcall(m.Undress, m)
-            for _, g in ipairs(gear) do
-                if type(g) == "table" and g.link then pcall(m.TryOn, m, g.link) end
-            end
-        end
-        if m.SetPortraitZoom then pcall(m.SetPortraitZoom, m, 0) end
-        if m.SetCamDistanceScale then pcall(m.SetCamDistanceScale, m, 1) end
-        if m.SetFacing then pcall(m.SetFacing, m, 0) end
-        m:Show()
-        return true
-    end
     local a = m.actor
+    s.framed, s.fixed, s.cam = false, false, nil
     local ok = pcall(a.SetModelByUnit, a, unit, false, true, false, true)
     if not ok then return false end
     if gear and a.Undress then
@@ -221,27 +275,24 @@ local function ShowReal(s, unit, gear)
         end
     end
     pcall(a.SetYaw, a, 0)
+    m.wait = 0
+    m:SetAlpha(0)
     m:Show()
-    if UIFrameFadeIn then pcall(UIFrameFadeIn, m, 0.4, 0, 1) end
+    FrameActor(s)
     return true
 end
 
 -- Places the model box over the slot's figure box (w x h)
 local function FitModel(s, w, h)
     if not s.model then return end
-    if s.model.dress then
-        -- the box around where this race's shadow would stand
-        local top, feet = h * (s.fitTop or 0.2), h * SHADOW_FEET
-        local boxH = (feet - top) / DRESS_FILL
-        s.model:ClearAllPoints()
-        s.model:SetSize(math.max(w, boxH * 0.8), boxH)
-        s.model:SetPoint("CENTER", s, "TOPLEFT", w / 2, -(top + feet) / 2)
-        return
-    end
-    local mw, mh = w * CAP_W, h * CAP_H
+    s.fitW, s.fitH = w, h
     s.model:ClearAllPoints()
-    s.model:SetSize(mw, mh)
-    s.model:SetPoint("TOPLEFT", s, "TOPLEFT", -w * CAP_X, 0)
+    if s.fixed then
+        s.model:SetSize(w * CAP_W, h * CAP_H)
+        s.model:SetPoint("TOPLEFT", s, "TOPLEFT", -w * CAP_X, 0)
+    else
+        s.model:SetAllPoints(s)
+    end
 end
 
 -- =========================================================
@@ -291,11 +342,11 @@ end
 local Scene = {}
 Scene.__index = Scene
 
--- parent: the frame it lives in. opts.wheelZoom: plain wheel zooms
--- (the big window); otherwise Ctrl + wheel zooms and the plain wheel is
--- handed to opts.onWheel (the story's scroll).
+-- parent: the frame it lives in. 0.6.7: the mouse wheel always zooms over
+-- the scene. opts.spread: the figures stand side by side, none behind
+-- another (the big window). opts.onBig: Enlarge, and a click on the scene.
 function UI.CreateStoryScene(parent, opts)
-    local self = setmetatable({ opts = opts or {}, zoom = 1, pan = 0, slots = {}, view = 1 }, Scene)
+    local self = setmetatable({ opts = opts or {}, zoom = 1, panX = 0, panY = 0, slots = {}, view = 1 }, Scene)
     local f = CreateFrame("Frame", nil, parent, UI.BACKDROP)
     self.frame = f
     UI.ApplyDarkGlass(f, 0.10, 0.09, 0.08, 1.0, 0.70, 0.55, 0.25, 0.70)
@@ -327,14 +378,6 @@ function UI.CreateStoryScene(parent, opts)
     self.label:SetShadowColor(0, 0, 0, 1)
     self.more = top:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     self.more:SetPoint("TOPLEFT", self.label, "BOTTOMLEFT", 0, -2)
-    -- the names in class colors along the ground, when the figures stand
-    -- too close for a name under each one
-    self.legend = top:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    self.legend:SetPoint("BOTTOMLEFT", 8, 4)
-    self.legend:SetPoint("BOTTOMRIGHT", -8, 4)
-    self.legend:SetJustifyH("CENTER")
-    self.legend:SetShadowOffset(1, -1)
-    self.legend:SetShadowColor(0, 0, 0, 1)
 
     -- view controls: previous / next scene, zoom, enlarge
     self.prev = UI.CreateSleekButton(top, 22, 18, "<", "tool")
@@ -349,10 +392,10 @@ function UI.CreateStoryScene(parent, opts)
     self.prev:SetPoint("RIGHT", self.next, "LEFT", -2, 0)
     self.prev.tipTitle, self.prev.tipText = "|cffffd100Previous scene|r", "The party, then each boss of the story."
     self.next.tipTitle, self.next.tipText = "|cffffd100Next scene|r", "The party, then each boss of the story."
-    self.zoomIn.tipTitle, self.zoomIn.tipText = "|cffffd100Zoom in|r", (opts and opts.wheelZoom) and "Or the mouse wheel. Drag to look around." or "Or Ctrl + mouse wheel over the scene. Drag to look around."
+    self.zoomIn.tipTitle, self.zoomIn.tipText = "|cffffd100Zoom in|r", "Or the mouse wheel over the scene. Drag to move the camera."
     self.zoomOut.tipTitle, self.zoomOut.tipText = "|cffffd100Zoom out|r", self.zoomIn.tipText
     self.big.tipTitle = "|cffffd100" .. (opts and opts.bigText or "Enlarge") .. "|r"
-    self.big.tipText = (opts and opts.bigTip) or "Shows this scene in a big window."
+    self.big.tipText = (opts and opts.bigTip) or "Shows the whole party side by side in a big window. Or click the scene."
     self.prev:SetScript("OnClick", function() self:Step(-1) end)
     self.next:SetScript("OnClick", function() self:Step(1) end)
     self.zoomIn:SetScript("OnClick", function() self:Zoom(0.25) end)
@@ -363,25 +406,26 @@ function UI.CreateStoryScene(parent, opts)
 
     f:EnableMouse(true)
     f:EnableMouseWheel(true)
-    f:SetScript("OnMouseWheel", function(_, delta)
-        if self.opts.wheelZoom or (IsControlKeyDown and IsControlKeyDown()) then
-            self:Zoom(delta * 0.15)
-        elseif self.opts.onWheel then
-            self.opts.onWheel(delta)
-        end
-    end)
-    -- drag to look around while zoomed in
+    f:SetScript("OnMouseWheel", function(_, delta) self:Zoom(delta * 0.2) end)
+    -- drag to move the camera (any way, while zoomed in); a click opens
+    -- the big window
     f:SetScript("OnMouseDown", function(_, button)
-        if button ~= "LeftButton" or self.zoom <= 1 then return end
-        local x = GetCursorPosition()
-        self.dragFrom, self.dragPan = x / (f:GetEffectiveScale() or 1), self.pan
+        if button == "LeftButton" then self:BeginDrag() end
     end)
-    f:SetScript("OnMouseUp", function() self.dragFrom = nil end)
+    f:SetScript("OnMouseUp", function(_, button)
+        if button ~= "LeftButton" then return end
+        if not self:EndDrag() and self.opts.onBig and not self.opts.spread then self.opts.onBig(self) end
+    end)
     f:SetScript("OnUpdate", function()
-        if not self.dragFrom then return end
-        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then self.dragFrom = nil return end
-        local x = GetCursorPosition() / (f:GetEffectiveScale() or 1)
-        self.pan = self.dragPan + (x - self.dragFrom)
+        local d = self.drag
+        if not d or d.stop then return end
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then d.stop = true return end
+        local x, y = GetCursorPosition()
+        local sc = f:GetEffectiveScale() or 1
+        local dx, dy = x / sc - d.x, y / sc - d.y
+        if not d.moved and dx * dx + dy * dy < 16 then return end
+        d.moved = true
+        self.panX, self.panY = d.px + dx, d.py + dy
         self:Layout()
     end)
     f:SetScript("OnHide", function() self:Release() end)
@@ -401,22 +445,35 @@ end
 function Scene:SetStory(st, view)
     self.story = st
     self.view = view or 1
-    self.zoom, self.pan = 1, 0
+    self.zoom, self.panX, self.panY = 1, 0, 0
     self:Refresh()
 end
 
 function Scene:Step(d)
     local n = #self:Views()
     self.view = ((self.view - 1 + d) % n) + 1
-    self.pan = 0
+    self.panX, self.panY = 0, 0
     self:Refresh()
     if self.opts.onView then self.opts.onView(self.view) end
 end
 
 function Scene:Zoom(d)
-    self.zoom = math.max(1, math.min(2.5, self.zoom + d))
-    if self.zoom == 1 then self.pan = 0 end
+    self.zoom = math.max(1, math.min(3, self.zoom + d))
+    if self.zoom == 1 then self.panX, self.panY = 0, 0 end
     self:Layout()
+end
+
+function Scene:BeginDrag()
+    local x, y = GetCursorPosition()
+    local sc = self.frame:GetEffectiveScale() or 1
+    self.drag = { x = (x or 0) / sc, y = (y or 0) / sc, px = self.panX, py = self.panY }
+end
+
+-- True when the press moved the camera (so it was no click)
+function Scene:EndDrag()
+    local d = self.drag
+    self.drag = nil
+    return d and d.moved or false
 end
 
 function Scene:Release()
@@ -424,14 +481,13 @@ function Scene:Release()
         ClearSlotModel(s)
         if s.bossModel then pcall(s.bossModel.ClearModel, s.bossModel) end
     end
-    self.dragFrom = nil
+    self.drag = nil
 end
 
 local function Slot(self, i)
     local s = self.slots[i]
     if not s then
-        s = NewSlot(self.stage)
-        s.useDress = true
+        s = NewSlot(self.stage, self)
         self.slots[i] = s
     end
     return s
@@ -517,11 +573,6 @@ function Scene:Refresh()
         self.bossSlot = s
     end
     for i = #members + (v.kind == "boss" and 2 or 1), #self.slots do self.slots[i]:Hide() end
-    local names = {}
-    for _, m in ipairs(members) do
-        table.insert(names, "|cff" .. Hex(ClassRGB(m.p)) .. tostring(m.p.name) .. "|r")
-    end
-    self.legendText = table.concat(names, "  ")
     self.label:SetText(v.kind == "boss" and ("|cffffd100The party|r |cffd7c4a3faces|r |cffdc143c" .. v.boss .. "|r")
         or "|cffffd100The party|r")
     self.more:SetText(more > 0 and ("|cffd7c4a3and " .. more .. " more|r") or "")
@@ -530,78 +581,90 @@ function Scene:Refresh()
     self:Layout()
 end
 
--- Positions the figures for the frame's size, zoom and pan
+-- Positions the figures for the frame's size, zoom and camera.
+-- 0.6.7 (Mor's test): the zoom grows the whole scene around the figures'
+-- chests and the drag moves the camera any way, so a face or the boots
+-- can be brought into view. Names stand under the figures, on two
+-- staggered rows (first names when even that is tight) when the figures
+-- stand close.
 function Scene:Layout()
     local f = self.frame
     local W, H = f:GetWidth() or 0, f:GetHeight() or 0
     if W < 40 or H < 40 or not self.members then return end
     local n = #self.members
+    local spread = self.opts.spread
     local bossW = self.bossSlot and math.floor(W * 0.36) or 0
     local partyW = W - bossW - 16
-    -- figure height: a bit under the scene's height (mist above the
-    -- tallest), shrunk until the row fits
-    local ground = 20
-    local figH = (H - ground - 8) * 0.84
-    local function RowWidth(h) local w = h * FIG_ASPECT return w + (n - 1) * w * 0.58 end
+    local gap = spread and 1.08 or 0.62
+    local figH = (H - 30 - 8) * 0.86
+    local function RowWidth(h) local w = h * FIG_ASPECT return w + (n - 1) * w * gap end
     if n > 0 and RowWidth(figH) > partyW then figH = figH * partyW / RowWidth(figH) end
-    figH = figH * self.zoom
     local figW = figH * FIG_ASPECT
-    local step = figW * 0.58
+    local step = figW * gap
+    local mode = (n <= 1 or step >= 112) and "each" or ((step * 2 >= 104) and "two" or "first")
+    local ground = (mode == "each") and 18 or 30
     local rowW = n > 0 and (figW + (n - 1) * step) or 0
-    -- panning stays inside the zoomed row
-    local spare = math.max(0, rowW - partyW)
-    self.pan = math.max(-spare / 2 - bossW, math.min(spare / 2, self.pan))
-    local left = 8 + (partyW - rowW) / 2 + self.pan
+    local left = 8 + (partyW - rowW) / 2
     local center = (n + 1) / 2
-    -- a name under each figure only when there is room for it
-    local nameEach = step >= 118
-    self.legend:SetText(nameEach and "" or (self.legendText or ""))
-    self.legend:ClearAllPoints()
-    self.legend:SetPoint("BOTTOMLEFT", 8, 4)
-    self.legend:SetPoint("BOTTOMRIGHT", -(8 + bossW), 4)
+    -- the camera
+    local z = self.zoom or 1
+    if z <= 1 then self.panX, self.panY = 0, 0 end
+    local mx, my = W * z * 0.5, H * z * 0.6
+    self.panX = math.max(-mx, math.min(mx, self.panX or 0))
+    self.panY = math.max(-my, math.min(my, self.panY or 0))
+    local cx, cy = W / 2, ground + figH * 0.62
+    local function TX(x) return cx + (x - cx) * z + self.panX end
+    local function TY(y) return cy + (y - cy) * z + self.panY end
+    local groundY = TY(ground)
     for i, m in ipairs(self.members) do
         local s = self.slots[i]
         local d = math.abs(i - center)
-        local scale = 1 - d * 0.06
+        local scale = spread and 1 or (1 - d * 0.06)
         local h, w = figH * scale, figW * scale
         local x = left + (i - 1) * step + (figW - w) / 2
-        local y = ground + d * figH * 0.05
+        local y = ground + (spread and 0 or d * figH * 0.05)
+        local X, Y, ww, hh = TX(x), TY(y), w * z, h * z
         s:ClearAllPoints()
-        s:SetSize(w, h)
-        s:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", x, y)
+        s:SetSize(ww, hh)
+        s:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", X, Y)
         s:SetFrameLevel((f:GetFrameLevel() or 1) + 10 - math.floor(d * 2))
         s.shadow:SetAllPoints(s)
         s.glow:ClearAllPoints()
-        s.glow:SetSize(w * 1.5, h * 1.1)
-        s.glow:SetPoint("CENTER", s, "CENTER", 0, -h * 0.05)
+        s.glow:SetSize(ww * 1.5, hh * 1.1)
+        s.glow:SetPoint("CENTER", s, "CENTER", 0, -hh * 0.05)
         s.foot:ClearAllPoints()
-        s.foot:SetSize(w * 0.9, h * 0.12)
-        s.foot:SetPoint("CENTER", s, "BOTTOM", 0, h * 0.04)
-        FitModel(s, w, h)
+        s.foot:SetSize(ww * 0.9, hh * 0.12)
+        s.foot:SetPoint("CENTER", s, "BOTTOM", 0, hh * 0.04)
+        FitModel(s, ww, hh)
+        -- the name, in the class color
+        local full = tostring(m.p.name)
+        local text = (mode == "first") and (full:match("^(%S+)") or full) or full
+        s.name:SetText("|cff" .. Hex(s.rgb or ClassRGB(m.p)) .. text .. "|r")
+        local row = (mode ~= "each" and i % 2 == 0) and 1 or 0
         s.name:ClearAllPoints()
-        s.name:SetPoint("TOP", s, "BOTTOM", 0, -2)
-        s.name:SetWidth(math.max(40, step))
-        if nameEach then s.name:Show() else s.name:Hide() end
-        -- far outside the stage while zoomed: hidden (models don't clip)
-        local visible = (x + w > 0) and (x < W)
+        s.name:SetWidth(n <= 1 and math.max(60, W - 16) or math.max(56, step * z * ((mode == "each") and 1 or 2) - 4))
+        s.name:SetPoint("TOP", f, "BOTTOMLEFT", X + ww / 2, groundY - 2 - row * 12)
+        s.name:Show()
+        -- far outside the stage: hidden
+        local visible = (X + ww > 0) and (X < W) and (Y < H) and (Y + hh > -40)
         if visible then s:Show() else s:Hide() end
     end
     if self.bossSlot then
         local s = self.bossSlot
-        local bh = math.min(H - ground - 10, bossW * 1.3) * math.min(self.zoom, 1.6)
+        local bw, bh = bossW * z, math.min(H - ground - 10, bossW * 1.3) * z
         s:ClearAllPoints()
-        s:SetSize(bossW, bh)
-        s:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8 + self.pan, ground)
+        s:SetSize(bw, bh)
+        s:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", TX(W - 8 - bossW), TY(ground))
         s:SetFrameLevel((f:GetFrameLevel() or 1) + 12)
         s.glow:ClearAllPoints()
-        s.glow:SetSize(bossW * 1.4, bh * 1.1)
+        s.glow:SetSize(bw * 1.4, bh * 1.1)
         s.glow:SetPoint("CENTER", s, "CENTER", 0, 0)
         s.foot:ClearAllPoints()
-        s.foot:SetSize(bossW * 0.9, bh * 0.1)
+        s.foot:SetSize(bw * 0.9, bh * 0.1)
         s.foot:SetPoint("CENTER", s, "BOTTOM", 0, bh * 0.04)
         s.name:ClearAllPoints()
         s.name:SetPoint("TOP", s, "BOTTOM", 0, -2)
-        s.name:SetWidth(bossW)
+        s.name:SetWidth(bw)
         s.name:Show()
     end
     -- words and buttons above every figure and model
@@ -629,7 +692,8 @@ do
         local z = stage.zoom or ZOOM_START
         if fig.model and fig.model:IsShown() then
             -- the camera moves in and rises toward the face
-            pcall(fig.model.SetCameraPosition, fig.model, 5.5 / z, 0, 1.1 + (z - 1) * 0.22)
+            fig.camZoom = z
+            ApplyCam(fig)
         end
         if fig.shadow:IsShown() then
             -- the cut-out grows, its head kept near the top of the stage
@@ -792,6 +856,9 @@ do
             glow:SetVertexColor(rgb[1], rgb[2], rgb[3], 0.85)
             glow:SetSize(260, 280)
             local unit = isYou and "player" or NearUnit(p.name)
+            local key = tostring((ns.ShadowTexture(p.race, p.sex))):match("([%w_]+)%.png$")
+            fig.fitTop = SHADOW_TOP[key or ""] or SHADOW_TOP.unknown
+            fig.camZoom = ZOOM_START
             local real = unit and ShowReal(fig, unit, (isYou and st.gear) or (not isYou and p.gear) or nil)
             fig:SetSize(FIG_H * FIG_ASPECT, FIG_H)
             fig:ClearAllPoints()
@@ -899,12 +966,13 @@ function UI.CreateBossPanel(parent)
 end
 
 -- =========================================================
--- The big window (Enlarge): the same scene, much bigger, with the wheel
--- zooming and dragging to look around. It can be resized.
+-- The big window (Enlarge, or a click on the scene): the whole party side
+-- by side, each at full size (0.6.7, Mor), with the wheel zooming and
+-- dragging moving the camera. It can be resized.
 -- =========================================================
 do
     local f = CreateFrame("Frame", "RPChroniclerSceneFrame", UIParent, UI.BACKDROP)
-    f:SetSize(900, 520)
+    f:SetSize(1000, 560)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetMovable(true)
@@ -925,7 +993,7 @@ do
     local closeX = UI.CreateSleekButton(f, 22, 20, "x", "danger")
     closeX:SetPoint("TOPRIGHT", -8, -8)
     closeX:SetScript("OnClick", function() f:Hide() end)
-    local hint = UI.Label(f, "|cff8f9ba8Mouse wheel: zoom. Drag: look around. Drag the corner to resize.|r", "GameFontHighlightSmall")
+    local hint = UI.Label(f, "|cff8f9ba8Mouse wheel: zoom. Drag: move the camera. Click someone to see them up close. Drag the corner to resize.|r", "GameFontHighlightSmall")
     hint:SetPoint("BOTTOMLEFT", 14, 10)
     local grip = CreateFrame("Button", nil, f)
     grip:SetSize(16, 16)
@@ -936,7 +1004,7 @@ do
     grip:SetScript("OnMouseUp", function() f:StopMovingOrSizing() end)
 
     local scene = UI.CreateStoryScene(f, {
-        wheelZoom = true, bigText = "Close", bigTip = "Back to the Story Book.",
+        spread = true, bigText = "Close", bigTip = "Back to the Story Book.",
         onBig = function() f:Hide() end,
     })
     scene.frame:SetPoint("TOPLEFT", 12, -38)

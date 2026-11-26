@@ -636,10 +636,10 @@ do
           tip = "One line on the Story Book shelf on reading your stories with screenshots in StoryViewer.html." },
         { key = "storyCover", label = "Story scenes",
           tip = "Each story opens with its party: you in 3D in the gear from that run, companions near you as they are, everyone else as a shadow of their race. Click anyone to see them up close with their items. Each boss gets a panel at its chapter. Turn it off if your client shows no models." },
-        { key = "bookPages", label = "Pages", names = { PARCHMENT = "Parchment", NIGHT = "Night" },
-          tip = "Parchment: light pages, with the story's colors inked darker so they read on paper. Night: dark pages, with the colors as the story was written." },
+        { key = "bookPages", label = "Pages", names = { PARCHMENT = "Parchment", LIGHT = "Light parchment", NIGHT = "Night" },
+          tip = "Parchment: warm paper pages, with the story's colors inked darker so they read on paper. Light parchment: the same, on brighter pages. Night: dark pages, with the colors as the story was written." },
         { key = "bookMotion", label = "Book animations",
-          tip = "The book opens, turns its pages and closes with short animations (under half a second). Off: everything happens at once." },
+          tip = "The book opens from its front cover, turns its pages and closes to its cover with short animations. Off: everything happens at once." },
     })
     Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -250)
     O.refresh.AI = function()

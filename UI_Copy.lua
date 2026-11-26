@@ -130,8 +130,9 @@ end
 
 -- 0.6.3: the instruction popup (Options > General, off by default).
 -- Ctrl+C asks for a one-line instruction for the AI; Enter (or Esc)
--- shows the snapshot selected, with the instruction as its [Instruction]
--- line, and Ctrl+C there copies it, like the Copy box style.
+-- selects the snapshot, with the instruction as its [Instruction] line.
+-- 0.6.4: the copy happens in the same small popup (Ctrl+C there), no
+-- big Copy box.
 function UI.ShowQuickNotePopup()
     UI.EnsureOptions()
     if UI.frame:IsShown() then UI.frame:Hide() end
@@ -146,8 +147,7 @@ function UI.ShowQuickNotePopup()
             return
         end
         CopyLog("copy", "instruction popup: len " .. #snap .. ((note or "") ~= "" and ", with instruction" or ""))
-        UI.ShowCopyBox("|cffffd100RP Chronicler|r |cff69ccf0[" .. Q.label .. "]|r",
-            "|cff9aa5b4Selected. Press|r |cffffd100Ctrl+C|r |cff9aa5b4to copy, it closes by itself.|r", snap, true)
+        UI.AskLineCopy("|cffffd100Copy for your AI|r  |cff69ccf0[" .. Q.label .. "]|r", snap)
     end
     UI.AskLine({
         title = "Instruction for the AI  |cff69ccf0[" .. Q.label .. "]|r",

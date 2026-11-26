@@ -28,32 +28,49 @@ local function IsBossUnit(unit)
 end
 ns.IsBossUnit = IsBossUnit
 
-local function CheckInstanceAdventureState(isInitialLogin)
+-- 0.6.4: entering a dungeon or raid asks "Start recording?" (Options >
+-- Recording: Ask, Always or Never). The run is named from the instance
+-- itself, and an instance run ends when you leave it.
+local function CheckInstanceAdventureState()
     ns.EnsureDB()
     local isDungeonOrRaid = ns.InstanceKind() ~= "world"
     local active = ns.GetActiveAdventure()
 
     if isDungeonOrRaid then
-        local zoneName = ns.SafeStr(GetRealZoneText()) or ns.GetCurrentWhere()
-        if not active then
-            -- Options > Recording: "Auto-record dungeons and raids" (on by default)
-            if ns.Get("autoRecord") then
-                ns.StartAdventure(zoneName, true)
+        local instName, instID = ns.InstanceInfo()
+        instName = instName or ns.SafeStr(GetRealZoneText()) or ns.GetCurrentWhere()
+        if active and active.isAuto then
+            local same
+            if instID and active.instanceID then
+                same = instID == active.instanceID
+            else
+                same = instName == active.instanceName
             end
-        else
-            local zoneName2 = ns.SafeStr(GetRealZoneText())
-            if active.isAuto and zoneName2 and active.instanceName and zoneName2 ~= active.instanceName then
+            if not same then
                 -- A different dungeon than the run we were recording
-                ns.EndAdventure("Entered " .. zoneName2)
-                ns.StartAdventure(zoneName2, true)
+                ns.EndAdventure("Entered " .. instName)
+                ns.Notify("runChanged")
+                active = nil
             else
                 ns.SyncAdventureRoster()
+                return
             end
+        elseif active then
+            ns.SyncAdventureRoster()
+            return
+        end
+        local mode = ns.Get("instanceRecord")
+        if mode == "AUTO" then
+            local run = ns.StartAdventure(instName, true)
+            if run then ns.Notify("runChanged", run) end
+        elseif mode == "ASK" then
+            ns.OfferInstanceStart(instName, instID)
         end
     else
         -- A paused run stays put until you resume or end it
         if active and active.isAuto and not active.paused then
             ns.EndAdventure("Left Instance")
+            ns.Notify("runChanged")
         end
     end
 end
@@ -644,20 +661,30 @@ local function OnEvent(event, ...)
         ns.Debug("info", "login, version " .. tostring(ns.VERSION or "?"))
         -- Version banner, read from the toc's ## Version field (see Core.lua)
         print(string.format("|cffffd100RP Chronicler|r |cff69ccf0v%s|r |cff9aa5b4loaded - /rp to open|r", tostring(ns.VERSION or "?")))
+        -- 0.6.4: skill users learn when the story rules changed
+        local notice = ns.TemplateNotice and ns.TemplateNotice()
+        if notice then print("|cffffd100RP Chronicler|r |cffffb74d" .. notice .. "|r") end
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Zone info is reliable here, so a saved run is restored at the first one
         RestoreRunOnce()
         CheckInstanceAdventureState()
+        ns.LearnLooks("player")
     elseif event == "PLAYER_LOGOUT" then
         ns.TouchActiveAdventure(true)
     elseif event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
         ns.PollCombatSoon()
     elseif event == "ZONE_CHANGED_NEW_AREA" then
         ns.RequestScreenshot("newzone", ns.GetCurrentWhere())
-    elseif event == "GROUP_ROSTER_UPDATE" then
+    elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" then
         ns.SyncAdventureRoster()
+        -- 0.6.4: fill in race and sex for older runs' shadows
+        if event == "GROUP_ROSTER_UPDATE" and ns.ForEachGroupUnit then
+            ns.ForEachGroupUnit(function(u) ns.LearnLooks(u) end)
+        end
     elseif event == "PLAYER_TARGET_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" then
         local unit = (event == "PLAYER_TARGET_CHANGED") and "target" or "mouseover"
+        ns.LearnLooks(unit)
+        ns.LearnBossLooks(unit)
         if UnitExists(unit) and UnitIsPlayer(unit) and ns.Get("autoUpdateKnown") then
             local fullName = ns.GetUnitFullName(unit)
             local key = fullName and ns.FindPlayerKey(fullName, true)
@@ -677,6 +704,9 @@ local function OnEvent(event, ...)
         -- In Combat / Out of Combat, and the extra lines crowded the slices.
         ns.RecordAdventureCombatState(true)
         ns.NoteCombatStarted()
+        -- 0.6.4: a pull is when the group is together, so the roster sees
+        -- who is really in the run
+        ns.SyncAdventureRoster()
         if UnitExists("target") and IsBossUnit("target") and UnitCanAttack("player", "target") then
             local bName = ns.SafeStr(UnitName("target"))
             if bName then
@@ -686,10 +716,11 @@ local function OnEvent(event, ...)
     elseif event == "PLAYER_REGEN_ENABLED" then
         ns.RecordAdventureCombatState(false)
     elseif event == "ENCOUNTER_START" then
-        local _, encounterName = ...
+        local encounterID, encounterName = ...
         local bName = ns.SafeStr(encounterName)
+        ns.SyncAdventureRoster()
         if bName then
-            ns.RecordAdventureBossEngage(bName)
+            ns.RecordAdventureBossEngage(bName, nil, encounterID)
         end
     elseif event == "ENCOUNTER_END" then
         local _, encounterName, _, _, success = ...
@@ -791,6 +822,8 @@ end
 table.insert(EVENTS, "CHAT_MSG_WHISPER_INFORM")
 table.insert(EVENTS, "CHAT_MSG_LOOT")
 table.insert(EVENTS, "CHAT_MSG_MONEY")
+-- 0.6.4: role changes update the roster
+table.insert(EVENTS, "PLAYER_ROLES_ASSIGNED")
 ns.On(EVENTS, OnEvent)
 
 -- Chat events (0.6.1: one list each instead of an if-chain): the channel

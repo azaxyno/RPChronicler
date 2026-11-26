@@ -88,7 +88,8 @@ function ns.BuildAdventureSummary(adv)
         Gap()
     end
 
-    local parts = adv.participants or {}
+    -- 0.6.4: older runs listed "Morai" and "Morai Galeclaw" apart
+    local parts = ns.MergedRoster(adv.participants)
     if StatShown("roster", adv) and (#parts > 1 or adv.kind ~= "world") then
         Head(adv.kind == "world" and "Companions on the road:" or "Party Roster:")
         if #parts > 0 then
@@ -304,12 +305,25 @@ local function FoldedObjective(line, done)
 end
 
 -- 0.6.3: the green and better gear the player wore, by name
-local function GearLine(adv)
+local function GearLine(adv, gear)
     local names = {}
-    for _, g in ipairs(type(adv.gear) == "table" and adv.gear or {}) do
+    for _, g in ipairs(type(gear or adv.gear) == "table" and (gear or adv.gear) or {}) do
         if type(g) == "table" and g.name and (tonumber(g.q) or 0) >= 2 and #names < 10 then table.insert(names, g.name) end
     end
     return #names > 0 and table.concat(names, ", ") or nil
+end
+
+-- 0.6.4: "female Tauren" from a roster entry ("" when not recorded)
+local RACE_NAMES = { [1] = "Human", [2] = "Orc", [3] = "Dwarf", [4] = "Night Elf", [5] = "Undead", [6] = "Tauren",
+    [7] = "Gnome", [8] = "Troll", [9] = "Goblin", [10] = "Blood Elf", [11] = "Draenei", [22] = "Worgen" }
+function ns.LooksText(p)
+    if type(p) ~= "table" then return "" end
+    local race = p.raceName or RACE_NAMES[tonumber(p.race) or 0]
+    local sex = ({ [2] = "male", [3] = "female" })[tonumber(p.sex) or 0]
+    local t = {}
+    if sex then table.insert(t, sex) end
+    if race and race ~= "" then table.insert(t, race) end
+    return table.concat(t, " ")
 end
 
 -- First line of the Full Log: the trigger of the matching story skill
@@ -353,8 +367,9 @@ function ns.BuildAdventureFullLog(adv)
 
     local mates = {}
     table.insert(out, "Roster:")
-    if adv.participants and #adv.participants > 0 then
-        for _, p in ipairs(adv.participants) do
+    local roster = ns.MergedRoster(adv.participants)
+    if #roster > 0 then
+        for _, p in ipairs(roster) do
             local rTag = ns.GetRoleTag(p.role, false)
             local rolePart = (rTag ~= "") and (", " .. rTag) or ""
             local guildPart = ""
@@ -363,8 +378,11 @@ function ns.BuildAdventureFullLog(adv)
                 table.insert(mates, p.name)
             end
             local petPart = p.pet and (" - pet: " .. p.pet) or ""
-            table.insert(out, string.format("- %s (Lvl %s %s%s)%s%s",
-                p.name, (p.level and p.level ~= "") and p.level or "?", (p.class and p.class ~= "") and p.class or "Adventurer", rolePart, guildPart, petPart))
+            -- 0.6.4: "female Tauren Druid", so the story gets who they are right
+            local looks = ns.LooksText(p)
+            table.insert(out, string.format("- %s (Lvl %s %s%s%s)%s%s",
+                p.name, (p.level and p.level ~= "") and p.level or "?", looks ~= "" and (looks .. " ") or "",
+                (p.class and p.class ~= "") and p.class or "Adventurer", rolePart, guildPart, petPart))
         end
     else
         table.insert(out, "- Solo Adventurer")
@@ -375,6 +393,13 @@ function ns.BuildAdventureFullLog(adv)
     local gear = ns.LogOn("gear") and GearLine(adv)
     if gear then
         table.insert(out, "Wearing (" .. (adv.char or "the player") .. "): " .. gear)
+    end
+    -- 0.6.4: the party's gear, when Record party gear inspected them
+    if ns.LogOn("gear") then
+        for _, p in ipairs(ns.MergedRoster(adv.participants)) do
+            local line = p.name ~= adv.char and type(p.gear) == "table" and GearLine(adv, p.gear)
+            if line then table.insert(out, "Wearing (" .. p.name .. "): " .. line) end
+        end
     end
     table.insert(out, "")
 
@@ -460,9 +485,28 @@ function ns.BuildAdventureFullLog(adv)
     return ns.ApplyRunFixes(adv, table.concat(out, "\n"))
 end
 
--- Size of the Full Log, for the size meter: characters and rough tokens
+-- 0.6.4: the text the player copies for the AI. By default the story
+-- template (dungeon or open world) goes in front of the log, so any AI
+-- chat writes the story with no skill, and the rules always match this
+-- version. With "My AI has the skill" it stays short (line 1 calls the
+-- skill) and says which template version the addon expects.
+function ns.BuildAiText(adv)
+    local log = ns.BuildAdventureFullLog(adv) or ""
+    if not adv then return log end
+    local first, rest = log:match("^([^\n]*)\n?(.*)$")
+    if ns.Get("aiHasSkill") then
+        return first .. "\nTemplate version: " .. tostring(ns.TEMPLATE_VERSION or "?") .. "\n" .. rest
+    end
+    local tpl = (adv.kind == "world") and ns.ADVENTURE_STORY_TEMPLATE or ns.DUNGEON_STORY_TEMPLATE
+    return first .. "\n" ..
+        "Write a story from the RP Chronicler Full Log at the end of this message. Follow the story rules below; " ..
+        "they come with RP Chronicler " .. tostring(ns.VERSION or "") .. ", so they always match it, and they replace any older skill of the same name.\n\n" ..
+        "---- STORY RULES ----\n" .. tostring(tpl or "") .. "\n\n---- FULL LOG ----\n" .. rest
+end
+
+-- Size of the copy, for the size meter: characters and rough tokens
 function ns.GetFullLogSize(adv)
-    local text = ns.BuildAdventureFullLog(adv) or ""
+    local text = ns.BuildAiText(adv) or ""
     local chars = #text
     return chars, math.floor(chars / 4 + 0.5)
 end

@@ -10,7 +10,11 @@ local UI = ns.UI
 -- combat. Re-open with /rp setup or Options > Privacy.
 -- Everything here can be changed later in Options.
 -- =========================================================
-local SETUP_VERSION = 3   -- 0.6.3: update notices and error reports
+local SETUP_VERSION = 4   -- 0.6.4: dungeons and raids ask before recording, RP button
+-- Mor (0.6.4): the setup stays basic, 4 choices at most (what to use,
+-- dungeon recording, screenshots, RP button). Everything else that is on
+-- by default (party gear, update notices, error reports) is named in one
+-- line under the choices and switched in Options, never added here.
 ns.SETUP_VERSION = SETUP_VERSION
 
 local W = 440              -- frame width
@@ -27,10 +31,13 @@ local USES = {
 -- label, a one-line why, and how it reads and writes the settings.
 local CHOICES = {
     { since = 2, kind = "use" },
-    { since = 2, key = "autoRecord", label = "Auto-record dungeons and raids",
-      why = "A run starts when you enter an instance and ends when you leave.",
-      get = function() return ns.Get("autoRecord") end,
-      set = function(v) ns.Set("autoRecord", v) end },
+    { since = 4, key = "instanceRecord", label = "Ask to record dungeons and raids",
+      why = "Entering a dungeon or raid asks if you want to record it. The run ends when you leave.",
+      get = function() return ns.Get("instanceRecord") ~= "OFF" end,
+      set = function(v)
+          if not v then ns.Set("instanceRecord", "OFF")
+          elseif ns.Get("instanceRecord") == "OFF" then ns.Set("instanceRecord", "ASK") end
+      end },
     { since = 2, key = "shots", label = "Screenshots in dungeons and raids",
       why = "On boss kills, level ups and moments you mark.",
       get = function() return ns.Get("autoShots") ~= "OFF" end,
@@ -38,15 +45,11 @@ local CHOICES = {
           if not v then ns.Set("autoShots", "OFF")
           elseif ns.Get("autoShots") == "OFF" then ns.Set("autoShots", "INSTANCE") end
       end },
-    -- 0.6.3: the only thing RP Chronicler ever sends, and it is only the version number
-    { since = 3, key = "versionCheck", label = "Update notices", always = true,
-      why = "Sends only RP Chronicler's version number to your group and guild, so you hear when a newer version exists. Nothing else is sent.",
-      get = function() return ns.Get("versionCheck") end,
-      set = function(v) ns.Set("versionCheck", v) end },
-    { since = 3, key = "keepErrors", label = "Keep error reports", always = true,
-      why = "Keeps RP Chronicler's own errors (never chat) in its saved file, for bug reports.",
-      get = function() return ns.Get("keepErrors") end,
-      set = function(v) ns.Set("keepErrors", v) end },
+    -- 0.6.4: the RP button's place
+    { since = 4, key = "iconMode", label = "RP button on the minimap", always = true,
+      why = "Off: a floating RP button you can drag anywhere instead.",
+      get = function() return ns.Get("iconMode") ~= "FLOAT" end,
+      set = function(v) ns.Set("iconMode", v and "MINIMAP" or "FLOAT") end },
 }
 
 local S = { rows = {} }
@@ -126,7 +129,7 @@ end
 S.later = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 S.later:SetWidth(TEXT_W)
 S.later:SetJustifyH("CENTER")
-S.later:SetText("|cff8f9ba8Change any of this later in Options. Which chat is kept: Options > Privacy.|r")
+S.later:SetText("|cff8f9ba8Also on, all kept on your PC: party gear (each member inspected once while you record), update notices (only the version number is sent) and error reports. Change any of this later in Options > Recording and Privacy.|r")
 
 S.start = UI.CreateSleekButton(f, 160, 28, "Start", "good")
 S.start:SetPoint("BOTTOM", 0, 14)
@@ -238,7 +241,6 @@ local function Finish()
             pcall(row.choice.set, v)
         end
     end
-    if S.use == "COPY" then ns.Set("promptOnGroup", false) end
     RPChroniclerDB.setupVersion = SETUP_VERSION
     f:Hide()
     UI.SyncCopyChip()
@@ -249,7 +251,7 @@ local function Finish()
         print("|cffffd100RP Chronicler|r |cff9aa5b4RP Copy, next:|r type /rp, open Options > AI & Stories, copy the RP Template into your AI as a character skill, and put its trigger in Options > Slice Tabs as the Skill Call. Then Ctrl+C copies the scene.")
     end
     if S.use ~= "COPY" then
-        print("|cffffd100RP Chronicler|r |cff9aa5b4Stories, next:|r type /rp, open Adventures and press Start (dungeons and raids can start by themselves). When the run ends, copy its Full Log and the story template (Options > AI & Stories) into your AI, then import the story in the Story Book.")
+        print("|cffffd100RP Chronicler|r |cff9aa5b4Stories, next:|r type /rp, open Adventures and press Start (dungeons and raids ask when you enter). When the run ends, open its Full Log, click Copy for AI, paste it into any AI chat, then import the story it writes in the Story Book.")
     end
     ns.Debug("info", "setup saved (v" .. SETUP_VERSION .. ", use " .. tostring(S.use) .. ")")
 end

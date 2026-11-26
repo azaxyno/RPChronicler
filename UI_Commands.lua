@@ -46,8 +46,23 @@ miniBtn:EnableMouse(true)
 miniBtn:RegisterForDrag("LeftButton")
 miniBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 miniBtn:SetScript("OnDragStart", miniBtn.StartMoving)
-miniBtn:SetScript("OnDragStop", miniBtn.StopMovingOrSizing)
+-- 0.6.4: where you drop it is kept in the saved file
+miniBtn:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local point, _, relPoint, x, y = self:GetPoint(1)
+    if point and RPChroniclerDB then
+        RPChroniclerDB.buttonPos = { point, relPoint or point, math.floor((x or 0) + 0.5), math.floor((y or 0) + 0.5) }
+    end
+end)
+miniBtn:SetClampedToScreen(true)
 UI.miniBtn = miniBtn
+local function PlaceFloating()
+    local p = RPChroniclerDB and RPChroniclerDB.buttonPos
+    if type(p) == "table" and p[1] then
+        miniBtn:ClearAllPoints()
+        miniBtn:SetPoint(p[1], UIParent, p[2] or p[1], tonumber(p[3]) or 0, tonumber(p[4]) or 0)
+    end
+end
 
 -- Right-click menu (0.4.0): Start/Stop, Pause/Resume, Mark Moment, Story
 -- Book, Clear logs. A plain frame, so it works in combat too.
@@ -73,6 +88,14 @@ do
             ns.ClearSessionLogs()
             print("|cff00ff00[RP Chronicler]|r All logs cleared.")
         end },
+        -- 0.6.4: minimap or floating, also from here (Options > General too)
+        { key = "mode", fn = function()
+            local float = ns.Get("iconMode") ~= "FLOAT"
+            ns.Set("iconMode", float and "FLOAT" or "MINIMAP")
+            if float then
+                print("|cffffd100RP Chronicler|r |cff9aa5b4The RP button floats now: drag it anywhere, it stays there. (A minimap button collector may keep its copy until you restart the game.)|r")
+            end
+        end },
     }
     for i, it in ipairs(items) do
         local b = UI.CreateSleekButton(menu, 158, 20, it.label or "", it.key == "run" and "good" or nil)
@@ -95,17 +118,23 @@ do
         if run then pauseBtn:Enable() else pauseBtn:Disable() end
         pauseBtn:SetText((run and run.paused) and "Resume" or "Pause")
         if run and not run.paused then markBtn:Enable() else markBtn:Disable() end
+        items[#items].btn:SetText(ns.Get("iconMode") == "FLOAT" and "Put button on minimap" or "Float the RP button")
     end
 
-    function UI.ToggleIconMenu()
+    -- anchor: the button that opened it (floating or minimap)
+    function UI.ToggleIconMenu(anchor)
         if menu:IsShown() then menu:Hide() return end
+        anchor = anchor or miniBtn
+        menu.anchor = anchor
         Refresh()
         menu:ClearAllPoints()
-        local y = miniBtn:GetBottom() or 0
+        local y = anchor:GetBottom() or 0
+        local x = anchor:GetLeft() or 0
+        local right = x > ((GetScreenWidth and GetScreenWidth() or 1920) - 200)
         if y > 160 then
-            menu:SetPoint("TOPLEFT", miniBtn, "BOTTOMLEFT", 0, -2)
+            menu:SetPoint(right and "TOPRIGHT" or "TOPLEFT", anchor, right and "BOTTOMRIGHT" or "BOTTOMLEFT", 0, -2)
         else
-            menu:SetPoint("BOTTOMLEFT", miniBtn, "TOPLEFT", 0, 2)
+            menu:SetPoint(right and "BOTTOMRIGHT" or "BOTTOMLEFT", anchor, right and "TOPRIGHT" or "TOPLEFT", 0, 2)
         end
         menu.idle = 0
         menu:Show()
@@ -113,7 +142,7 @@ do
 
     -- Closes a few seconds after the mouse leaves it
     menu:SetScript("OnUpdate", function(self, elapsed)
-        if self:IsMouseOver() or miniBtn:IsMouseOver() then
+        if self:IsMouseOver() or (self.anchor and self.anchor:IsMouseOver()) then
             self.idle = 0
         else
             self.idle = (self.idle or 0) + elapsed
@@ -207,6 +236,125 @@ do
 end
 
 -- =========================================================
+-- 0.6.4: the RP button on the minimap's edge (the default), like other
+-- addons. Drag it around the minimap; Options > General > RP button
+-- switches between it and the floating button. Same clicks, same menu,
+-- same recording dot.
+-- =========================================================
+do
+    -- Made only when it is shown: with the floating button chosen there is
+    -- no minimap button at all, so a minimap button collector can't take it
+    local mm
+    local function MakeMinimapButton()
+        mm = CreateFrame("Button", "RPChroniclerMinimapButton", Minimap or UIParent)
+        mm:SetSize(31, 31)
+        mm:SetFrameStrata("MEDIUM")
+        mm:SetFrameLevel(8)
+        mm:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        mm:RegisterForDrag("LeftButton")
+        mm:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+        local bg = mm:CreateTexture(nil, "BACKGROUND")
+        bg:SetSize(20, 20)
+        bg:SetPoint("TOPLEFT", 7, -5)
+        bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
+        local icon = mm:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(20, 20)
+        icon:SetPoint("TOPLEFT", 7, -5)
+        icon:SetTexture("Interface\\AddOns\\RPChronicler\\Media\\logo")
+        local border = mm:CreateTexture(nil, "OVERLAY")
+        border:SetSize(53, 53)
+        border:SetPoint("TOPLEFT")
+        border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+        local dot = mm:CreateTexture(nil, "OVERLAY", nil, 2)
+        dot:SetSize(9, 9)
+        dot:SetPoint("CENTER", mm, "TOPRIGHT", -7, -7)
+        dot:SetTexture(UI.ICONS.DOT)
+        dot:Hide()
+        UI.minimapBtn = mm
+
+        -- Position: an angle around the minimap (degrees), kept in the saved file
+        local function Place()
+            local angle = math.rad(tonumber(RPChroniclerDB and RPChroniclerDB.minimapAngle) or 200)
+            local r = ((Minimap and Minimap:GetWidth() or 140) / 2) + 6
+            mm:ClearAllPoints()
+            mm:SetPoint("CENTER", Minimap or UIParent, "CENTER", math.cos(angle) * r, math.sin(angle) * r)
+        end
+        mm:SetScript("OnDragStart", function(self)
+            self:SetScript("OnUpdate", function()
+                if not Minimap then return end
+                local mx, my = Minimap:GetCenter()
+                local cx, cy = GetCursorPosition()
+                local s = Minimap:GetEffectiveScale() or 1
+                if not (mx and my) then return end
+                RPChroniclerDB.minimapAngle = math.floor(math.deg(math.atan2(cy / s - my, cx / s - mx)) + 0.5) % 360
+                Place()
+            end)
+        end)
+        mm:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
+        mm:SetScript("OnClick", function(self, button)
+            if button == "RightButton" then
+                UI.ToggleIconMenu(self)
+            else
+                RPChronicler_Toggle()
+            end
+        end)
+        -- its own tooltip (the floating button's hover look needs a backdrop,
+        -- which this round button has none of)
+        mm:SetScript("OnEnter", function(self)
+            local run = ns.GetActiveAdventure and ns.GetActiveAdventure()
+            local state = run and (run.paused and "|cffffb74dRecording paused|r" or "|cffff5252Recording|r") or nil
+            if state then
+                UI.Tooltip(self, "|cffffd100RP Chronicler|r", state, "Click: open. Right-click: menu.", "Drag: move around the minimap.")
+            else
+                UI.Tooltip(self, "|cffffd100RP Chronicler|r", "Click: open. Right-click: menu.", "Drag: move around the minimap.")
+            end
+        end)
+        mm:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+        -- the recording dot, as on the floating button
+        local acc = 0
+        local ticker = CreateFrame("Frame", nil, mm)
+        ticker:SetScript("OnUpdate", function(_, elapsed)
+            acc = acc + elapsed
+            if acc < 0.05 then return end
+            acc = 0
+            local run = ns.GetActiveAdventure()
+            if run and run.paused then
+                dot:SetVertexColor(1, 0.72, 0.30, 1)
+                dot:SetAlpha(1)
+                dot:Show()
+            elseif run then
+                dot:SetVertexColor(1, 0.15, 0.15, 1)
+                dot:SetAlpha(0.35 + 0.65 * math.abs(math.sin(GetTime() * 4)))
+                dot:Show()
+            else
+                dot:Hide()
+            end
+        end)
+
+        UI.PlaceMinimapButton = Place
+    end
+
+    -- Shows the button the player chose (Options > General > RP button,
+    -- or the button's right-click menu)
+    function UI.ApplyIconMode()
+        local onMinimap = ns.Get("iconMode") ~= "FLOAT" and Minimap ~= nil
+        if onMinimap then
+            if not mm then MakeMinimapButton() end
+            UI.PlaceMinimapButton()
+            mm:Show()
+            miniBtn:Hide()
+        else
+            if mm then mm:Hide() end
+            PlaceFloating()
+            miniBtn:Show()
+        end
+    end
+    ns.On("PLAYER_LOGIN", function() UI.ApplyIconMode() end)
+    ns.Listen("setting", function(key) if key == "iconMode" then UI.ApplyIconMode() end end)
+end
+
+-- =========================================================
 -- 0.6.3: one entry in the game's own Options > AddOns, with a single
 -- button that opens RP Chronicler's Options (no settings of its own)
 -- =========================================================
@@ -234,7 +382,7 @@ do
     end)
     local slash = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     slash:SetPoint("TOPLEFT", open, "BOTTOMLEFT", 0, -10)
-    slash:SetText("|cff8f9ba8Or type /rp in chat, or click the floating RP button.|r")
+    slash:SetText("|cff8f9ba8Or type /rp in chat, or click the RP button (on the minimap, or floating).|r")
 
     local ok = false
     if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
@@ -263,7 +411,9 @@ SlashCmdList["RPCHRONICLER"] = function(msg)
     elseif low == "capture" then
         RPChronicler_CaptureTarget()
     elseif low == "btn" then
-        if miniBtn:IsShown() then miniBtn:Hide() else miniBtn:Show() end
+        -- 0.6.4: shows or hides whichever RP button you chose
+        local b = (ns.Get("iconMode") ~= "FLOAT" and UI.minimapBtn) or miniBtn
+        if b:IsShown() then b:Hide() else b:Show() end
     elseif low == "options" or low == "config" then
         UI.OpenOptionsPage(RPChroniclerDB and RPChroniclerDB.optionsPage or "GENERAL")
     elseif low == "companions" then

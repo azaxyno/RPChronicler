@@ -98,13 +98,15 @@ end
 local STORY_SHARED_RULES = [[
 READING THE LOG (HIDDEN CONTEXT)
 
-1. Stay Faithful to the Log: build the story only from the real roster, places, foes, bosses, quests, loot, deaths and chat quotes in the log. Use rich fantasy prose for the scenes, but never invent bosses, kills, loot, quests, deaths or player quotes.
+1. Stay Faithful to the Log: build the story only from the real roster, places, foes, bosses, quests, loot, deaths and chat quotes in the log. Use rich fantasy prose for the scenes, but never invent bosses, kills, loot, quests, deaths or player quotes. The roster gives each member's sex and race when known (e.g. "female Tauren Druid"): use them for pronouns and looks, and never guess them when they are missing.
 2. Header lines: "Run type:" says Dungeon, Raid or Open world adventure. The Roster gives each member's level, class and role ([Tank], [Healer], [DPS]). A member marked "<Guild> (guildmate)" shares the player's guild: treat them as old companions-in-arms of the same guild and mention the shared guild naturally once or twice. "Known companions:" lines are the player's own RP notes: let them shape how that character acts and talks, but never quote a note or invent a scene from it. "Wearing (Name):" lists the notable gear the player's character wore: describe it once or twice where it fits (a cloak in the wind, a blade drawn), never as a list.
 3. Timestamps, HP and mana are hidden context: [HH:MM:SS], [BOSS HP], [LOW MANA], [DANGER] and combat tags tell you order and intensity only. The story prose must NEVER mention clock times, durations, or any HP, mana or percent numbers. "at 4% HP" becomes "with the beast staggering on its last breath".
 ]] .. "4. Tags and what they mean:\n" .. TagGlossary() .. "\n" .. [[
 5. Do not shrink the run into a dry summary. Messy moments (wipes, near deaths, panicked chat, lucky loot) are what make it memorable.
 6. No Icons: never write |T or |A texture codes. RP Chronicler adds boss icons itself.
 7. Story length: a reader should finish the story in a few minutes. When the header has a "Story length:" line, never write more chapters than it allows. Group related quests and events into one chapter (a quest chain, one village's troubles, a stretch of road), sum up routine quests, travel and easy fights in a sentence or two, and keep full scenes for the moments that matter: bosses, hard fights, near deaths, named foes, [NOTE] and [HIGHLIGHT] moments and real chat.
+8. Quote only in-character lines. Party chat is full of gamer shorthand and out-of-character chatter; never quote it word for word. Read the intent behind it and retell it as story: "mana" or "need mana" = the speaker ran dry and called for a moment to recover ("drained, Hexer called for a breath of rest"), "oom" = out of mana, "mb" or "sry" = an apology, "ty" or "thx" = thanks, "gj" or "gg" = praise, "inc" = enemies coming, "brb" or "afk" = a short pause, "lol" = a laugh, "ready" or "r" = ready to go. Typos and misspellings are never quoted either. A full sentence that works in character ("Stay behind me, the fire burns hotter below.") may be quoted now and then, with the speaker's name.
+9. Farewells: never list everyone saying "thank you" or "gg". Turn the goodbye into one short story beat (nods exchanged, a last look back at the gate).
 
 STORY BOOK HEADER AND FOOTER (REQUIRED, RP Chronicler reads them)
 
@@ -129,7 +131,7 @@ COLOR EVERY MENTION, IN EVERY CHAPTER: each time a player, pet, place, foe, NPC 
 - Bosses, elites, named foes and every foe type ("Windsong Crawler"): |cffdc143c (Crimson). Never use the Druid orange for a foe.
 - Wipes, deaths and danger: |cffff5252 (Red)
 - Victories, saves and healing: |cff66bb6a (Green)
-- Loot: |cffffd700 (Loot Gold) or |cffe066ff (Epic Purple)
+- Loot: |cffffd700 (Loot Gold). Write each item's name exactly as the log spells it (whole name, no plural, no nickname): RP Chronicler finds the name and gives it the item's real icon and quality color (gray, white, green, blue, purple, orange).
 - Quoted dialogue: |cffaaaaff (Party Blue) or |cffffffff (Say White). NPC words: |cfffff0a0 (Pale Yellow)
 - Header, footer and metadata: |cff9e9e9e (Muted Gray)
 
@@ -140,6 +142,13 @@ FORMATTING RULES FOR WOW
 3. No Markdown inside the code block: no asterisks, pound-sign headers or bullet symbols. Use color tags and blank lines.
 4. ASCII only inside the code block (- ' " *), so WoW fonts never show missing-glyph boxes.
 5. Before you answer, check the story prose for any timestamp, percent sign, or HP or mana number, and rewrite those sentences in-world.]]
+
+-- 0.6.4: bumped only when the story rules change (not on every addon
+-- version). The templates say it in their header; a Full Log copied for
+-- an AI with the skill says it too, so the AI can tell the player that
+-- their skill is older.
+ns.TEMPLATE_VERSION = "0.6.4"
+local VERSION_RULE = "\n\nTEMPLATE VERSION\n\nTemplate version: " .. ns.TEMPLATE_VERSION .. ". If the Full Log has a \"Template version:\" line with a newer version than this one, write the story anyway, then add one line after the code block: \"Your story skill is older than RP Chronicler " .. "<that version>: copy the template again from Options > AI & Stories.\""
 
 -- 0.6.0: the skill names come from ns.STORY_SKILLS (Core.lua), the same
 -- names the Full Log's first line calls ("use <name>")
@@ -155,9 +164,9 @@ STRUCTURE
 - A short opening chapter: the party gathers at the entrance (use the place and the roster).
 - One chapter per boss in the order of [BOSS ENGAGED] / [BOSS KILL] lines, named after the boss or the place. Trash fights between bosses ([FIGHT], [KILL]) belong to the chapter of the boss that follows them.
 - Every wipe gets its moment: what went wrong, and how the party came back.
-- A closing chapter: the last boss falls, the loot is shared, the party leaves.
+- A closing chapter: the last boss falls, the loot is shared, the party leaves in one short farewell beat (see rule 9).
 - Give every party member a distinct voice and role, from the roster and their real chat quotes.
-]] .. STORY_SHARED_RULES
+]] .. STORY_SHARED_RULES .. VERSION_RULE
 
 ns.ADVENTURE_STORY_TEMPLATE = "---\nname: " .. ns.STORY_SKILLS.world .. "\n" .. [[description: Turn an RP Chronicler open-world Full Log (solo or small group questing, travel, gathering, taming) into an introspective colored adventure story, formatted with WoW color codes (|cffRRGGBB...|r) for RP Chronicler's Story Book. Use when the user pastes an RP Chronicler log that starts with "use ]] .. ns.STORY_SKILLS.world .. [[" (or the older "use adventure story") or says "Run type: Open world adventure", or asks for an adventure story.
 ---
@@ -176,4 +185,15 @@ STRUCTURE
 - Ordinary trash fights become a line of travel color, not a scene. Elites, rares and near deaths get the drama.
 - If the character travelled with others, give them presence from the roster and real chat quotes. Guildmates are old friends.
 - A quiet closing: where the character rests, what they carry, what is still ahead.
-]] .. STORY_SHARED_RULES
+]] .. STORY_SHARED_RULES .. VERSION_RULE
+
+-- 0.6.4: one line for skill users when the story rules changed since the
+-- template they last opened (nil when there is nothing to say)
+function ns.TemplateNotice()
+    if not ns.Get("aiHasSkill") or type(RPChroniclerDB) ~= "table" then return nil end
+    if RPChroniclerDB.templateCopied == ns.TEMPLATE_VERSION then return nil end
+    return "The story template changed in " .. ns.TEMPLATE_VERSION .. ". If you use a skill, copy it again (Options > AI & Stories)."
+end
+function ns.MarkTemplateCopied()
+    if type(RPChroniclerDB) == "table" then RPChroniclerDB.templateCopied = ns.TEMPLATE_VERSION end
+end

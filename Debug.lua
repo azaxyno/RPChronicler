@@ -72,6 +72,16 @@ end
 function ns.DebugReady()
     if ready then return end
     ready = true
+    -- 0.6.6: after an update, errors saved by older versions are dropped
+    -- (they are fixed or no longer apply), so a bug report shows only
+    -- what still happens on this version
+    if RPChroniclerDB and type(RPChroniclerDB.errors) == "table" then
+        local cur, keep = tostring(ns.VERSION or "?"), {}
+        for _, e in ipairs(RPChroniclerDB.errors) do
+            if type(e) == "table" and e.v == cur then keep[#keep + 1] = e end
+        end
+        RPChroniclerDB.errors = keep
+    end
     for _, line in ipairs(pending) do Push(line) end
     pending = {}
     for _, e in ipairs(pendingErrors) do KeepError(e) end

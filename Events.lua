@@ -919,17 +919,17 @@ do
     end
 
     local function GroupInCombat()
-        if UnitAffectingCombat and UnitAffectingCombat("player") == true then return true end
+        if UnitAffectingCombat and ns.SafeBool(UnitAffectingCombat("player")) == true then return true end
         for i = 1, 4 do
             local u = "party" .. i
-            if UnitExists(u) and UnitAffectingCombat and UnitAffectingCombat(u) == true then return true end
+            if UnitExists(u) and UnitAffectingCombat and ns.SafeBool(UnitAffectingCombat(u)) == true then return true end
         end
         return false
     end
 
     local function TargetSuffix(unit, word)
         local tu = unit .. "target"
-        if not UnitExists(tu) or (UnitIsUnit and UnitIsUnit(tu, unit) == true) then return "" end
+        if not UnitExists(tu) or (UnitIsUnit and ns.SafeBool(UnitIsUnit(tu, unit)) == true) then return "" end
         local n = ns.SafeStr(UnitName(tu))
         return n and (" " .. word .. " " .. ns.StripRealm(n)) or ""
     end
@@ -975,7 +975,7 @@ do
     -- [BOSS CAST]
     local function OnBossCast(unit, spellID, started)
         if not ns.LogOn("bossCasts") then return end
-        if UnitIsPlayer(unit) or not UnitCanAttack("player", unit) then return end
+        if ns.SafeBool(UnitIsPlayer(unit)) ~= false or ns.SafeBool(UnitCanAttack("player", unit)) ~= true then return end
         local bName = ns.SafeStr(UnitName(unit))
         if not bName then return end
         local activeBoss = ns.GetActiveBossName()
@@ -1018,7 +1018,7 @@ do
         if (now - (T.auraScanAt[unit] or 0)) < 0.3 then return end
         T.auraScanAt[unit] = now
 
-        local charmed = UnitIsCharmed and UnitIsCharmed(unit) == true
+        local charmed = UnitIsCharmed and ns.SafeBool(UnitIsCharmed(unit)) == true
         if charmed and not T.charmed[who] then
             ns.RecordAdventureLine(string.format("[CC] %s is mind controlled!", who))
         elseif not charmed and T.charmed[who] then
@@ -1054,7 +1054,7 @@ do
         if not petName then return end
         -- 0.6.3: "Mor's pet Snips (Crab)", so "Crab" is never just a word
         local label = string.format("%s's pet %s", owner, ns.FormatPet(petName, ns.GetPetSpecies(unit)))
-        local dead = UnitIsDead(unit) == true
+        local dead = ns.SafeBool(UnitIsDead(unit)) == true
         if dead and not st.dead then
             ns.RecordAdventureLine(string.format("[PET DEATH] %s died", label))
         elseif not dead and st.dead and st.name == petName then

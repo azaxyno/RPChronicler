@@ -179,7 +179,7 @@ function ns.FightSeeUnit(u)
     end
     if not C.fight or C.enemySeen[key] then return end
     if not UnitCanAttack("player", u) then return end
-    if UnitAffectingCombat and UnitAffectingCombat(u) ~= true then return end
+    if UnitAffectingCombat and ns.SafeBool(UnitAffectingCombat(u)) ~= true then return end
     local kind = EnemyKind(u)
     C.enemySeen[key] = { name = name, kind = kind }
     AddEnemy(name, kind)

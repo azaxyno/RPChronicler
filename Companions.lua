@@ -298,8 +298,8 @@ function ns.SaveOrUpdatePlayer(name, unit)
     if not name or name == "" then return nil, false end
     local kind = "player"
     if unit and UnitExists(unit) and not UnitIsPlayer(unit) then
-        local isPet = (UnitIsBattlePetCompanion and UnitIsBattlePetCompanion(unit) == true)
-            or (UnitIsOtherPlayersBattlePet and UnitIsOtherPlayersBattlePet(unit) == true)
+        local isPet = (UnitIsBattlePetCompanion and ns.SafeBool(UnitIsBattlePetCompanion(unit)) == true)
+            or (UnitIsOtherPlayersBattlePet and ns.SafeBool(UnitIsOtherPlayersBattlePet(unit)) == true)
         kind = isPet and "pet" or "npc"
     end
     local canonical = (kind == "player") and ns.ResolveCanonicalPlayerName(name) or name

@@ -27,41 +27,88 @@ local lootRepeat = {} -- looter|item -> the timeline line to update with xN
 
 local RESUME_WINDOW = 120 -- seconds: a run seen this recently resumes after /reload or disconnect
 
-local ZONE_ICONS = {
-    { pattern = "scarlet",     icon = "Interface\\Icons\\INV_Helmet_52" },
-    { pattern = "deadmines",   icon = "Interface\\Icons\\INV_Misc_Coin_02" },
-    { pattern = "shadowfang",  icon = "Interface\\Icons\\INV_Misc_Bone_01" },
-    { pattern = "stockade",    icon = "Interface\\Icons\\INV_Misc_Key_03" },
-    { pattern = "gnomeregan",  icon = "Interface\\Icons\\INV_Misc_Gear_01" },
-    { pattern = "razorfen",    icon = "Interface\\Icons\\INV_Misc_Horn_01" },
-    { pattern = "maraudon",    icon = "Interface\\Icons\\INV_Misc_Gem_Emerald_01" },
-    { pattern = "zulfarrak",   icon = "Interface\\Icons\\INV_Sword_39" },
-    { pattern = "zul'farrak",  icon = "Interface\\Icons\\INV_Sword_39" },
-    { pattern = "stratholme",  icon = "Interface\\Icons\\Spell_Holy_HolyBolt" },
-    { pattern = "scholomance", icon = "Interface\\Icons\\INV_Misc_Book_09" },
-    { pattern = "blackrock",   icon = "Interface\\Icons\\Spell_Fire_LavaSpawn" },
-    { pattern = "molten",      icon = "Interface\\Icons\\Spell_Fire_Fire" },
-    { pattern = "onyxia",      icon = "Interface\\Icons\\INV_Misc_Head_Dragon_01" },
-    { pattern = "wailing",     icon = "Interface\\Icons\\INV_Misc_Scale_08" },
-    { pattern = "ragefire",    icon = "Interface\\Icons\\Spell_Fire_SoulBurn" },
-    { pattern = "uldaman",     icon = "Interface\\Icons\\INV_Misc_StoneTablet_01" },
-    { pattern = "sunken",      icon = "Interface\\Icons\\INV_Misc_MonsterScales_07" },
-    { pattern = "dire maul",   icon = "Interface\\Icons\\INV_Crown_01" },
+-- =========================================================
+-- Adventure icons (0.6.6, Mor): our own icons in Media/Icons (made by
+-- tools/icons/make_icons.py from game-icons.net, CC BY 3.0, see
+-- CREDITS.md), so they look the same on every client. Dungeons and raids
+-- are keyed by instance ID (GetInstanceInfo), with a name match for old
+-- runs; open world goes by the zone's terrain. A new zone is one line.
+-- =========================================================
+local ICON_DIR = "Interface\\AddOns\\RPChronicler\\Media\\Icons\\"
+ns.ICON_DIR = ICON_DIR
+
+-- instance ID = { icon, name pattern (lowercase) }
+local INSTANCE_ICONS = {
+    [389] = { "ragefire", "ragefire" },
+    [43]  = { "wailing", "wailing caverns" },
+    [36]  = { "deadmines", "deadmines" },
+    [33]  = { "shadowfang", "shadowfang" },
+    [48]  = { "blackfathom", "blackfathom" },
+    [34]  = { "stockade", "stockade" },
+    [90]  = { "gnomeregan", "gnomeregan" },
+    [47]  = { "razorfen_kraul", "razorfen kraul" },
+    [129] = { "razorfen_downs", "razorfen downs" },
+    [189] = { "scarlet", "scarlet" },
+    [70]  = { "uldaman", "uldaman" },
+    [209] = { "zulfarrak", "zul'farrak" },
+    [349] = { "maraudon", "maraudon" },
+    [109] = { "sunken_temple", "sunken temple" },
+    [230] = { "blackrock_depths", "blackrock depths" },
+    [229] = { "blackrock_spire", "blackrock spire" },
+    [429] = { "dire_maul", "dire maul" },
+    [289] = { "scholomance", "scholomance" },
+    [329] = { "stratholme", "stratholme" },
+    [409] = { "molten_core", "molten core" },
+    [249] = { "onyxia", "onyxia" },
+}
+
+-- open-world zone (lowercase) = terrain icon; other zones get "world"
+local ZONE_TERRAIN = {
+    ["orgrimmar"] = "capital_horde", ["thunder bluff"] = "capital_horde", ["undercity"] = "capital_horde",
+    ["stormwind city"] = "capital_alliance", ["ironforge"] = "capital_alliance", ["darnassus"] = "capital_alliance",
+    ["booty bay"] = "coast", ["ratchet"] = "coast", ["gadgetzan"] = "desert", ["everlook"] = "snow",
+    ["durotar"] = "desert", ["tanaris"] = "desert", ["silithus"] = "desert", ["desolace"] = "desert",
+    ["badlands"] = "desert", ["blasted lands"] = "desert",
+    ["the barrens"] = "plains", ["mulgore"] = "plains", ["westfall"] = "plains", ["arathi highlands"] = "plains",
+    ["hillsbrad foothills"] = "plains",
+    ["elwynn forest"] = "forest", ["ashenvale"] = "forest", ["teldrassil"] = "forest", ["duskwood"] = "forest",
+    ["tirisfal glades"] = "forest", ["silverpine forest"] = "forest", ["feralas"] = "forest", ["felwood"] = "forest",
+    ["moonglade"] = "forest", ["the hinterlands"] = "forest", ["western plaguelands"] = "forest",
+    ["eastern plaguelands"] = "forest",
+    ["stranglethorn vale"] = "jungle", ["un'goro crater"] = "jungle",
+    ["dun morogh"] = "snow", ["winterspring"] = "snow", ["alterac mountains"] = "snow",
+    ["swamp of sorrows"] = "swamp", ["dustwallow marsh"] = "swamp", ["wetlands"] = "swamp",
+    ["loch modan"] = "mountains", ["redridge mountains"] = "mountains", ["stonetalon mountains"] = "mountains",
+    ["thousand needles"] = "mountains", ["searing gorge"] = "mountains", ["burning steppes"] = "mountains",
+    ["deadwind pass"] = "mountains",
+    ["darkshore"] = "coast", ["azshara"] = "coast", ["bloodmyst isle"] = "coast",
 }
 
 local function PreciseStamp()
     return (date and date("%H:%M:%S")) or ns.TimeOnlyStamp()
 end
 
+-- The run's icon: its dungeon or raid, else the open-world terrain
 function ns.GetAdventureIcon(adv)
-    if not adv then return "Interface\\Icons\\INV_Misc_Map_01" end
-    local hay = ((adv.zone or "") .. " " .. (adv.title or "")):lower()
-    for _, item in ipairs(ZONE_ICONS) do
-        if hay:find(item.pattern, 1, true) then
-            return item.icon
+    if not adv then return ICON_DIR .. "world" end
+    local byId = INSTANCE_ICONS[tonumber(adv.instanceID) or -1]
+    if byId then return ICON_DIR .. byId[1] end
+    local hay = ((adv.instanceName or "") .. " " .. (adv.zone or "") .. " " .. (adv.title or "")):lower()
+    if adv.kind == "dungeon" or adv.kind == "raid" or adv.instanceID then
+        for _, e in pairs(INSTANCE_ICONS) do
+            if hay:find(e[2], 1, true) then return ICON_DIR .. e[1] end
         end
+        return ICON_DIR .. (adv.kind == "raid" and "raid" or "dungeon")
     end
-    return "Interface\\Icons\\INV_Misc_Map_01"
+    local zone = (ns.SafeStr(adv.zone) or ""):lower():match("^%s*(.-)%s*$")
+    return ICON_DIR .. (ZONE_TERRAIN[zone] or "world")
+end
+
+-- Our icons carry their own frame, so they show whole; game icons are
+-- trimmed of their built-in border
+function ns.IconCoords(path)
+    if type(path) == "string" and path:find(ICON_DIR, 1, true) == 1 then return 0, 1, 0, 1 end
+    return 0.08, 0.92, 0.08, 0.92
 end
 
 function ns.GetActiveAdventure()

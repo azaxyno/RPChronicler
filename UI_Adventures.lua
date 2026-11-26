@@ -406,7 +406,7 @@ do
     A.heroIcon:SetPoint("TOPLEFT", 2, -2)
     A.heroIcon:SetPoint("BOTTOMRIGHT", -2, 2)
     A.heroIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    A.heroIcon:SetTexture(UI.ICONS.ADVENTURES)
+    A.heroIcon:SetTexture(UI.ICONS.ADVENTURES); A.heroIcon:SetTexCoord(ns.IconCoords(UI.ICONS.ADVENTURES))
 
     -- 0.6.3: the lines stack (the meta line may take two lines), and
     -- A.Layout sizes the hero to them
@@ -599,13 +599,13 @@ end
 
 local function UpdateHero(adv, isLive)
     if not adv then
-        A.heroIcon:SetTexture(UI.ICONS.ADVENTURES)
+        A.heroIcon:SetTexture(UI.ICONS.ADVENTURES); A.heroIcon:SetTexCoord(ns.IconCoords(UI.ICONS.ADVENTURES))
         A.heroTitle:SetText("|cffffd100No Adventure Selected|r")
         A.heroMeta:SetText("|cff9aa5b4Enter a dungeon, or click Start Recording above.|r")
         A.heroStats:SetText("")
         return
     end
-    A.heroIcon:SetTexture(ns.GetAdventureIcon(adv))
+    A.heroIcon:SetTexture(ns.GetAdventureIcon(adv)); A.heroIcon:SetTexCoord(ns.IconCoords(ns.GetAdventureIcon(adv)))
     local livePrefix = isLive and (adv.paused and "|cffffb74d[PAUSED]|r " or "|cffff5252[REC]|r ") or ""
     local storyBadge = ns.RunHasStory(adv) and "  |cffffd100[Story]|r" or ""
     A.heroTitle:SetText(livePrefix .. "|cffffd100" .. (adv.title or "Adventure") .. "|r" .. storyBadge)
@@ -697,7 +697,7 @@ function UI.RefreshAdventuresTab()
             A.cards[idx] = card
         end
         card:SetPoint("TOPLEFT", 0, -(idx - 1) * 48)
-        card.icon:SetTexture(ns.GetAdventureIcon(adv))
+        card.icon:SetTexture(ns.GetAdventureIcon(adv)); card.icon:SetTexCoord(ns.IconCoords(ns.GetAdventureIcon(adv)))
         local prefix = item.isLive and (adv.paused and "|cffffb74d[P]|r " or "|cffff5252[REC]|r ") or ""
         local bookStar = ns.RunHasStory(adv) and " |cffffd100*|r" or ""
         card.titleLbl:SetText(prefix .. "|cfff0f4f8" .. (adv.title or "Adventure") .. "|r" .. bookStar)

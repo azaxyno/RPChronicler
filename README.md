@@ -4,6 +4,8 @@
 
 <p align="center"><b>Record your World of Warcraft: Forever adventures and read them back as stories. Great for chronicling your runs with friends. Plus one-key RP replies for your own character.</b></p>
 
+<p align="center"><a href="https://www.curseforge.com/wow/addons/rpchronicler"><b>Download RP Chronicler on CurseForge</b></a></p>
+
 RP Chronicler is a free addon that sits between WoW and the AI you already use (Gemini, ChatGPT or Claude). It never sends chat and never goes online. It copies text out, and you decide what to paste back. The only thing it ever sends is its version number to your group and guild, so you hear when there is an update (you can turn that off).
 
 **Made for roleplay adventures.** RP Chronicler is mostly for players who roleplay through their runs. What happens in character shapes the story: what you and your party say in the dungeon, the emotes, your character's thoughts (Story Notes), who saved whom. Play it in character, and the story you get back is your roleplay, not just a list of kills.
@@ -29,7 +31,7 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 3. **Your AI answers** with five short in-character replies, one per mood. Pick the one you like there and copy it.
 4. **Back in WoW**, paste it into chat (`/s`, `/p`, `/w` and so on) and send it yourself.
 
-- **Version:** 0.6.5 beta (interface `16001`, WoW: Forever)
+- **Version:** 0.6.6 beta (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPChroniclerDB` (account-wide, on your PC only)
 - **License:** GPL-3.0
 
@@ -275,7 +277,7 @@ RP Chronicler also works as a quiet chronicler. A recording captures what a stor
 <summary><b>How recording works</b></summary>
 
 - **One Start / Stop button**, green to start and red (**Stop & Save**) while a run records, with **Pause** and **Mark Moment** next to it. Each also has a command and a Key Bindings entry.
-- **The RP button** sits on the minimap's edge (drag it around the minimap), or floats anywhere on the screen if you choose **Options > General > RP button > Floating**. Left-click opens the window. Right-click opens a menu: Start or Stop, Pause or Resume, Mark Moment, **Open current recording**, Story Book, **Feedback / bug report**, Clear chat logs. It turns red with a pulsing dot while recording, amber while paused.
+- **The RP button** sits on the minimap's edge (drag it around the minimap), or floats anywhere on the screen if you choose **Options > General > RP button > Floating**. Left-click opens the window. Right-click opens a menu: Start or Stop, Pause or Resume, Mark Moment, **Open current recording**, Story Book, **Feedback / bug report**, Clear chat logs. Both show the RP Chronicler logo. While recording, the floating button glows red (the minimap button shows a pulsing red dot); while paused, its logo dims and shows a pause badge (amber dot on the minimap).
 - **Never lost.** After a `/reload` or a short disconnect the run continues. After a logout or a longer disconnect it is saved as **interrupted**, and the next login asks whether to **resume** or **keep** it.
 - **Rich but short.** One meaningful line instead of many raw ones, and never out-of-character chat: `(( ))`, `[OOC]`, the OOC channel, guild and world channels stay out.
 - **A Summary by run type.** Zeros are hidden, bosses and wipes show only for dungeons, places only for the open world.
@@ -323,7 +325,7 @@ The header has the run type, zone, date and duration, levels gained, quests comp
 
 ## The Story Book
 
-The Story Book has its own place on the rail. Every story your AI wrote is there under the title the AI gave it on its first line (`Title: Shadows Over Pyrewood`), with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
+The Story Book has its own place on the rail. Every run and story shows its own icon: one per dungeon and raid (raids in a gold frame), and one per kind of land for the open world (desert, forest, snow, coast, the capitals and more). Every story your AI wrote is there under the title the AI gave it on its first line (`Title: Shadows Over Pyrewood`), with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
 
 - **Read** it in game, with gold chapter titles, class-colored party names, crimson bosses and foes, sea-green pets and turquoise places. Bosses get an icon: a skull, a gold dragon for an elite, a silver dragon for a rare.
 - **Auto-color.** Names the AI left plain are colored from the run itself: party (with surnames), pets and their species, places, foes, NPCs and quest givers, and items. A name the AI colored once is colored everywhere. It works on stories you already imported too.
@@ -393,7 +395,7 @@ The Story Book tip can be closed (bring it back in **Options > AI & Stories**).
 | `/rp options` | Open Options (also `/rp config`) |
 | `/rp setup` | Show the privacy note and setup choices again (also `/rp privacy`) |
 | `/rp wipe` | Delete all RP Chronicler data, after a confirmation |
-| `/rp feedback` | Where to send ideas and bug reports, with the bug report to paste (also `/rp bug`) |
+| `/rp feedback` | Where to send ideas and bug reports: the link to copy, and the bug report on its own button (also `/rp bug`) |
 | `/rp debug` | Open the debug report to copy into a bug report (`/rp debug clear` empties it, `/rp debug verbose` adds extra detail until you log out) |
 | `/rp diag` | Print what RP Chronicler can read about your target and your guessed role |
 | `/rp clear` | Clear the session chat, combat, NPC and loot buffers |
@@ -425,10 +427,10 @@ Instant works in combat too. If a copy doesn't land, `/rp debug` shows the last 
 
 RP Chronicler keeps a small debug log (about 200 lines) of its own errors, blocked actions and run events, plus up to 20 error reports that last between sessions and a check of what your game client supports. It never stores chat. RP Chronicler also has a page in the game's **Options > AddOns** that opens its own Options.
 
-**Ideas and bug reports are welcome.** In game, open **Feedback** (the RP button's right-click menu, **Options > General**, or `/rp feedback`): it shows where to send them, with the bug report under the links. An addon can't open a browser, so copy the link from there.
+**Ideas and bug reports are welcome.** In game, open **Feedback** (the RP button's right-click menu, **Options > General**, or `/rp feedback`). Its **Feedback** button shows the link to copy, and **Copy bug report** shows the bug report on its own. An addon can't open a browser, so copy the link from there.
 
-1. Open **Feedback** (or type `/rp debug` for the report alone).
-2. **Select All**, `Ctrl+C`, and open a [GitHub issue](https://github.com/azaxyno/RPChronicler/issues/new/choose) (**Bug report** or **Feature request**), or write a comment on RP Chronicler's CurseForge page. Say what you were doing and paste the report.
+1. Open **Feedback** and click **Copy bug report** (or type `/rp debug`). The report is selected: press `Ctrl+C`.
+2. Open a [GitHub issue](https://github.com/azaxyno/RPChronicler/issues/new/choose) (**Bug report** or **Feature request**), or write a comment on [RP Chronicler's CurseForge page](https://www.curseforge.com/wow/addons/rpchronicler). Say what you were doing and paste the report.
 3. Chasing something odd? Type `/rp debug verbose`, reproduce it and copy the report again.
 
 If the game shows a "blocked from an action" popup, `Logs\taint.log` in your game folder names the file and line. Attach it too.
@@ -437,7 +439,7 @@ If the game shows a "blocked from an action" popup, `Logs\taint.log` in your gam
 
 ## Installation
 
-1. Download `RPChronicler-vX.Y.Z.zip` from the latest [Release](https://github.com/azaxyno/RPChronicler/releases) (or from CurseForge) and unzip it into your AddOns folder, so the folder is named exactly `RPChronicler`:
+1. Download RP Chronicler from [CurseForge](https://www.curseforge.com/wow/addons/rpchronicler) (the CurseForge app installs it for you), or download the zip there and unzip it into your AddOns folder, so the folder is named exactly `RPChronicler`:
    ```
    World of Warcraft\_forever_\Interface\AddOns\RPChronicler\RPChronicler.toc
    ```
@@ -481,7 +483,8 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | | `Bindings.xml` | Key Bindings entries |
 | | `StoryViewer.html` | Reads your stories and screenshots in the browser, offline, and saves a story as one web page |
 | | `Export_Stories.bat` | Windows exporter (GitHub zip only): all stories, text and Full Logs at once |
-| | `Media/logo.tga` | The logo shown in the setup and on the minimap button |
+| | `Media/logo.tga` | The logo shown in the setup and on the minimap and floating RP buttons |
+| | `Media/Icons/` | The adventure icons: one per dungeon and raid, one per kind of land for the open world, and the Adventures tab |
 | | `Media/Shadows/`, `Media/Scene/` | The race shadows, glow and misty backdrop of the story scenes |
 
 </details>
@@ -520,7 +523,7 @@ Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or 
 - WoW fonts can't draw Unicode symbols, so in-game text is plain ASCII with `|cffRRGGBB...|r` colors. Pasted text turns `|` into `||`, and `ns.NormalizeStoryText` converts it back.
 - Screenshots fade `UIParent` with `SetAlpha` instead of hiding it, which avoids `ADDON_ACTION_BLOCKED` in combat.
 - `COMBAT_LOG_EVENT_UNFILTERED` is Blizzard-only on this client, so RP Chronicler never registers it. A light poller reads boss HP from `boss1-5`, `target`, `focus` and party targets, ends pulls when the group leaves combat, and tracks aggro. Spells, casts, crowd control and pets come from `UNIT_SPELLCAST_*`, `UNIT_AURA`, `UNIT_PET` and `UNIT_HEALTH`. Values the client hides as "secret" are skipped; `/rp diag` shows what is readable.
-- **Versioning.** Every change bumps `## Version` in `RPChronicler.toc`: a patch bump for small fixes, a minor bump for big updates, below 1.0 while in beta. Each version is tagged and published as a GitHub Release with a zip.
+- **Versioning.** Every change bumps `## Version` in `RPChronicler.toc`: a patch bump for small fixes, a minor bump for big updates, below 1.0 while in beta. Each version is released on [CurseForge](https://www.curseforge.com/wow/addons/rpchronicler); GitHub holds the source.
 
 </details>
 
@@ -528,8 +531,8 @@ Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or 
 
 ## Credits
 
-The recording and event-engine techniques are adapted from [StoryTracker](https://github.com/ninepointlabs/wow-storytracker-addon) by Nine Point Labs (MIT). See [CREDITS.md](CREDITS.md).
+Adventure icons are made from [game-icons.net](https://game-icons.net) glyphs by Lorc, Delapouite, Sbed and Caro Asercion (CC BY 3.0). The Story Viewer's title font (Cinzel, OFL) and the icons are listed with their licenses in [CREDITS.md](CREDITS.md).
 
 ## License
 
-GPL-3.0 (GNU General Public License v3.0) since 0.6.5, see [LICENSE](LICENSE). You may share and change RP Chronicler, as long as what you share stays under the same license with its source. Parts adapted from StoryTracker keep their MIT notice in [CREDITS.md](CREDITS.md).
+GPL-3.0 (GNU General Public License v3.0) since 0.6.5, see [LICENSE](LICENSE). You may share and change RP Chronicler, as long as what you share stays under the same license with its source.

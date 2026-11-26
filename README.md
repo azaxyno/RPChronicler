@@ -31,7 +31,7 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 3. **Your AI answers** with five short in-character replies, one per mood. Pick the one you like there and copy it.
 4. **Back in WoW**, paste it into chat (`/s`, `/p`, `/w` and so on) and send it yourself.
 
-- **Version:** 0.6.6 beta (interface `16001`, WoW: Forever)
+- **Version:** 0.6.7 beta (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPChroniclerDB` (account-wide, on your PC only)
 - **License:** GPL-3.0
 
@@ -325,26 +325,27 @@ The header has the run type, zone, date and duration, levels gained, quests comp
 
 ## The Story Book
 
-The Story Book has its own place on the rail. It opens on **your shelf**.
+The Story Book has its own place on the rail. It opens on **your shelf**: a wall of wooden shelves where every story stands as a leather book with gold bands and its title on the spine.
 
-- **Chronicles.** Put stories that belong together in a volume, for example the whole road of an alt you level with a friend. **+ New chronicle** on the shelf makes one (a name of up to 32 letters); in the reader, **Chronicle** puts the story you are reading in a volume, moves it to another or takes it out. Each volume stands on the shelf as a colored spine with its name (the full name shows when you point at it); stories in no volume stand at the end as thin loose books.
-- **Open a volume** and it swings open with the game's book sound: on the left its cover, with the party scene of its first story (or the one you pick with **Cover**), its name and dates; on the right its contents. Point at a story for its date, place, kind of run, party and length; click it to read it. **Up** and **Down** set the order, **Out** takes a story out (it stays in the Story Book), and **<** and **>** move the volume on the shelf. **Rename**, **Color** and **Delete** change the volume; deleting a volume never deletes its stories.
-- **Read on.** In a volume's story, **< Prev** and **Next >** turn to the story before or after it. **Shelf** goes back.
-- **Search** on the shelf finds stories by title, place, party member, date or chronicle.
+- **The shelf.** Each book takes its color from its kind of run (a chronicle keeps the color you give it), and a story you imported this session glows until you open it. Point at a book for its date, place, kind of run, party and length; click it to open it. **Search** finds stories by title, place, party member, date or chronicle, and **+ Import** adds a new story.
+- **Chronicles.** Put stories that belong together in one thick volume, for example the whole road of an alt you level with a friend. **+ New chronicle** on the shelf makes one (a name of up to 32 letters), and **Book > Add to a chronicle** puts the story you are reading in one, moves it to another or takes it out. Stories in no volume stand at the end as thin loose books.
+- **The open book.** A book opens across the whole window as two facing pages, with the game's book sound. The first page of a story is its title page: the party scene, the title, the place, the date and the run's numbers, with a list of its chapters (click one to go there). Every chapter starts on a new page. Turn pages with the page corners, the mouse wheel or the arrows at the top; **Contents** goes back to the start. **< Close book** closes it and puts it back on the shelf. In a narrow window the book shows one page at a time.
+- **A chronicle as a book.** A volume opens on its cover (its name, dates and the party scene of its first story, or the one you pick), then its contents, then each story in order on its own pages. Point at a story in the contents for **Up**, **Down**, **Cover** and **Out** (Out takes it out of the volume; it stays on the shelf).
+- **The Book menu** (top right of the open book) holds everything else: for the story you are reading, **Add to a chronicle**, **Share as plain text**, **Read outside the game**, **Copy for viewer**, **Edit details**, **Re-import**, **Open the run** and **Delete story**; for a chronicle, **Rename**, **Change color**, **Move left** or **right** on the shelf and **Delete chronicle** (its stories stay on the shelf).
+- **Pages:** parchment by default, with the story's colors inked darker so they read well on paper, or **Night** pages (dark, with the story's own bright colors) in **Options > AI & Stories > Pages**. **Book animations** (the cover opening, page turns, the book closing) can be turned off there too.
 
-Every run and story shows its own icon: one per dungeon and raid (raids in a gold frame), and one per kind of land for the open world (desert, forest, snow, coast, the capitals and more). Every story your AI wrote is there under the title the AI gave it on its first line (`Title: Shadows Over Pyrewood`), with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
+Every run shows its own icon (in Adventures, and on a story's title page when scenes are off): one per dungeon and raid (raids in a gold frame), and one per kind of land for the open world (desert, forest, snow, coast, the capitals and more). Every story your AI wrote is there under the title the AI gave it on its first line (`Title: Shadows Over Pyrewood`), with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
 
 - **Read** it in game, with gold chapter titles, class-colored party names, crimson bosses and foes, sea-green pets and turquoise places. Bosses get an icon: a skull, a gold dragon for an elite, a silver dragon for a rare.
 - **Auto-color.** Names the AI left plain are colored from the run itself: party (with surnames), pets and their species, places, foes, NPCs and quest givers, and items. A name the AI colored once is colored everywhere. It works on stories you already imported too.
-- **Share** copies the story as clean plain text for Discord or a forum. **Details** renames the story or edits any other field. **Re-Import** replaces the text and keeps your details. **Run** jumps to the recording (when the story has one). **Viewer path** keeps `StoryViewer.html`'s address once you paste it there. **Delete** removes the story. **Copy for viewer** (in the tip above the story) hands a story you imported this session to `StoryViewer.html`. **+ Import** at the top of the list adds a new one.
+- **Share as plain text** copies the story as clean text for Discord or a forum. **Edit details** renames the story or edits any other field. **Re-import** replaces the text and keeps your details. **Open the run** jumps to the recording (when the story has one). **Read outside the game** keeps `StoryViewer.html`'s address once you paste it there. **Copy for viewer** hands a story you imported this session to `StoryViewer.html`. **Delete story** removes it (it asks first).
 - **Titles come from the AI.** Both story templates ask for `Title: <name>` on the first line, and RP Chronicler names the story from that line, never by guessing. A story without one keeps the run's name until you rename it.
 - **Stories stand on their own.** Deleting a recording keeps its story and its details.
 - **Story scenes.** Each story opens with its party standing together on a misty backdrop, then its title. Every member is shown exactly as they are, or as a shadow: you appear in 3D in the gear from that run (on your own stories), a companion who is near you right now appears as they are, and everyone else is a black shadow of their race in a glow of their class color. Every race keeps its true size, so a gnome stands next to a tauren the way they did in game. **+** and **-** (or Ctrl + mouse wheel) zoom, dragging looks around, and **Enlarge** opens the scene in a big window you can resize. Someone whose race an older run never recorded stands as a blurred figure until you see them again.
 - **Up close.** Click anyone in the scene for their own small window: the figure enlarged (drag to turn a 3D model, mouse wheel or + and - to zoom), their level, sex, race, class and role, what they wore (yours always; your party's with **Record party gear**, which you can turn off in Options > Recording) and the gear each of them really won on the run (won rolls and their own loot, weapons and armor of green quality and up, each drop once).
-- **Bosses in their chapters.** Each boss the story tells of gets a panel with its model right under the header of its chapter. Click it to see it up close with what it dropped. RP Chronicler learns how a boss looks when you fight it, from the game's Encounter Journal, or when you target or point at it later; until then the panel shows a skull. Turn the scenes off in **Options > AI & Stories > Story scenes**.
+- **Bosses in their chapters.** Each boss the story tells of gets a panel with its model where its chapter first names it. Click it to see it up close with what it dropped. RP Chronicler learns how a boss looks when you fight it, from the game's Encounter Journal, or when you target or point at it later; until then the panel shows a skull. Turn the scenes off in **Options > AI & Stories > Story scenes**.
 - **Items in color.** Loot and gear named in a story show their icon and quality color (gray, white, green, blue, purple, orange), in game and in `StoryViewer.html` (which draws a small icon for the kind of item: a sword, a bow, a shield, cloth, plate, a gem and so on).
-- A story you imported this session glows in the list until you open it.
-- Drag the grip in the bottom-right corner to make the reader bigger.
+- Make the RP Chronicler window bigger and the book grows with it.
 
 
 ---
@@ -355,19 +356,19 @@ Every run and story shows its own icon: one per dungeon and raid (raids in a gol
 - **Your own screenshots** taken with Print Screen during a run join it, with a caption such as "Fighting Hogger in Elwynn Forest".
 - Each shot is listed in the Full Log with its own ID, for example `[Shot TPX8OK-2]` (the Run ID and the shot's number), so a marker always points at the right run's picture. The story templates ask the AI to pick only the shots that fit the story and copy each marker exactly. The in-game reader hides these markers.
 
-**Read stories in your browser:** open `StoryViewer.html` in `Interface\AddOns\RPChronicler` (double-click it, or drag it onto your browser). It is a plain web page that works offline and needs nothing installed. The page shows its own address with a **Copy** button: paste that once into **Viewer path** in the Story Book tip, and the game hands it back to you whenever you want to open the page again. Can't find the folder? **Viewer path > Online viewer** gives the same page on the web (https://azaxyno.github.io/RPChronicler/StoryViewer.html). It works the same way: it reads only the files you pick and uploads nothing.
+**Read stories in your browser:** open `StoryViewer.html` in `Interface\AddOns\RPChronicler` (double-click it, or drag it onto your browser). It is a plain web page that works offline and needs nothing installed. The page shows its own address with a **Copy** button: paste that once into **Book > Read outside the game** in the Story Book, and the game hands it back to you whenever you want to open the page again. Can't find the folder? **Read outside the game > Online viewer** gives the same page on the web (https://azaxyno.github.io/RPChronicler/StoryViewer.html). It works the same way: it reads only the files you pick and uploads nothing.
 
 1. The first time, click **Choose WoW folder** and pick your `_forever_` folder (for example `C:\Program Files (x86)\World of Warcraft\_forever_`). Chrome and Edge remember it, so later you only click **Refresh**.
 2. Click a story to read it with its screenshots in place, and **Save story** to keep it as one web page with the pictures inside (it goes to your Downloads folder).
 
-- **When stories appear:** the game saves your stories to disk when you log out or switch characters, so older stories are always there. For a story you imported this session, click **Copy for viewer** in the Story Book tip, press `Ctrl+C`, and paste it into **Paste a story** on the page.
+- **When stories appear:** the game saves your stories to disk when you log out or switch characters, so older stories are always there. For a story you imported this session, open it and click **Book > Copy for viewer**, press `Ctrl+C`, and paste it into **Paste a story** on the page.
 - **If the folder is refused:** Chrome and Edge won't open folders under `Program Files`, and Firefox can't remember folders. Then open **Other ways** and use **Choose RPChronicler.lua** (this one file loads every story; Chrome and Edge remember it too, so later you only click **Refresh**) (in `_forever_\WTF\Account\<your account>\SavedVariables`) and, to save pictures with a story, **Choose Screenshots folder**. You can also drag the `_forever_` folder onto the page.
 - **Finding the pictures:** the page finds each screenshot by the file name the game gave it, whatever time zone your browser reports (Firefox's privacy mode reports UTC). A picture it can't find shows a note with its file name instead of a blank.
 - **Timeline.** Above each story, a bar shows the run's big moments (bosses, wipes, deaths, quests, levels, places, shots and notes). Drag along it, or click **Play** to step through them with the screenshots.
-- **Screenshot format:** browsers show the game's default JPG screenshots. If your game saves TGA, the Story Book tip offers **Use JPG**.
+- **Screenshot format:** browsers show the game's default JPG screenshots. If your game saves TGA, the Book menu offers **Use JPG screenshots**.
 - **Power users:** the GitHub release zip also has `Export_Stories.bat`, which writes every story, its plain text and its Full Log to `_forever_\RP Chronicler Stories\` in one go (Windows PowerShell).
 
-The Story Book tip can be closed (bring it back in **Options > AI & Stories**).
+The one-line viewer tip at the bottom of the shelf can be closed (bring it back in **Options > AI & Stories**).
 
 ---
 
@@ -483,17 +484,19 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 17 | `UI_Companions.lua` | Companions view |
 | 18 | `UI_Adventures.lua` | Adventures view, record bar, run list, size meter, story import |
 | 19 | `UI_Scenes.lua` | Story scenes: the party (3D or shadows) and each boss, zoom and the big scene window |
-| 20 | `UI_StoryBook.lua` | Story Book section: library, reader, Share, Details, Re-Import, Delete |
-| 21 | `UI_Shelf.lua` | The Story Book's shelf: chronicles, loose stories, search, the open volume (cover and contents), Prev/Next |
-| 22 | `UI_Options.lua` | Options pages and the template window |
-| 23 | `UI_Setup.lua` | First-run setup |
-| 24 | `UI_Commands.lua` | The Ctrl+C binding, the RP button (minimap or floating) and its menu, `/rp` commands |
+| 20 | `UI_StoryBook.lua` | Story Book section: what it shows (shelf or book), story text, Share, Details, Re-Import, Delete |
+| 21 | `UI_Shelf.lua` | The Story Book's shelf: leather books on wooden shelves, chronicles, loose stories, search |
+| 22 | `UI_Book.lua` | The open book: two facing pages, title page, chapters, page turns, contents of a chronicle, the Book menu |
+| 23 | `UI_Options.lua` | Options pages and the template window |
+| 24 | `UI_Setup.lua` | First-run setup |
+| 25 | `UI_Commands.lua` | The Ctrl+C binding, the RP button (minimap or floating) and its menu, `/rp` commands |
 | | `Bindings.xml` | Key Bindings entries |
 | | `StoryViewer.html` | Reads your stories and screenshots in the browser, offline, and saves a story as one web page |
 | | `Export_Stories.bat` | Windows exporter (GitHub zip only): all stories, text and Full Logs at once |
 | | `Media/logo.tga` | The logo shown in the setup and on the minimap and floating RP buttons |
 | | `Media/Icons/` | The adventure icons: one per dungeon and raid, one per kind of land for the open world, and the Adventures tab |
 | | `Media/Shadows/`, `Media/Scene/` | The race shadows, glow and misty backdrop of the story scenes |
+| | `Media/Book/` | The shelf and the book: leather, gold trim, parchment, wood and wall (our own art) |
 
 </details>
 
@@ -513,7 +516,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | `rpCopy`, `quickCtrlC`, `copyMode`, `messages` | RP Copy on or off, Ctrl+C, copy style, chat messages per source |
 | `instanceRecord`, `partyGear`, `autoShots`, `logDetail` | Recording options |
 | `knownPlayerBlocks`, `autoUpdateKnown`, `companionMenu`, `runCompanions` | Companion options |
-| `rpReplyLength`, `exportTip`, `viewerPath`, `storyCover` | Template reply length, the Story Book export tip, the StoryViewer.html address you pasted in Viewer path, the story cover |
+| `rpReplyLength`, `exportTip`, `viewerPath`, `storyCover`, `bookPages`, `bookMotion` | Template reply length, the viewer tip on the shelf, the StoryViewer.html address you pasted in Read outside the game, the story cover, parchment or night pages, the book's animations |
 | `quickNote`, `keepErrors`, `versionCheck` | Ask for an instruction on Ctrl+C, keep error reports, update notices |
 | `debugLog` | The debug log (no chat) |
 | `frameW`, `frameH`, `frameX`, `frameY`, `optionsPage` | Window size, place and the last Options page |

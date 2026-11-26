@@ -7,7 +7,8 @@
 Each icon is a game-icons.net glyph (CC BY 3.0, credited in CREDITS.md),
 drawn in gold with a shadow on a tinted dark background and a beveled
 frame: bronze for open world and the tab, silver for dungeons, gold for
-raids. Output: Media/Icons/<key>.png, 64x64 with alpha.
+raids. Output: Media/Icons/<key>.png, 64x64, 32-bit RGBA (the paths in
+the Lua end in .png).
 
 To add an icon: one line in ICONS, then one line in the Lua registry
 (ns.ADVENTURE_ICONS in Runs.lua)."""
@@ -126,8 +127,9 @@ def main():
     os.makedirs(out, exist_ok=True)
     for key, (name, frame, tint) in ICONS.items():
         img = build(os.path.join(src_root, name + ".svg"), frame, tint)
-        # a 256-color palette with alpha keeps the zip small
-        img.quantize(256, method=Image.FASTOCTREE).save(os.path.join(out, key + ".png"), optimize=True)
+        # 0.6.7: 32-bit RGBA. The client showed nothing for the 8-bit
+        # palette PNGs of 0.6.6 (the RGBA race shadows always worked).
+        img.convert("RGBA").save(os.path.join(out, key + ".png"), optimize=True)
     print("wrote %d icons to %s" % (len(ICONS), out))
 
 

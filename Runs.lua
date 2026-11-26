@@ -36,6 +36,9 @@ local RESUME_WINDOW = 120 -- seconds: a run seen this recently resumes after /re
 -- =========================================================
 local ICON_DIR = "Interface\\AddOns\\RPChronicler\\Media\\Icons\\"
 ns.ICON_DIR = ICON_DIR
+-- 0.6.7: a PNG needs its extension in the path (without it the client
+-- looks for .blp and .tga only, and 0.6.6 showed empty squares)
+local function Icon(key) return ICON_DIR .. key .. ".png" end
 
 -- instance ID = { icon, name pattern (lowercase) }
 local INSTANCE_ICONS = {
@@ -90,18 +93,18 @@ end
 
 -- The run's icon: its dungeon or raid, else the open-world terrain
 function ns.GetAdventureIcon(adv)
-    if not adv then return ICON_DIR .. "world" end
+    if not adv then return Icon("world") end
     local byId = INSTANCE_ICONS[tonumber(adv.instanceID) or -1]
-    if byId then return ICON_DIR .. byId[1] end
+    if byId then return Icon(byId[1]) end
     local hay = ((adv.instanceName or "") .. " " .. (adv.zone or "") .. " " .. (adv.title or "")):lower()
     if adv.kind == "dungeon" or adv.kind == "raid" or adv.instanceID then
         for _, e in pairs(INSTANCE_ICONS) do
-            if hay:find(e[2], 1, true) then return ICON_DIR .. e[1] end
+            if hay:find(e[2], 1, true) then return Icon(e[1]) end
         end
-        return ICON_DIR .. (adv.kind == "raid" and "raid" or "dungeon")
+        return Icon(adv.kind == "raid" and "raid" or "dungeon")
     end
     local zone = (ns.SafeStr(adv.zone) or ""):lower():match("^%s*(.-)%s*$")
-    return ICON_DIR .. (ZONE_TERRAIN[zone] or "world")
+    return Icon(ZONE_TERRAIN[zone] or "world")
 end
 
 -- Our icons carry their own frame, so they show whole; game icons are

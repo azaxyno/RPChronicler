@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.6"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.7"
 
 BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
 BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
@@ -189,7 +189,12 @@ ns.SETTINGS = {
     { key = "keepErrors",        default = true,       label = "Keep error reports" },
     -- 0.6.3: send only the version number to your group and guild
     { key = "versionCheck",      default = true,       label = "Update notices" },
-    -- Not a switch: the Story Book export tip, hidden once you close it
+    -- 0.6.7: the open book's pages: parchment (story colors inked darker
+    -- so they read on paper) or night (dark pages, the colors as written)
+    { key = "bookPages",         default = "PARCHMENT", choices = { "PARCHMENT", "NIGHT" } },
+    -- 0.6.7: the book opens, turns its pages and closes with short animations
+    { key = "bookMotion",        default = true,       label = "Book animations" },
+    -- The viewer tip (0.6.7: one line on the shelf), hidden once you close it
     { key = "exportTip",         default = true },
     -- Not a switch (0.6.3): StoryViewer.html's address, pasted once by you
     -- from the page itself (an addon can't see where the game is installed)

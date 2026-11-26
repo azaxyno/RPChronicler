@@ -17,3 +17,7 @@ A small ASCII subset of Cinzel is embedded in StoryViewer.html for story titles.
 - **License**: Creative Commons Attribution 3.0 (CC BY 3.0, https://creativecommons.org/licenses/by/3.0/)
 
 The icons in `Media/Icons` are game-icons.net glyphs, recolored in gold and set on our own tinted backgrounds and frames (`tools/icons/make_icons.py`). Glyphs used: spyglass, treasure-map, snowflake-2, mountains, wave-crest, wheat, wolf-head, lion, snake, wolf-howl, octopus, gears, frozen-orb, stone-tablet, crystal-growth, dragon-breath, fire-wave, crowned-skull, volcano and dragon-head by Lorc; desert, forest, palm-tree, swamp, castle, dungeon-gate, pirate-flag, cage, cross-shield, ceremonial-mask, temple-gate, fire-shrine, castle-ruins and spell-book by Delapouite; death-skull by Sbed; boar by Caro Asercion.
+
+## Book art
+
+The shelf and book textures in `Media/Book` (leather, gold trim, parchment, wood, wall, corners, flourish) are our own, drawn by code in `tools/book/make_book_art.py` (GPL-3.0 with the rest of the addon). The book uses the game's own Morpheus font and spellbook sounds.

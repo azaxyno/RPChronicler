@@ -191,7 +191,7 @@ ns.SETTINGS = {
     { key = "versionCheck",      default = true,       label = "Update notices" },
     -- 0.6.7: the open book's pages: parchment (story colors inked darker
     -- so they read on paper) or night (dark pages, the colors as written)
-    { key = "bookPages",         default = "PARCHMENT", choices = { "PARCHMENT", "NIGHT" } },
+    { key = "bookPages",         default = "PARCHMENT", choices = { "PARCHMENT", "LIGHT", "NIGHT" } },
     -- 0.6.7: the book opens, turns its pages and closes with short animations
     { key = "bookMotion",        default = true,       label = "Book animations" },
     -- The viewer tip (0.6.7: one line on the shelf), hidden once you close it

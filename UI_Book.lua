@@ -37,27 +37,54 @@ local PARA_GAP = 6      -- between paragraphs
 do
     local cache = {}
     local function Lin(c) return c <= 0.04045 and c / 12.92 or ((c + 0.055) / 1.055) ^ 2.4 end
-    local function Srgb(c) return c <= 0.0031308 and 12.92 * c or 1.055 * c ^ (1 / 2.4) - 0.055 end
+    local INK_LUM = 0.03     -- the luminance every colored word is inked to
     function K.Ink(hex)
         hex = hex:lower()
         if cache[hex] then return cache[hex] end
-        local r = Lin(tonumber(hex:sub(1, 2), 16) / 255)
-        local g = Lin(tonumber(hex:sub(3, 4), 16) / 255)
-        local b = Lin(tonumber(hex:sub(5, 6), 16) / 255)
-        -- 0.6.7 (Mor's test): the first ink (luminance 0.07) read pale in
-        -- game. Grays and near-whites (a story's body color) become the
-        -- body ink; every other color is darkened to 0.035 and made a bit
-        -- more saturated, so names stay colored but read like ink.
-        local hi, lo = math.max(r, g, b), math.min(r, g, b)
-        if hi <= 0 or (hi - lo) / hi < 0.22 then
-            cache[hex] = "1c1208"
-            return "1c1208"
+        local R = tonumber(hex:sub(1, 2), 16) / 255
+        local G = tonumber(hex:sub(3, 4), 16) / 255
+        local Bl = tonumber(hex:sub(5, 6), 16) / 255
+        local hi, lo = math.max(R, G, Bl), math.min(R, G, Bl)
+        local sat = hi > 0 and (hi - lo) / hi or 0
+        -- 0.6.7, third pass (Mor: still hard to see): grays keep their
+        -- meaning. Near-whites (prose, spoken words) are the body ink, the
+        -- Priest's gray a slate that still stands apart, darker grays a
+        -- faded brown.
+        if sat < 0.2 then
+            local out = (Lin(hi) > 0.7 and "1c1208") or (Lin(hi) > 0.42 and "3b4656") or "5a4632"
+            cache[hex] = out
+            return out
         end
-        r, g, b = r - lo * 0.6, g - lo * 0.6, b - lo * 0.6
-        local lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-        local k = lum > 0.035 and 0.035 / lum or 1
-        local function C(v) return math.floor(Srgb(math.min(1, v * k)) * 255 + 0.5) end
-        local out = string.format("%02x%02x%02x", C(r), C(g), C(b))
+        -- every other color keeps its hue at full strength, as dark ink
+        -- (yellows turn amber: a dark yellow reads as mud)
+        local hue
+        if hi == R then hue = ((G - Bl) / (hi - lo)) % 6
+        elseif hi == G then hue = (Bl - R) / (hi - lo) + 2
+        else hue = (R - G) / (hi - lo) + 4 end
+        hue = hue * 60
+        if hue >= 40 and hue <= 75 then hue = 32 + (hue - 40) * 0.3 end
+        sat = math.max(sat, 0.9)
+        local function Rgb(v)
+            local c = v * sat
+            local x = c * (1 - math.abs((hue / 60) % 2 - 1))
+            local m = v - c
+            local r, g, b
+            if hue < 60 then r, g, b = c, x, 0
+            elseif hue < 120 then r, g, b = x, c, 0
+            elseif hue < 180 then r, g, b = 0, c, x
+            elseif hue < 240 then r, g, b = 0, x, c
+            elseif hue < 300 then r, g, b = x, 0, c
+            else r, g, b = c, 0, x end
+            return r + m, g + m, b + m
+        end
+        local v0, v1 = 0, 1
+        for _ = 1, 24 do
+            local mid = (v0 + v1) / 2
+            local r, g, b = Rgb(mid)
+            if 0.2126 * Lin(r) + 0.7152 * Lin(g) + 0.0722 * Lin(b) < INK_LUM then v0 = mid else v1 = mid end
+        end
+        local r, g, b = Rgb(v0)
+        local out = string.format("%02x%02x%02x", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
         cache[hex] = out
         return out
     end
@@ -129,7 +156,7 @@ do
     K.tocBtn = UI.CreateSleekButton(f, 72, 22, "Contents")
     K.tocBtn:SetPoint("RIGHT", K.menuBtn, "LEFT", -6, 0)
     K.tocBtn.tipTitle = GOLD .. "Contents|r"
-    K.tocBtn.tipText = "Back to the first pages: the cover and contents, or the story's title page."
+    K.tocBtn.tipText = "Opens the book at its first pages: the story's title page and its chapters."
     K.tocBtn:SetScript("OnClick", function() K.GoTo(1) end)
     K.pageText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     K.pageText:SetPoint("RIGHT", K.tocBtn, "LEFT", -10, 0)
@@ -181,7 +208,7 @@ do
     -- 0.6.7 (Mor): clear arrows at the bottom of the pages (the dog-eared
     -- corners of the first build went unnoticed); the wheel still turns
     local function Arrow(d)
-        local b = UI.CreateSleekButton(tome, 96, 22, d < 0 and "< Previous" or "Next >", "gold")
+        local b = UI.CreateSleekButton(tome, 112, 22, d < 0 and "< Previous" or "Next >", "gold")
         b:SetFrameLevel((tome:GetFrameLevel() or 1) + 30)
         b.tipTitle = GOLD .. (d < 0 and "Previous page" or "Next page") .. "|r"
         b.tipText = "Or the mouse wheel over the book."
@@ -195,6 +222,19 @@ do
     K.measure:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     K.measure:SetAlpha(0)
     K.measure:SetJustifyH("LEFT")
+end
+
+-- The arrows under the pages: on the first and last pages they close
+-- the book to its front or back cover (0.6.7, Mor)
+function K.Arrows(first, last)
+    K.prevBtn.label:SetText(first and "< Front cover" or "< Previous")
+    K.prevBtn.tipTitle = GOLD .. (first and "Front cover" or "Previous page") .. "|r"
+    K.prevBtn.tipText = first and "Closes the book on its front cover." or "Or the mouse wheel over the book."
+    K.nextBtn.label:SetText(last and "Back cover >" or "Next >")
+    K.nextBtn.tipTitle = GOLD .. (last and "Back cover" or "Next page") .. "|r"
+    K.nextBtn.tipText = last and "Closes the book on its back cover." or "Or the mouse wheel over the book."
+    K.prevBtn:Enable()
+    K.nextBtn:Enable()
 end
 
 -- Where the pages sit: two side by side, or one when the window is narrow
@@ -226,12 +266,13 @@ function K.Layout()
     -- the text area of a page and its type size
     K.cw = K.pageW - PAD_X - PAD_GUTTER
     K.ch = K.pageH - PAD_TOP - PAD_BOTTOM
-    K.size = 12 + (K.cw > 300 and 1 or 0) + (K.cw > 400 and 1 or 0) + (K.cw > 520 and 1 or 0)
+    K.size = 13 + (K.cw > 300 and 1 or 0) + (K.cw > 400 and 1 or 0) + (K.cw > 520 and 1 or 0)
     local style = K.Style()
     l.bg:SetTexture(B.Art(style.tex))
     r.bg:SetTexture(B.Art(style.tex))
-    -- 0.6.7: parchment a shade deeper, so it never washes out to white
-    local tone = K.Night() and 1 or 0.88
+    -- 0.6.7 (Mor): Parchment a shade deeper than Light, so it never
+    -- washes out to white; Light is the brighter page
+    local tone = (K.Night() and 1) or (ns.Get("bookPages") == "LIGHT" and 0.88) or 0.78
     l.bg:SetVertexColor(tone, tone * 0.97, tone * 0.92)
     r.bg:SetVertexColor(tone, tone * 0.97, tone * 0.92)
     l.bg:SetTexCoord(0, 1, 0, 1)
@@ -577,6 +618,17 @@ function K.Paginate()
             rows[i].page = K.storyPage[st.id]
         end
     end
+    -- 0.6.7: a last right-hand page that would stay blank says The End
+    if not K.single and #pages % 2 == 1 and #pages > 1 then
+        local style = K.Style()
+        local t = "|cff" .. style.head .. "The End|r"
+        local h = K.Measure(t, K.size + 5, B.TITLE_FONT)
+        local mid = math.floor(K.ch / 2)
+        table.insert(pages, { items = {
+            { type = "text", text = t, size = K.size + 5, font = B.TITLE_FONT, center = true, y = mid - h - 6, h = h },
+            { type = "flourish", y = mid + 4, h = 14 },
+        }, storyId = pages[#pages].storyId, blank = true })
+    end
     K.list = pages
     return pages
 end
@@ -740,8 +792,7 @@ function K.DrawPage(side, n)
         elseif it.type == "scene" and not K.noModels then
             if not p.scene then
                 local ok, scene = pcall(UI.CreateStoryScene, p, {
-                    bigTip = "Shows this scene in a big window, where you can zoom and look around.",
-                    onWheel = function(delta) K.Wheel(delta) end,
+                    bigTip = "Shows the whole party side by side in a big window. Or click the scene.",
                     onBig = function(sc) UI.OpenBigScene(sc.story, sc.view, ns.GetBookInfo(sc.story).name) end,
                 })
                 if ok and scene then
@@ -791,14 +842,12 @@ function K.Render(sides)
     local l, r = K.pages[1], K.pages[2]
     if K.single then
         if not sides or sides[1] then K.DrawPage(1, K.at) end
-        if K.at > 1 then K.prevBtn:Enable() else K.prevBtn:Disable() end
-        if K.at < n then K.nextBtn:Enable() else K.nextBtn:Disable() end
+        K.Arrows(K.at <= 1, K.at >= n)
         K.pageText:SetText("|cffd7c4a3" .. K.at .. " of " .. n .. "|r")
     else
         if not sides or sides[1] then K.DrawPage(1, K.at) end
         if not sides or sides[2] then K.DrawPage(2, K.at + 1) end
-        if K.at > 1 then K.prevBtn:Enable() else K.prevBtn:Disable() end
-        if K.at + 1 < n then K.nextBtn:Enable() else K.nextBtn:Disable() end
+        K.Arrows(K.at <= 1, K.at + 1 >= n)
         K.pageText:SetText("|cffd7c4a3" .. K.at .. (K.at + 1 <= n and ("-" .. (K.at + 1)) or "") .. " of " .. n .. "|r")
     end
     if K.list and K.list[K.at] and K.list[K.at].storyId then ns.state.bookStoryId = K.list[K.at].storyId end
@@ -856,56 +905,265 @@ do
         s:Hide()
         return s
     end
+    -- 0.6.7 (Mor's test): a little slower than the first build (fast,
+    -- but with time to see the page move)
     local ok = K.tome.CreateAnimationGroup and pcall(function()
-        -- the book grows in, then its cover swings open
-        K.tomeIn = K.tome:CreateAnimationGroup()
-        AlphaAnim(K.tomeIn, 0, 1, 0.16)
-        ScaleAnim(K.tomeIn, 0.90, 0.90, 1, 1, 0.22, "CENTER", "OUT")
-        K.tomeOut = K.tome:CreateAnimationGroup()
-        AlphaAnim(K.tomeOut, 1, 0, 0.16)
-        ScaleAnim(K.tomeOut, 1, 1, 0.86, 0.86, 0.16, "CENTER", "IN")
-        if K.tomeOut.SetToFinalAlpha then K.tomeOut:SetToFinalAlpha(true) end
-        K.cover = Sheet("cover", false)
-        K.cover.shade:SetAlpha(0.35)
-        K.coverOpen = K.cover:CreateAnimationGroup()
-        ScaleAnim(K.coverOpen, 1, 1, 0.02, 1, 0.24, "LEFT", "IN", nil, 0.10)
-        K.coverClose = K.cover:CreateAnimationGroup()
-        ScaleAnim(K.coverClose, 0.02, 1, 1, 1, 0.20, "LEFT", "OUT")
+        -- the pages fade in under a cover that swings open, and out under
+        -- a cover that swings shut (the covers are made below)
+        K.tomeFadeIn = K.tome:CreateAnimationGroup()
+        AlphaAnim(K.tomeFadeIn, 0, 1, 0.22)
+        K.tomeFadeOut = K.tome:CreateAnimationGroup()
+        AlphaAnim(K.tomeFadeOut, 1, 0, 0.20)
+        if K.tomeFadeOut.SetToFinalAlpha then K.tomeFadeOut:SetToFinalAlpha(true) end
         -- a page turning: it folds to the spine on one side, opens on the
         -- other, then fades into the new page
         for i, origin in ipairs({ "RIGHT", "LEFT" }) do
             local s = Sheet("page", i == 1)
             s.fold = s:CreateAnimationGroup()
-            ScaleAnim(s.fold, 1, 1, 0.02, 1, 0.15, origin, "IN")
+            ScaleAnim(s.fold, 1, 1, 0.02, 1, 0.21, origin, "IN")
             s.open = s:CreateAnimationGroup()
-            ScaleAnim(s.open, 0.02, 1, 1, 1, 0.15, origin, "OUT")
+            ScaleAnim(s.open, 0.02, 1, 1, 1, 0.21, origin, "OUT")
             s.fade = s:CreateAnimationGroup()
-            AlphaAnim(s.fade, 1, 0, 0.10)
+            AlphaAnim(s.fade, 1, 0, 0.14)
             if s.fade.SetToFinalAlpha then s.fade:SetToFinalAlpha(true) end
             K["sheet" .. i] = s
         end
     end)
     K.canAnimate = ok and true or false
+    K.ScaleAnim, K.AlphaAnim = ScaleAnim, AlphaAnim
 end
 
 function K.Motion()
     return K.canAnimate and ns.Get("bookMotion") and true or false
 end
 
+-- =========================================================
+-- 0.6.7 (Mor): the closed book. A book taken from the shelf lies closed
+-- with its front cover up: its title, where it happened, its emblem and
+-- its party. It opens with a click on the cover, Next or the wheel.
+-- Previous on the first pages closes it to the front cover again, and
+-- Next on the last pages to its back cover, with a few lines from the
+-- story, as on the back of a real book. K.state: FRONT, OPEN or BACK.
+-- =========================================================
+do
+    local function Edge(c, a1, x1, y1, a2, x2, y2, w, h)
+        local t = c:CreateTexture(nil, "ARTWORK")
+        t:SetTexture(UI.SOLID_TEX)
+        t:SetVertexColor(0.86, 0.68, 0.26, 0.85)
+        t:SetPoint(a1, c, a1, x1, y1)
+        t:SetPoint(a2, c, a2, x2, y2)
+        if w then t:SetWidth(w) end
+        if h then t:SetHeight(h) end
+    end
+    local function Text(c, template, size, font, r, g, b)
+        local fs = c:CreateFontString(nil, "OVERLAY", template)
+        if size then pcall(fs.SetFont, fs, font or BODY_FONT, size, "") end
+        fs:SetJustifyH("CENTER")
+        fs:SetTextColor(r, g, b)
+        fs:SetShadowOffset(1, -1)
+        fs:SetShadowColor(0, 0, 0, 0.9)
+        return fs
+    end
+    local function Cover(back)
+        local c = CreateFrame("Button", nil, K.frame)
+        c:SetFrameLevel((K.tome:GetFrameLevel() or 1) + 45)
+        c.leather = c:CreateTexture(nil, "BACKGROUND")
+        c.leather:SetAllPoints(c)
+        c.leather:SetTexture(B.Art("cover"))
+        c.shade = c:CreateTexture(nil, "BORDER")
+        c.shade:SetAllPoints(c)
+        c.shade:SetTexture(B.Art("shade"))
+        if back then c.shade:SetTexCoord(1, 0, 0, 1) end
+        c.shade:SetAlpha(0.40)
+        -- a gold rule inside the edge, with the book's gold corners
+        Edge(c, "TOPLEFT", 18, -18, "TOPRIGHT", -18, -18, nil, 2)
+        Edge(c, "BOTTOMLEFT", 18, 18, "BOTTOMRIGHT", -18, 18, nil, 2)
+        Edge(c, "TOPLEFT", 18, -18, "BOTTOMLEFT", 18, 18, 2, nil)
+        Edge(c, "TOPRIGHT", -18, -18, "BOTTOMRIGHT", -18, 18, 2, nil)
+        local coords = { { "TOPLEFT", 0, 1, 0, 1, 8, -8 }, { "TOPRIGHT", 1, 0, 0, 1, -8, -8 },
+            { "BOTTOMLEFT", 0, 1, 1, 0, 8, 8 }, { "BOTTOMRIGHT", 1, 0, 1, 0, -8, 8 } }
+        for _, k in ipairs(coords) do
+            local t = c:CreateTexture(nil, "OVERLAY", nil, 6)
+            t:SetTexture(B.Art("corner"))
+            t:SetSize(30, 30)
+            t:SetPoint(k[1], k[6], k[7])
+            t:SetTexCoord(k[2], k[3], k[4], k[5])
+        end
+        c.title = Text(c, "GameFontNormalLarge", back and 19 or 27, B.TITLE_FONT, 1, 0.82, 0.25)
+        c.title:SetShadowOffset(1, -2)
+        c.title:SetSpacing(4)
+        c.sub = Text(c, "GameFontNormal", back and 12 or 14, nil, 0.93, 0.84, 0.62)
+        c.flour = c:CreateTexture(nil, "OVERLAY")
+        c.flour:SetTexture(B.Art("flourish"))
+        c.flour:SetVertexColor(1, 0.86, 0.45)
+        c.line = Text(c, "GameFontHighlight", back and 12 or 13, nil, 0.90, 0.82, 0.66)
+        c.line:SetSpacing(3)
+        c.foot = Text(c, "GameFontHighlightSmall", 11, nil, 0.80, 0.70, 0.52)
+        c.hint = Text(c, "GameFontHighlightSmall", 10, nil, 0.72, 0.62, 0.45)
+        if back then
+            c.blurb = Text(c, "GameFontHighlight", 13, nil, 0.97, 0.91, 0.78)
+            c.blurb:SetSpacing(4)
+        else
+            c.icon = c:CreateTexture(nil, "OVERLAY")
+            c.icon:SetSize(64, 64)
+            c.ring = c:CreateTexture(nil, "OVERLAY", nil, -1)
+            c.ring:SetTexture(UI.SOLID_TEX)
+            c.ring:SetVertexColor(0.86, 0.68, 0.26, 0.85)
+            c.ring:SetSize(70, 70)
+        end
+        c:RegisterForClicks("LeftButtonUp")
+        c:SetScript("OnClick", function() K.OpenCover(back and "BACK" or "FRONT") end)
+        c:EnableMouseWheel(true)
+        c:SetScript("OnMouseWheel", function(_, delta) K.Wheel(delta) end)
+        -- swings open toward the spine, and shut again
+        if K.canAnimate then
+            local origin = back and "RIGHT" or "LEFT"
+            c.fold = c:CreateAnimationGroup()
+            K.ScaleAnim(c.fold, 1, 1, 0.02, 1, 0.38, origin, "IN")
+            c.unfold = c:CreateAnimationGroup()
+            K.ScaleAnim(c.unfold, 0.02, 1, 1, 1, 0.38, origin, "OUT")
+            c.fadeOut = c:CreateAnimationGroup()
+            K.AlphaAnim(c.fadeOut, 1, 0, 0.22)
+            if c.fadeOut.SetToFinalAlpha then c.fadeOut:SetToFinalAlpha(true) end
+        end
+        c:Hide()
+        return c
+    end
+    K.front = Cover(false)
+    K.back = Cover(true)
+end
+
+-- A few plain lines from the story's opening, for the back cover
+local function Blurb(st, info)
+    local chapters = K.StoryBody(st, info)
+    local para
+    for _, ch in ipairs(chapters) do
+        if ch.paras[1] then para = ch.paras[1] break end
+    end
+    if not para then return "" end
+    local t = ns.StripColors(para):gsub("|T.-|t", ""):gsub("|A.-|a", ""):gsub("%s+", " ")
+    t = t:match("^%s*(.-)%s*$") or ""
+    if #t > 260 then t = (t:sub(1, 260):match("^(.*)%s") or t:sub(1, 260)) .. "..." end
+    return t
+end
+
+-- The words on both covers of the open book
+function K.FillCovers()
+    local o = ns.state.bookOpen or {}
+    local r, g, b = B.BookColor(o)
+    for _, c in ipairs({ K.front, K.back }) do c.leather:SetVertexColor(r, g, b) end
+    local F, Bk = K.front, K.back
+    local st = o.kind ~= "chronicle" and ns.FindStory(o.id)
+    if not st then
+        local ch = o.kind == "chronicle" and ns.FindChronicle and ns.FindChronicle(o.id)
+        local name = ch and ch.title or ""
+        F.title:SetText(name)
+        Bk.title:SetText(name)
+        for _, fs in ipairs({ F.sub, F.line, F.foot, Bk.sub, Bk.line, Bk.foot, Bk.blurb }) do fs:SetText("") end
+        if F.icon then F.icon:Hide(); F.ring:Hide() end
+        return
+    end
+    local info = ns.GetBookInfo(st)
+    local name = ns.StripColors(info.name or "")
+    local place = (info.instance ~= "" and info.instance) or info.zone or ""
+    if info.zone ~= "" and info.zone ~= place then place = place .. ", " .. info.zone end
+    local party = (info.party ~= "" and info.party) or ""
+    F.title:SetText(name)
+    F.sub:SetText(place)
+    F.icon:SetTexture(ns.GetAdventureIcon(st))
+    F.icon:SetTexCoord(ns.IconCoords(ns.GetAdventureIcon(st)))
+    F.icon:Show()
+    F.ring:Show()
+    F.line:SetText(party ~= "" and ("A tale of " .. party) or "")
+    F.foot:SetText(ns.GetRunKindLabel(st) .. ((info.date or "") ~= "" and ("  -  " .. info.date) or ""))
+    F.hint:SetText("Click to open")
+    Bk.title:SetText(name)
+    local blurb = Blurb(st, info)
+    Bk.blurb:SetText((blurb ~= "" and not blurb:find("\"", 1, true)) and ("\"" .. blurb .. "\"") or blurb)
+    Bk.line:SetText(party ~= "" and ("With " .. party) or "")
+    local stats = ns.StripColors(ns.GetBookStats(info) or "")
+    Bk.sub:SetText(place .. ((place ~= "" and stats ~= "") and "\n" or "") .. stats)
+    Bk.foot:SetText(((info.date or "") ~= "" and (info.date .. "  -  ") or "") .. ns.GetRunKindLabel(st) ..
+        ((info.duration or "") ~= "" and (", " .. info.duration) or ""))
+    Bk.hint:SetText("Click to open it again")
+end
+
+-- Where the covers lie: the front over the right-hand page, the back over
+-- the left (one page: over the whole book), and their words
+function K.PlaceCovers()
+    local F, Bk = K.front, K.back
+    F:ClearAllPoints()
+    Bk:ClearAllPoints()
+    if K.single then
+        F:SetAllPoints(K.tome)
+        Bk:SetAllPoints(K.tome)
+    else
+        F:SetPoint("TOPLEFT", K.tome, "TOP", 0, 0)
+        F:SetPoint("BOTTOMRIGHT", K.tome, "BOTTOMRIGHT", 0, 0)
+        Bk:SetPoint("TOPLEFT", K.tome, "TOPLEFT", 0, 0)
+        Bk:SetPoint("BOTTOMRIGHT", K.tome, "BOTTOM", 0, 0)
+    end
+    local w = math.max(120, (K.single and (K.tome:GetWidth() or 400) or (K.tome:GetWidth() or 800) / 2) - 70)
+    local h = K.tome:GetHeight() or 400
+    for _, c in ipairs({ F, Bk }) do
+        for _, fs in ipairs({ c.title, c.sub, c.line, c.foot, c.hint, c.blurb }) do
+            if fs then fs:SetWidth(w) end
+        end
+        c.flour:SetSize(math.min(200, w * 0.7), 16)
+        c.foot:ClearAllPoints()
+        c.foot:SetPoint("BOTTOM", c, "BOTTOM", 0, 50)
+        c.hint:ClearAllPoints()
+        c.hint:SetPoint("BOTTOM", c, "BOTTOM", 0, 28)
+    end
+    F.title:ClearAllPoints()
+    F.title:SetPoint("TOP", F, "TOP", 0, -math.max(48, h * 0.14))
+    F.sub:ClearAllPoints()
+    F.sub:SetPoint("TOP", F.title, "BOTTOM", 0, -8)
+    F.flour:ClearAllPoints()
+    F.flour:SetPoint("TOP", F.sub, "BOTTOM", 0, -12)
+    F.icon:ClearAllPoints()
+    F.icon:SetPoint("TOP", F.flour, "BOTTOM", 0, -math.max(18, h * 0.06))
+    F.ring:ClearAllPoints()
+    F.ring:SetPoint("CENTER", F.icon, "CENTER")
+    F.line:ClearAllPoints()
+    F.line:SetPoint("TOP", F.icon, "BOTTOM", 0, -18)
+    Bk.title:ClearAllPoints()
+    Bk.title:SetPoint("TOP", Bk, "TOP", 0, -48)
+    Bk.flour:ClearAllPoints()
+    Bk.flour:SetPoint("TOP", Bk.title, "BOTTOM", 0, -10)
+    Bk.blurb:ClearAllPoints()
+    Bk.blurb:SetPoint("TOP", Bk.flour, "BOTTOM", 0, -16)
+    Bk.line:ClearAllPoints()
+    Bk.line:SetPoint("TOP", Bk.blurb, "BOTTOM", 0, -18)
+    Bk.sub:ClearAllPoints()
+    Bk.sub:SetPoint("TOP", Bk.line, "BOTTOM", 0, -10)
+end
+
+local COVER_ANIMS = { "fold", "unfold", "fadeOut" }
+
 -- Stops whatever is moving and shows the book as it should be
 function K.Settle()
-    for _, ag in ipairs({ K.tomeIn, K.coverOpen, K.coverClose,
+    for _, ag in ipairs({ K.tomeFadeIn, K.tomeFadeOut,
         K.sheet1 and K.sheet1.fold, K.sheet1 and K.sheet1.open, K.sheet1 and K.sheet1.fade,
         K.sheet2 and K.sheet2.fold, K.sheet2 and K.sheet2.open, K.sheet2 and K.sheet2.fade }) do
         if ag and ag:IsPlaying() then ag:Stop() end
     end
-    if K.cover then K.cover:Hide() end
+    for _, c in ipairs({ K.front, K.back }) do
+        for _, k in ipairs(COVER_ANIMS) do
+            if c[k] and c[k]:IsPlaying() then c[k]:Stop() end
+        end
+        c:SetAlpha(1)
+    end
     if K.sheet1 then K.sheet1:Hide(); K.sheet1:SetAlpha(1) end
     if K.sheet2 then K.sheet2:Hide(); K.sheet2:SetAlpha(1) end
     K.tome:SetAlpha(1)
+    local state = K.state or "OPEN"
+    if state == "FRONT" then K.front:Show() else K.front:Hide() end
+    if state == "BACK" then K.back:Show() else K.back:Hide() end
+    if state == "OPEN" then K.tome:Show() else K.tome:Hide() end
     if K.busy or K.noModels then
         K.busy, K.noModels = nil, nil
-        K.Render()
+        if state == "OPEN" then K.Render() end
     end
 end
 
@@ -930,62 +1188,90 @@ local function PlaceSheets()
     end
 end
 
--- Opens: the book grows in and its cover swings open over the right page
-function K.PlayOpen()
-    B.Sound("IG_SPELLBOOK_OPEN")
-    if not K.Motion() then return end
-    local r, g, b = B.BookColor(ns.state.bookOpen)
-    K.cover.bg:SetVertexColor(r * 0.9, g * 0.9, b * 0.9)
-    K.cover:ClearAllPoints()
-    if K.single then
-        K.cover:SetAllPoints(K.tome)
-    else
-        K.cover:SetPoint("TOPLEFT", K.tome, "TOP", 0, 0)
-        K.cover:SetPoint("BOTTOMRIGHT", K.tome, "BOTTOMRIGHT", 0, 0)
-    end
-    K.busy, K.noModels, K.busySince = true, true, GetTime()
+-- Shows the book closed, its front or back cover up (no animation)
+function K.ShowClosed(which)
+    K.state = which
+    K.FillCovers()
+    K.PlaceCovers()
+    K.Settle()
+    K.pageText:SetText("|cffd7c4a3" .. (which == "FRONT" and "Cover" or "Back cover") .. "|r")
+end
+
+-- Shows the pages at once (Contents, a story asked for by name)
+function K.ShowOpen(n)
+    K.state = "OPEN"
+    K.Settle()
+    K.at = K.SpreadOf(n or K.at or 1)
     K.Render()
-    K.cover:Show()
-    OnDone(K.coverOpen, function()
-        K.cover:Hide()
+end
+
+-- From a closed cover to the pages: the cover swings open over them
+function K.OpenCover(which)
+    if not K.list or K.state ~= which then return end
+    local c = (which == "BACK") and K.back or K.front
+    K.Settle()
+    K.at = K.SpreadOf(which == "BACK" and #K.list or 1)
+    K.state = "OPEN"
+    B.Sound("IG_SPELLBOOK_OPEN")
+    if not K.Motion() or not c.fold then return K.Settle() or K.Render() end
+    K.busy, K.noModels, K.busySince = true, true, GetTime()
+    K.tome:Show()
+    K.Render()
+    OnDone(c.fold, function()
+        c:Hide()
         K.busy, K.noModels = nil, nil
         K.Render()
     end)
-    K.tomeIn:Play()
-    K.coverOpen:Play()
+    K.tomeFadeIn:Play()
+    c.fold:Play()
 end
 
--- Closes: the cover folds back over the pages, the book shrinks away,
--- then the shelf
+-- From the pages to a closed cover: the cover swings shut over them
+function K.CloseCover(which, after)
+    local c = (which == "BACK") and K.back or K.front
+    B.Sound("IG_SPELLBOOK_CLOSE")
+    K.FillCovers()
+    K.PlaceCovers()
+    if not K.Motion() or not c.unfold then
+        K.ShowClosed(which)
+        if after then after() end
+        return
+    end
+    K.Settle()
+    K.busy, K.noModels, K.busySince = true, true, GetTime()
+    K.Render()
+    c:SetAlpha(1)
+    c:Show()
+    OnDone(c.unfold, function()
+        K.busy, K.noModels = nil, nil
+        K.ShowClosed(which)
+        if after then after() end
+    end)
+    K.tomeFadeOut:Play()
+    c.unfold:Play()
+end
+
+-- Closes the book to the shelf: shut on its front cover, then away
 function K.Close()
     local function Done()
+        K.state = "OPEN"
         K.Settle()
         ns.state.bookView = "SHELF"
         UI.RefreshStoryBook()
     end
-    B.Sound("IG_SPELLBOOK_CLOSE")
     if K.menu then K.menu:Hide() end
-    if not K.Motion() or not K.frame:IsVisible() then return Done() end
-    K.Settle()
-    K.busy, K.noModels, K.busySince = true, true, GetTime()
-    K.Render()
-    local r, g, b = B.BookColor(ns.state.bookOpen)
-    K.cover.bg:SetVertexColor(r * 0.9, g * 0.9, b * 0.9)
-    K.cover:ClearAllPoints()
-    if K.single then
-        K.cover:SetAllPoints(K.tome)
-    else
-        K.cover:SetPoint("TOPLEFT", K.tome, "TOP", 0, 0)
-        K.cover:SetPoint("BOTTOMRIGHT", K.tome, "BOTTOMRIGHT", 0, 0)
+    if not K.Motion() or not K.frame:IsVisible() then
+        B.Sound("IG_SPELLBOOK_CLOSE")
+        return Done()
     end
-    K.cover:Show()
-    OnDone(K.coverClose, function() K.tomeOut:Play() end)
-    OnDone(K.tomeOut, function()
-        K.cover:Hide()
-        K.busy, K.noModels = nil, nil
-        Done()
-    end)
-    K.coverClose:Play()
+    local function Away()
+        local c = (K.state == "BACK") and K.back or K.front
+        if not c.fadeOut then return Done() end
+        K.busy, K.busySince = true, GetTime()
+        OnDone(c.fadeOut, function() K.busy = nil Done() end)
+        c.fadeOut:Play()
+    end
+    if K.state == "OPEN" then K.CloseCover("FRONT", Away) else B.Sound("IG_SPELLBOOK_CLOSE") Away() end
 end
 
 -- Turns to the spread of page `n`; dir 1 forward, -1 back
@@ -1036,20 +1322,25 @@ end
 
 function K.Turn(d)
     if not K.list then return end
+    -- a closed book opens; past the first or last pages it closes
+    if K.state == "FRONT" then if d > 0 then K.OpenCover("FRONT") end return end
+    if K.state == "BACK" then if d < 0 then K.OpenCover("BACK") end return end
     local step = K.single and 1 or 2
     local target = K.at + d * step
-    if target < 1 or target > #K.list then return end
+    if target < 1 then return K.CloseCover("FRONT") end
+    if target > #K.list then return K.CloseCover("BACK") end
     K.Show(target, d)
 end
 
 function K.GoTo(n)
     if K.menu then K.menu:Hide() end
+    if K.state ~= "OPEN" then return K.ShowOpen(n) end
     K.Show(n)
 end
 
 function K.Wheel(delta)
     -- a turn still moving takes the wheel only after a moment
-    if K.busy and GetTime() - (K.busySince or 0) < 0.6 then return end
+    if K.busy and GetTime() - (K.busySince or 0) < 0.8 then return end
     K.Turn(delta < 0 and 1 or -1)
 end
 
@@ -1131,11 +1422,17 @@ function B.ShowBook()
             if K.frame:IsVisible() and ns.state.bookView == "BOOK" and Signature() ~= K.sig then B.ShowBook() end
         end)
     end
-    if K.animateOpen or not wasShown then
+    -- 0.6.7 (Mor): a book just taken from the shelf (or asked for by
+    -- name) lies closed, front cover up; back in the Story Book it stays
+    -- as it was left
+    if K.animateOpen or keyChanged or not K.state then
         K.animateOpen = nil
+        K.ShowClosed("FRONT")
+    elseif K.state ~= "OPEN" then
+        if changed then K.ShowClosed(K.state) end
+    elseif not wasShown then
         K.Settle()
         K.Render()
-        K.PlayOpen()
     elseif (changed or jumped) and not K.busy then
         K.Render()
     end

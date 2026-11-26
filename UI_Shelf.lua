@@ -162,8 +162,8 @@ do
         S.newBtn:Hide()
         S.importBtn:SetPoint("TOPRIGHT", -12, -10)
     end
-    S.importBtn.tipTitle = GOLD .. "Import Story from AI|r"
-    S.importBtn.tipText = "Paste the colored story your AI wrote and pick the run it belongs to."
+    S.importBtn.tipTitle = GOLD .. "Import Story|r"
+    S.importBtn.tipText = "Paste a colored story and pick the run it belongs to."
     S.importBtn:SetScript("OnClick", function() UI.OpenStoryImportModal(nil) end)
 
     -- search: title, place, party member, date or chronicle

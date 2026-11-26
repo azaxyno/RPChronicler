@@ -17,9 +17,9 @@ UI.storyBook = B
 -- only and every story opens as its own book. Saved chronicles are kept
 -- (RPChroniclerDB.chronicles), just not shown; true brings them back.
 B.CHRONICLES = false
-local root = UI.NewSection("BOOK", "Story Book", "The stories your AI wrote from your runs.")
+local root = UI.NewSection("BOOK", "Story Book", "The tales of your adventures.")
 B.root = root
-UI.AddRailButton("BOOK", "Story Book", UI.ICONS.STORY, "Read, share and edit the stories your AI wrote from your runs.")
+UI.AddRailButton("BOOK", "Story Book", UI.ICONS.STORY, "Read, share and edit the tales of your adventures.")
 
 -- Stories imported this session glow on the shelf until opened
 B.sessionStart = time and time() or 0

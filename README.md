@@ -20,7 +20,9 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 - **Use what you want.** RP Copy and the recordings are separate: the setup on first login asks whether you want RP Copy, recordings and stories, or both. Turn RP Copy off and none of it runs.
 - **Private by design.** Everything stays on your PC, and `/rp wipe` deletes it all.
 
-<p align="center"><img src="docs/story-book.png" width="640" alt="The in-game Story Book showing a colored story chapter"><br><i>The in-game Story Book</i><br><sub>Your party on the cover. Members you have not met up close stay shadows until you meet them again.</sub></p>
+<p align="center"><img src="docs/story-book-open.png" width="640" alt="A story open in the in-game Story Book: the party and title page on the left, the first chapter on the right"><br><i>A story open in the Story Book</i><br><sub>Your party on the title page. Members you have not met up close stay shadows until you meet them again.</sub></p>
+
+<p align="center"><img src="docs/story-shelf.png" width="560" alt="The Story Book shelf with leather-bound stories"><br><i>Your stories on the shelf</i></p>
 
 <p align="center"><img src="docs/story-export-example.png" width="640" alt="A story web page with a screenshot placed in the chapter"><br><i>A story as a web page, screenshots in place</i></p>
 

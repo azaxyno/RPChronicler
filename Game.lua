@@ -127,83 +127,83 @@ function ns.UnitDisplayId(unit)
     return (id and id > 0) and id or nil
 end
 
--- 0.6.4: a boss's display ID from the Encounter Journal, by its
--- encounter ID or by the dungeon's and the boss's names (older runs kept
--- neither). Every call guarded; the journal's tier is put back after.
-local ejCache = {}
-function ns.JournalBossDisplay(instanceName, bossName, encounterID)
-    if not EJ_GetCreatureInfo then return nil end
-    local key = tostring(instanceName) .. "|" .. tostring(bossName) .. "|" .. tostring(encounterID)
-    if ejCache[key] ~= nil then return ejCache[key] or nil end
-    local function Creature(enc)
-        local ok, _, _, _, _, display = pcall(EJ_GetCreatureInfo, 1, enc)
-        display = ok and ns.SafeNum(display) or nil
-        return (display and display > 0) and display or nil
+-- 0.6.8: what the Encounter Journal knows about each boss, built once a
+-- session: { [boss name, lower case] = { instance, encounter, display,
+-- npc } }. Every tier and every dungeon and raid is read, with the
+-- dungeon selected first (the journal may list no encounters for a dungeon
+-- that isn't selected), then the journal's tier is put back. Skipped
+-- while the player's own journal is open, so it never jumps under them.
+local ejBosses
+local function JournalCreature(encounterID)
+    if not (EJ_GetCreatureInfo and encounterID) then return nil, nil end
+    -- returns id, name, description, displayInfo, iconImage, uiModelSceneID
+    local ok, npc, _, _, display = pcall(EJ_GetCreatureInfo, 1, encounterID)
+    display = ok and ns.SafeNum(display) or nil
+    npc = ok and ns.SafeNum(npc) or nil
+    return (display and display > 0) and display or nil, (npc and npc > 0) and npc or nil
+end
+function ns.JournalBosses()
+    if ejBosses then return ejBosses end
+    if not (EJ_GetNumTiers and EJ_SelectTier and EJ_GetInstanceByIndex and EJ_GetEncounterInfoByIndex) then
+        ejBosses = {}
+        return ejBosses
     end
-    local found = encounterID and Creature(encounterID) or nil
-    if not found and type(instanceName) == "string" and type(bossName) == "string"
-        and EJ_GetNumTiers and EJ_SelectTier and EJ_GetInstanceByIndex and EJ_GetEncounterInfoByIndex then
-        local okT, oldTier = pcall(EJ_GetCurrentTier)
-        local okN, tiers = pcall(EJ_GetNumTiers)
-        local wantI, wantB = instanceName:lower(), bossName:lower()
-        for t = 1, (okN and tonumber(tiers) or 0) do
-            if found then break end
-            pcall(EJ_SelectTier, t)
-            for _, raid in ipairs({ false, true }) do
-                if found then break end
-                for i = 1, 200 do
-                    local ok, id, name = pcall(EJ_GetInstanceByIndex, i, raid)
-                    if not ok or not id then break end
-                    if type(name) == "string" and name:lower() == wantI then
-                        for j = 1, 40 do
-                            local okE, eName, _, encID = pcall(EJ_GetEncounterInfoByIndex, j, id)
-                            if not okE or not eName then break end
-                            if eName:lower() == wantB then found = Creature(encID) break end
-                        end
-                        break
-                    end
+    if EncounterJournal and EncounterJournal.IsShown and EncounterJournal:IsShown() then return {} end
+    local out = {}
+    local okT, oldTier = pcall(EJ_GetCurrentTier)
+    local okN, tiers = pcall(EJ_GetNumTiers)
+    for t = 1, (okN and tonumber(tiers) or 0) do
+        pcall(EJ_SelectTier, t)
+        for _, raid in ipairs({ false, true }) do
+            for i = 1, 200 do
+                local ok, id, iname = pcall(EJ_GetInstanceByIndex, i, raid)
+                if not ok or not id then break end
+                iname = ns.SafeStr(iname)
+                if EJ_SelectInstance then pcall(EJ_SelectInstance, id) end
+                for j = 1, 40 do
+                    local okE, eName, _, encID = pcall(EJ_GetEncounterInfoByIndex, j, id)
+                    if not okE or not eName then okE, eName, _, encID = pcall(EJ_GetEncounterInfoByIndex, j) end
+                    eName = okE and ns.SafeStr(eName) or nil
+                    if not eName then break end
+                    local display, npc = JournalCreature(ns.SafeNum(encID))
+                    local e = { instance = iname, encounter = ns.SafeNum(encID), display = display, npc = npc }
+                    out[eName:lower()] = out[eName:lower()] or e
+                    -- the boss's own name too, when the encounter is named otherwise
+                    local okC, _, cName = pcall(EJ_GetCreatureInfo, 1, encID)
+                    cName = okC and ns.SafeStr(cName) or nil
+                    if cName and not out[cName:lower()] then out[cName:lower()] = e end
                 end
             end
         end
-        if okT and oldTier then pcall(EJ_SelectTier, oldTier) end
     end
-    ejCache[key] = found or false
-    return found
+    if okT and oldTier then pcall(EJ_SelectTier, oldTier) end
+    ejBosses = out
+    return out
+end
+
+-- 0.6.4: a boss's display ID from the Encounter Journal, by the fight's
+-- encounter ID, else by the boss's name. 0.6.8: the journal's creature
+-- display is its 4th value (0.6.4 read the icon by mistake). Returns
+-- display, npc.
+function ns.JournalBossDisplay(bossName, encounterID)
+    local display, npc = JournalCreature(encounterID)
+    if display then return display, npc end
+    if type(bossName) ~= "string" or bossName == "" then return nil, npc end
+    local e = ns.JournalBosses()[bossName:lower()]
+    if e then return e.display, e.npc or npc end
+    return nil, npc
 end
 
 -- 0.6.5: the dungeon or raid a boss belongs to, from the Encounter
--- Journal, for runs saved before the instance name was recorded (they
--- were named after the city around the entrance). Guarded and cached.
-local ejInstCache = {}
+-- Journal (0.6.8: or the built-in boss list), for runs saved before the instance name was recorded (they
+-- were named after the city around the entrance).
 function ns.JournalInstanceOfBoss(bossName)
     if type(bossName) ~= "string" or bossName == "" then return nil end
-    local want = bossName:lower()
-    if ejInstCache[want] ~= nil then return ejInstCache[want] or nil end
-    local found
-    if EJ_GetNumTiers and EJ_SelectTier and EJ_GetInstanceByIndex and EJ_GetEncounterInfoByIndex then
-        local okT, oldTier = pcall(EJ_GetCurrentTier)
-        local okN, tiers = pcall(EJ_GetNumTiers)
-        for t = 1, (okN and tonumber(tiers) or 0) do
-            if found then break end
-            pcall(EJ_SelectTier, t)
-            for _, raid in ipairs({ false, true }) do
-                if found then break end
-                for i = 1, 200 do
-                    local ok, id, name = pcall(EJ_GetInstanceByIndex, i, raid)
-                    if not ok or not id then break end
-                    for j = 1, 40 do
-                        local okE, eName = pcall(EJ_GetEncounterInfoByIndex, j, id)
-                        if not okE or not eName then break end
-                        if type(eName) == "string" and eName:lower() == want then found = ns.SafeStr(name) break end
-                    end
-                    if found then break end
-                end
-            end
-        end
-        if okT and oldTier then pcall(EJ_SelectTier, oldTier) end
-    end
-    ejInstCache[want] = found or false
-    return found
+    local e = ns.JournalBosses()[bossName:lower()]
+    if e and e.instance then return e.instance end
+    -- 0.6.8: else the built-in boss list (SceneData.lua)
+    local known = ns.BOSS_LOOKS and ns.BOSS_LOOKS[bossName]
+    return known and known[3] or nil
 end
 
 -- Calls fn(unit) for every group member other than you: raid1-40 in a

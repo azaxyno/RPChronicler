@@ -622,7 +622,7 @@ do
 
     local stories = CreateFrame("Frame", nil, p)
     stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
-    stories:SetHeight(296)
+    stories:SetHeight(320)
     -- 0.6.5: Include AI instructions adds the story rules, so the skill is optional
     Note(stories,
         "|cffffd100Your stories|r\n" ..
@@ -635,13 +635,15 @@ do
         { key = "exportTip", label = "Viewer tip on the shelf",
           tip = "One line on the Story Book shelf on reading your stories with screenshots in StoryViewer.html." },
         { key = "storyCover", label = "Story scenes",
-          tip = "Each story opens with its party: you in 3D in the gear from that run, companions near you as they are, everyone else as a shadow of their race. Click anyone to see them up close with their items. Each boss gets a panel at its chapter. Turn it off if your client shows no models." },
+          tip = "Each story opens with its party: you in 3D in the gear from that run, companions near you as they are, everyone else as a shadow of their race, in front of a painting of the place. At each boss's chapter the party faces the boss, and after the kill you see it fall. Click anyone to see them up close with their items. Off: the book is only written pages (also if your client shows no models)." },
+        { key = "bookMusic", label = "Dungeon music in the book",
+          tip = "While a dungeon story's pages are open, the game's own music for that kind of dungeon plays (at your music volume). Off, or when Story scenes is off: the book is silent and the game's music goes on as usual." },
         { key = "bookPages", label = "Pages", names = { PARCHMENT = "Parchment", LIGHT = "Light parchment", NIGHT = "Night" },
           tip = "Parchment: warm paper pages, with the story's colors inked darker so they read on paper. Light parchment: the same, on brighter pages. Night: dark pages, with the colors as the story was written." },
         { key = "bookMotion", label = "Book animations",
           tip = "The book opens from its front cover, turns its pages and closes to its cover with short animations. Off: everything happens at once." },
     })
-    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -250)
+    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -274)
     O.refresh.AI = function()
         stories:ClearAllPoints()
         stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)

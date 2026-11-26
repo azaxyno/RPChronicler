@@ -21,3 +21,7 @@ The icons in `Media/Icons` are game-icons.net glyphs, recolored in gold and set 
 ## Book art
 
 The shelf and book textures in `Media/Book` (leather, gold trim, parchment, wood, wall, corners, flourish) are our own, drawn by code in `tools/book/make_book_art.py` (GPL-3.0 with the rest of the addon). The book uses the game's own Morpheus font and spellbook sounds.
+
+## Story scene paintings and boss looks (0.6.8)
+
+The paintings of places behind the story scenes (`Media/Scene/bg_*.png`) are our own, drawn by code in `tools/scenes/make_backdrops.py` (GPL-3.0 with the rest of the addon). The boss list in `SceneData.lua` holds only the game's own ID numbers for each boss (its NPC and display IDs), checked against the boss data of the AtlasLootClassic and DungeonJournal addons; no code, text or art of theirs is included. The book's music is the game's own, played by file ID.

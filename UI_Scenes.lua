@@ -313,9 +313,24 @@ local function SetBossModel(m, st, name)
     return shown
 end
 UI.SetBossModel = SetBossModel
-local BOSS_UNKNOWN = "Its look isn't known yet: target it or point at it the next time you meet it, and it appears here."
+local BOSS_UNKNOWN = "Its look isn't known: the game's journal doesn't have it and it isn't in RP Chronicler's list of bosses yet."
 
-local function ShowBoss(slot, name, st)
+-- 0.6.8: poses, from the game's own animations (a model without one
+-- stands): ready to fight, or the boss lying dead after the kill
+local ANIM_STAND, ANIM_DEAD, ANIM_READY1H, ANIM_READYBOW, ANIM_READYSPELL = 0, 6, 26, 29, 51
+local CASTERS = { MAGE = true, PRIEST = true, WARLOCK = true, SHAMAN = true, DRUID = true }
+local function Pose(s, p, pose)
+    local a = s.model and s.model.actor
+    if not (a and a.SetAnimation) then return end
+    local anim = ANIM_STAND
+    if pose == "fight" then
+        local cf = p and p.classFile or ""
+        anim = (cf == "HUNTER" and ANIM_READYBOW) or (CASTERS[cf] and ANIM_READYSPELL) or ANIM_READY1H
+    end
+    pcall(a.SetAnimation, a, anim)
+end
+
+local function ShowBoss(slot, name, st, pose)
     slot.icon:Hide()
     if slot.bossModel == nil then
         local ok, m = pcall(CreateFrame, "PlayerModel", nil, slot)
@@ -325,6 +340,12 @@ local function ShowBoss(slot, name, st)
     local m = slot.bossModel
     local shown = m and SetBossModel(m, st, name) or false
     if m then if shown then m:Show() else m:Hide() end end
+    if shown and m.SetAnimation then
+        local anim = (pose == "fall") and ANIM_DEAD or ((pose == "fight") and ANIM_READY1H or ANIM_STAND)
+        pcall(m.SetAnimation, m, anim)
+        -- again once the model has loaded (a new model starts standing)
+        pcall(m.SetScript, m, "OnModelLoaded", function(self) pcall(self.SetAnimation, self, anim) end)
+    end
     if not shown then
         slot.icon:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
         slot.icon:ClearAllPoints()
@@ -416,7 +437,12 @@ function UI.CreateStoryScene(parent, opts)
         if button ~= "LeftButton" then return end
         if not self:EndDrag() and self.opts.onBig and not self.opts.spread then self.opts.onBig(self) end
     end)
-    f:SetScript("OnUpdate", function()
+    f:SetScript("OnUpdate", function(_, elapsed)
+        if self.theme and ns.Get("bookMotion") then
+            self.driftT = (self.driftT or 0) + (elapsed or 0)
+            self.driftWait = (self.driftWait or 0) + (elapsed or 0)
+            if self.driftWait > 0.05 then self.driftWait = 0 self:Drift(self.driftT) end
+        end
         local d = self.drag
         if not d or d.stop then return end
         if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then d.stop = true return end
@@ -429,17 +455,28 @@ function UI.CreateStoryScene(parent, opts)
         self:Layout()
     end)
     f:SetScript("OnHide", function() self:Release() end)
-    f:SetScript("OnSizeChanged", function() self:Layout() end)
+    f:SetScript("OnSizeChanged", function() self:Layout() self:Drift(self.driftT) end)
     f:SetScript("OnShow", function() if self.story then self:Refresh() end end)
     return self
 end
 
--- Scenes of a story: 1 = the party, then one per boss killed
--- Scenes of a story: the party. 0.6.4 (Mor): each boss has its own
--- panel at its chapter in the story text (UI.CreateBossPanel), so the
--- cover shows the party alone.
+-- Scenes of a story: the party (the cover). 0.6.8 (Mor): a boss scene
+-- (at the boss's chapter) shows the party facing the boss, then, once
+-- it was killed (or the run kept no kills), the boss fallen.
 function Scene:Views()
-    return { { kind = "party" } }
+    local b = self.bossName
+    if not b then return { { kind = "party" } } end
+    local out = { { kind = "boss", boss = b, pose = "fight" } }
+    local kills = self.story and self.story.bossKills
+    local killed = type(kills) ~= "table" or #kills == 0
+    for _, k in ipairs(type(kills) == "table" and kills or {}) do if k == b then killed = true end end
+    if killed then table.insert(out, { kind = "boss", boss = b, pose = "fall" }) end
+    return out
+end
+
+function Scene:SetBoss(st, boss, view)
+    self.bossName = boss
+    self:SetStory(st, view)
 end
 
 function Scene:SetStory(st, view)
@@ -502,14 +539,41 @@ function Scene:Backdrop()
         local ok, _, _, bg = pcall(EJ_GetInstanceInfo, st.ejInstance)
         if ok and bg and bg ~= 0 and bg ~= "" then art = bg end
     end
+    self.theme = nil
     if art and pcall(self.art.SetTexture, self.art, art) then
         self.art:SetTexCoord(0, 0.68, 0, 0.75)
         self.art:Show()
         self.veil:Show()
+        return
+    end
+    -- 0.6.8: a painting of the kind of place (SceneData.lua), drifting
+    -- slowly across while the scene is shown
+    local theme = ns.SceneTheme and ns.SceneTheme(st)
+    if theme and pcall(self.art.SetTexture, self.art, MEDIA .. "Scene\\bg_" .. theme .. ".png") then
+        self.theme = theme
+        self.art:Show()
+        self.veil:Hide()
+        self:Drift(0)
     else
         self.art:Hide()
         self.veil:Hide()
     end
+end
+
+-- The painting shows its middle and drifts left and right over about 40
+-- seconds (still when Book animations is off)
+local DRIFT_PERIOD = 40
+function Scene:Drift(t)
+    if not self.theme then return end
+    local W, H = self.frame:GetWidth() or 0, self.frame:GetHeight() or 0
+    if W < 2 or H < 2 then return end
+    local vh = 0.9
+    local fw = math.min(0.86, (W / H) / 2 * vh)
+    if fw >= 0.86 then vh = 0.86 * 2 * H / W end
+    local room = (1 - fw) / 2
+    local u = room + math.sin((t or 0) * 2 * math.pi / DRIFT_PERIOD) * room * 0.8
+    local v0 = (1 - vh) - 0.02
+    self.art:SetTexCoord(u, u + fw, math.max(0, v0), math.max(0, v0) + vh)
 end
 
 -- Fills the slots for the current view (who is Real, who is a shadow)
@@ -536,6 +600,7 @@ function Scene:Refresh()
         local real = unit and ShowReal(s, unit, (m.isYou and st.gear) or (not m.isYou and p.gear) or nil)
         if real then
             s.shadow:Hide()
+            Pose(s, p, v.pose)
         else
             ClearSlotModel(s)
             local tex, unknown = ns.ShadowTexture(p.race, p.sex)
@@ -566,14 +631,15 @@ function Scene:Refresh()
         s.name:SetText("|cffdc143c" .. v.boss .. "|r")
         s.glow:SetVertexColor(0.86, 0.08, 0.24, 0.9)
         ClearSlotModel(s)
-        ShowBoss(s, v.boss, st)
+        ShowBoss(s, v.boss, st, v.pose)
         s.tipText = s.tipText .. "\n|cff8f9ba8Click for what it dropped.|r"
         s.onClick = function(slot) UI.OpenFigure(st, { name = v.boss }, false, true) end
         s:Show()
         self.bossSlot = s
     end
     for i = #members + (v.kind == "boss" and 2 or 1), #self.slots do self.slots[i]:Hide() end
-    self.label:SetText(v.kind == "boss" and ("|cffffd100The party|r |cffd7c4a3faces|r |cffdc143c" .. v.boss .. "|r")
+    self.label:SetText((v.pose == "fall" and ("|cffdc143c" .. v.boss .. "|r |cffd7c4a3falls|r"))
+        or (v.kind == "boss" and ("|cffffd100The party|r |cffd7c4a3faces|r |cffdc143c" .. v.boss .. "|r"))
         or "|cffffd100The party|r")
     self.more:SetText(more > 0 and ("|cffd7c4a3and " .. more .. " more|r") or "")
     local multi = #views > 1
@@ -913,58 +979,6 @@ end
 -- a crimson glow. Click it to see the boss up close with what it dropped.
 -- The model loads only while the panel is shown.
 -- =========================================================
-function UI.CreateBossPanel(parent)
-    local p = CreateFrame("Frame", nil, parent, UI.BACKDROP)
-    p:SetHeight(170)
-    p.isBossPanel = true
-    UI.ApplyDarkGlass(p, 0.10, 0.09, 0.08, 1.0, 0.70, 0.55, 0.25, 0.70)
-    if p.SetClipsChildren then pcall(p.SetClipsChildren, p, true) end
-    local mist = p:CreateTexture(nil, "BACKGROUND", nil, -6)
-    mist:SetPoint("TOPLEFT", 1, -1)
-    mist:SetPoint("BOTTOMRIGHT", -1, 1)
-    mist:SetTexture(MEDIA .. "Scene\\mist.png")
-    local glow = p:CreateTexture(nil, "BACKGROUND", nil, 2)
-    glow:SetTexture(MEDIA .. "Scene\\glow.png")
-    glow:SetBlendMode("BLEND")
-    glow:SetVertexColor(0.86, 0.08, 0.24, 0.9)
-    glow:SetSize(260, 190)
-    glow:SetPoint("CENTER", p, "CENTER", 0, -4)
-    local okM, m = pcall(CreateFrame, "PlayerModel", nil, p)
-    m = okM and m or nil
-    if m then m:SetPoint("TOPLEFT", 4, -4) m:SetPoint("BOTTOMRIGHT", -4, 18) m:EnableMouse(false) end
-    local skull = p:CreateTexture(nil, "ARTWORK")
-    skull:SetSize(56, 56)
-    skull:SetPoint("CENTER", p, "CENTER", 0, 8)
-    skull:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
-    local name = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    name:SetPoint("BOTTOM", p, "BOTTOM", 0, 5)
-    name:SetShadowOffset(1, -1)
-    name:SetShadowColor(0, 0, 0, 1)
-    p:EnableMouse(true)
-    p:SetScript("OnEnter", function(self)
-        UI.Tooltip(self, "|cffdc143c" .. tostring(self.boss) .. "|r",
-            self.shown and "Click to see it up close, with what it dropped." or (BOSS_UNKNOWN .. " Click for what it dropped."))
-    end)
-    p:SetScript("OnLeave", function() UI.HideTooltip() end)
-    p:SetScript("OnMouseUp", function(self, button)
-        if button == "LeftButton" and self.story then UI.HideTooltip() UI.OpenFigure(self.story, { name = self.boss }, false, true) end
-    end)
-    local function Load(self)
-        if not self.story or not self.boss then return end
-        self.shown = m and SetBossModel(m, self.story, self.boss) or false
-        if m then if self.shown then m:Show() else m:Hide() end end
-        if self.shown then skull:Hide() else skull:Show() end
-    end
-    p:SetScript("OnShow", Load)
-    p:SetScript("OnHide", function() if m then pcall(m.ClearModel, m) end end)
-    function p:SetBoss(st, boss)
-        self.story, self.boss = st, boss
-        name:SetText("|cffdc143c" .. tostring(boss) .. "|r")
-        if self:IsShown() then Load(self) end
-    end
-    return p
-end
-
 -- =========================================================
 -- The big window (Enlarge, or a click on the scene): the whole party side
 -- by side, each at full size (0.6.7, Mor), with the wheel zooming and
@@ -1012,9 +1026,39 @@ do
     f:SetScript("OnSizeChanged", function() scene:Layout() end)
     UI.bigScene = scene
 
-    function UI.OpenBigScene(st, view, name)
+    -- 0.6.8: boss = a boss scene (the party facing that boss)
+    function UI.OpenBigScene(st, view, name, boss)
         title:SetText("|cffffd100" .. tostring(name or st.title or "Story") .. "|r")
         f:Show()
-        scene:SetStory(st, view)
+        scene:SetBoss(st, boss, view)
+    end
+end
+
+-- =========================================================
+-- 0.6.8 (Mor): the book's music. While a dungeon or raid story's pages
+-- are open, the game's own music for that kind of place plays (one track
+-- per story, picked from its id, at the player's music volume). Nothing
+-- plays with Story scenes or Dungeon music off; StopMusic gives the
+-- game's own music back when the book closes or turns to another story.
+-- =========================================================
+do
+    local playing
+    function UI.BookMusic(st)
+        local list
+        if type(st) == "table" and (st.kind == "dungeon" or st.kind == "raid")
+            and ns.Get("storyCover") and ns.Get("bookMusic") and ns.SceneTheme then
+            local t = ns.SCENE_THEMES[ns.SceneTheme(st) or ""]
+            list = t and t.music
+        end
+        if not (list and #list > 0 and PlayMusic) then
+            if playing and StopMusic then pcall(StopMusic) end
+            playing = nil
+            return
+        end
+        if playing == st.id then return end
+        local n = 0
+        for c in tostring(st.id):gmatch("%d") do n = n + tonumber(c) end
+        pcall(PlayMusic, list[n % #list + 1])
+        playing = st.id
     end
 end

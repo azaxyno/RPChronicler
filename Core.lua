@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.7"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.8"
 
 BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
 BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
@@ -194,6 +194,8 @@ ns.SETTINGS = {
     { key = "bookPages",         default = "PARCHMENT", choices = { "PARCHMENT", "LIGHT", "NIGHT" } },
     -- 0.6.7: the book opens, turns its pages and closes with short animations
     { key = "bookMotion",        default = true,       label = "Book animations" },
+    -- 0.6.8: a dungeon story's own music plays softly while its book is open
+    { key = "bookMusic",         default = true,       label = "Dungeon music in the book" },
     -- The viewer tip (0.6.7: one line on the shelf), hidden once you close it
     { key = "exportTip",         default = true },
     -- Not a switch (0.6.3): StoryViewer.html's address, pasted once by you

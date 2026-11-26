@@ -966,11 +966,12 @@ end
 -- 0.6.4: what each boss looks like, kept across runs
 -- (RPChroniclerDB.bossLooks[name] = { npc, display }), so older stories
 -- can show a boss you meet again.
-function ns.RememberBossLooks(name, npc, display)
-    if type(name) ~= "string" or name == "" or not (npc or display) or type(RPChroniclerDB) ~= "table" then return end
+-- 0.6.8: also the fight's encounter ID, which the game never hides
+function ns.RememberBossLooks(name, npc, display, encounter)
+    if type(name) ~= "string" or name == "" or not (npc or display or encounter) or type(RPChroniclerDB) ~= "table" then return end
     RPChroniclerDB.bossLooks = RPChroniclerDB.bossLooks or {}
     local e = RPChroniclerDB.bossLooks[name] or {}
-    e.npc, e.display = e.npc or npc, e.display or display
+    e.npc, e.display, e.encounter = e.npc or npc, e.display or display, e.encounter or encounter
     RPChroniclerDB.bossLooks[name] = e
 end
 
@@ -1013,6 +1014,7 @@ local function RecordBossInfo(bossName, unit, encounterID)
     if not info and encounterID then
         activeRun.bossInfo[bossName] = { cls = "worldboss", level = 0, kind = "boss", encounter = encounterID }
     end
+    if encounterID then ns.RememberBossLooks(bossName, nil, nil, encounterID) end
 end
 
 function ns.RecordAdventureBossEngage(bossName, unit, encounterID)

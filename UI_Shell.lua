@@ -397,7 +397,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.7") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.8") .. "|r")
 end
 
 -- Left rail

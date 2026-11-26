@@ -33,7 +33,7 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 3. **Your AI answers** with five short in-character replies, one per mood. Pick the one you like there and copy it.
 4. **Back in WoW**, paste it into chat (`/s`, `/p`, `/w` and so on) and send it yourself.
 
-- **Version:** 0.6.7 beta (interface `16001`, WoW: Forever)
+- **Version:** 0.6.8 beta (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPChroniclerDB` (account-wide, on your PC only)
 - **License:** GPL-3.0
 
@@ -341,9 +341,11 @@ Every run shows its own icon (in Adventures, and on a story's title page when sc
 - **Share as plain text** copies the story as clean text for Discord or a forum. **Edit details** renames the story or edits any other field. **Re-import** replaces the text and keeps your details. **Open the run** jumps to the recording (when the story has one). **Read outside the game** keeps `StoryViewer.html`'s address once you paste it there. **Copy for viewer** hands a story you imported this session to `StoryViewer.html`. **Delete story** removes it (it asks first).
 - **Titles come from the AI.** Both story templates ask for `Title: <name>` on the first line, and RP Chronicler names the story from that line, never by guessing. A story without one keeps the run's name until you rename it.
 - **Stories stand on their own.** Deleting a recording keeps its story and its details.
-- **Story scenes.** Each story opens with its party standing together on a misty backdrop, then its title. Every member is shown exactly as they are, or as a shadow: you appear in 3D in the gear from that run (on your own stories), a companion who is near you right now appears as they are, and everyone else is a black shadow of their race in a glow of their class color. Every race keeps its true size, so a gnome stands next to a tauren the way they did in game. Your 3D figure stands exactly as tall as a shadow of your race. **+** and **-** (or the mouse wheel over the scene) zoom, dragging moves the camera any way (up to a face, down to the boots), and a click on the scene or **Enlarge** opens the whole party side by side, each at full size, in a big window you can resize. Click anyone there to see them up close. Someone whose race an older run never recorded stands as a blurred figure until you see them again.
+- **Story scenes.** Each story opens with its party standing together in front of a painting of the place (a lava cavern, a crypt, a mine, a forest and more; the painting drifts slowly while you read), then its title. Every member is shown exactly as they are, or as a shadow: you appear in 3D in the gear from that run (on your own stories), a companion who is near you right now appears as they are, and everyone else is a black shadow of their race in a glow of their class color. Every race keeps its true size, so a gnome stands next to a tauren the way they did in game. Your 3D figure stands exactly as tall as a shadow of your race. **+** and **-** (or the mouse wheel over the scene) zoom, dragging moves the camera any way (up to a face, down to the boots), and a click on the scene or **Enlarge** opens the whole party side by side, each at full size, in a big window you can resize. Click anyone there to see them up close. Someone whose race an older run never recorded stands as a blurred figure until you see them again.
 - **Up close.** Click anyone in the scene for their own small window: the figure enlarged (drag to turn a 3D model, mouse wheel or + and - to zoom), their level, sex, race, class and role, what they wore (yours always; your party's with **Record party gear**, which you can turn off in Options > Recording) and the gear each of them really won on the run (won rolls and their own loot, weapons and armor of green quality and up, each drop once).
-- **Bosses in their chapters.** Each boss the story tells of gets a panel with its model where its chapter first names it. Click it to see it up close with what it dropped. RP Chronicler learns how a boss looks when you fight it, from the game's Encounter Journal, or when you target or point at it later; until then the panel shows a skull. Turn the scenes off in **Options > AI & Stories > Story scenes**.
+- **Bosses in their chapters.** Where a story's chapter first names a boss, the party faces it in its own scene: you in a fighting pose, the boss ready for you. **<** and **>** on the scene show it again after the kill, lying fallen. Click the boss to see it up close with what it dropped. RP Chronicler knows how a boss looks from the game's Encounter Journal (by the fight it recorded) and from its own list of the dungeon and raid bosses, so a boss shows even in older stories and for bosses you never met; a boss it doesn't know yet shows a skull.
+- **The dungeon's music.** While a dungeon or raid story is open, the game's own music for that kind of dungeon plays softly (at your music volume), and the game's music comes back when you close the book. Turn it off in **Options > AI & Stories > Dungeon music in the book**.
+- **Just the written book.** Turn off **Options > AI & Stories > Story scenes** and the book is only its written pages: no scenes, no models and no music.
 - **Items in color.** Loot and gear named in a story show their icon and quality color (gray, white, green, blue, purple, orange), in game and in `StoryViewer.html` (which draws a small icon for the kind of item: a sword, a bow, a shield, cloth, plate, a gem and so on).
 - Make the RP Chronicler window bigger and the book grows with it.
 
@@ -473,29 +475,30 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 6 | `Runs.lua` | Run lifecycle, interrupted runs, every recorded line, timeline, screenshots |
 | 7 | `RunReport.lua` | Summary, Known companions and the Full Log |
 | 8 | `Stories.lua` | Story storage, Story Book details and titles, boss icons, auto-color |
-| 9 | `Templates.lua` | The RP template and the two story templates, the template version |
-| 10 | `Narrator.lua` | Quick Chronicle: a short story written in game from a run's log, with no AI |
-| 11 | `Screenshots.lua` | Combat-safe auto screenshots and your own screenshots |
-| 12 | `Updates.lua` | Update notices: sends only the version number to your group and guild |
-| 13 | `Events.lua` | Game events to recordings, chat buffers and capture switches, loot, combat poller, run trackers |
-| 14 | `Chronicle.lua` | Fights and streaks, kills, PvP, quests and objectives, NPCs, levels, places, milestones, prompts |
-| 15 | `UI_Shell.lua` | `ns.UI`, theme and widgets, main window, rail, resize |
-| 16 | `UI_Copy.lua` | Copy view, quick-copy engine, Nearby companions chip |
-| 17 | `UI_Companions.lua` | Companions view |
-| 18 | `UI_Adventures.lua` | Adventures view, record bar, run list, size meter, story import |
-| 19 | `UI_Scenes.lua` | Story scenes: the party (3D or shadows) and each boss, zoom and the big scene window |
-| 20 | `UI_StoryBook.lua` | Story Book section: what it shows (shelf or book), story text, Share, Details, Re-Import, Delete |
-| 21 | `UI_Shelf.lua` | The Story Book's shelf: leather books on wooden shelves, search |
-| 22 | `UI_Book.lua` | The open book: two facing pages, title page, chapters, page turns, the Book menu |
-| 23 | `UI_Options.lua` | Options pages and the template window |
-| 24 | `UI_Setup.lua` | First-run setup |
-| 25 | `UI_Commands.lua` | The Ctrl+C binding, the RP button (minimap or floating) and its menu, `/rp` commands |
+| 9 | `SceneData.lua` | How each dungeon and raid boss looks (the fallback after the game's journal), the paintings and music of each kind of place |
+| 10 | `Templates.lua` | The RP template and the two story templates, the template version |
+| 11 | `Narrator.lua` | Quick Chronicle: a short story written in game from a run's log, with no AI |
+| 12 | `Screenshots.lua` | Combat-safe auto screenshots and your own screenshots |
+| 13 | `Updates.lua` | Update notices: sends only the version number to your group and guild |
+| 14 | `Events.lua` | Game events to recordings, chat buffers and capture switches, loot, combat poller, run trackers |
+| 15 | `Chronicle.lua` | Fights and streaks, kills, PvP, quests and objectives, NPCs, levels, places, milestones, prompts |
+| 16 | `UI_Shell.lua` | `ns.UI`, theme and widgets, main window, rail, resize |
+| 17 | `UI_Copy.lua` | Copy view, quick-copy engine, Nearby companions chip |
+| 18 | `UI_Companions.lua` | Companions view |
+| 19 | `UI_Adventures.lua` | Adventures view, record bar, run list, size meter, story import |
+| 20 | `UI_Scenes.lua` | Story scenes: the party (3D or shadows), the party facing each boss, the place's painting, zoom, the big scene window and the book's music |
+| 21 | `UI_StoryBook.lua` | Story Book section: what it shows (shelf or book), story text, Share, Details, Re-Import, Delete |
+| 22 | `UI_Shelf.lua` | The Story Book's shelf: leather books on wooden shelves, search |
+| 23 | `UI_Book.lua` | The open book: two facing pages, title page, chapters, page turns, the Book menu |
+| 24 | `UI_Options.lua` | Options pages and the template window |
+| 25 | `UI_Setup.lua` | First-run setup |
+| 26 | `UI_Commands.lua` | The Ctrl+C binding, the RP button (minimap or floating) and its menu, `/rp` commands |
 | | `Bindings.xml` | Key Bindings entries |
 | | `StoryViewer.html` | Reads your stories and screenshots in the browser, offline, and saves a story as one web page |
 | | `Export_Stories.bat` | Windows exporter (GitHub zip only): all stories, text and Full Logs at once |
 | | `Media/logo.tga` | The logo shown in the setup and on the minimap and floating RP buttons |
 | | `Media/Icons/` | The adventure icons: one per dungeon and raid, one per kind of land for the open world, and the Adventures tab |
-| | `Media/Shadows/`, `Media/Scene/` | The race shadows, glow and misty backdrop of the story scenes |
+| | `Media/Shadows/`, `Media/Scene/` | The race shadows, glow, mist and the paintings of places behind the story scenes |
 | | `Media/Book/` | The shelf and the book: leather, gold trim, parchment, wood and wall (our own art) |
 
 </details>

@@ -18,7 +18,7 @@ UI.BACKDROP = BackdropTemplateMixin and "BackdropTemplate" or nil
 UI.ICONS = {
     COPY       = "Interface\\Icons\\INV_Scroll_03",
     PLAYERS    = "Interface\\Icons\\Spell_Holy_PrayerOfFortitude",
-    ADVENTURES = "Interface\\Icons\\INV_Misc_Map_01",
+    ADVENTURES = "Interface\\AddOns\\RPChronicler\\Media\\Icons\\tab_adventures", -- 0.6.6: our spyglass, used nowhere else
     OPTIONS    = "Interface\\Icons\\INV_Misc_Gear_01",
     STORY      = "Interface\\Icons\\INV_Misc_Book_09",
     MARK       = "Interface\\Icons\\INV_Misc_Note_01",
@@ -397,7 +397,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.5") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.6") .. "|r")
 end
 
 -- Left rail
@@ -439,7 +439,7 @@ function UI.AddRailButton(key, label, icon, tip)
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
     btn.icon:SetSize(24, 24)
     btn.icon:SetPoint("TOP", 0, -6)
-    btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    btn.icon:SetTexCoord(ns.IconCoords(icon))
     btn.icon:SetTexture(icon)
     btn.tipTitle = "|cffffd100" .. label .. "|r"
     btn.tipText = tip

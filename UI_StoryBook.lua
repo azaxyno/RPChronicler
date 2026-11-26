@@ -732,7 +732,7 @@ function UI.RefreshStoryBook()
         local info = ns.GetBookInfo(adv)
         card.info = info
         card:SetPoint("TOPLEFT", 0, -(idx - 1) * 48)
-        card.icon:SetTexture(ns.GetAdventureIcon(adv))
+        card.icon:SetTexture(ns.GetAdventureIcon(adv)); card.icon:SetTexCoord(ns.IconCoords(ns.GetAdventureIcon(adv)))
         card.titleLbl:SetText("|cfff5e6c8" .. info.title .. "|r")
         card.subLbl:SetText("|cffb0a080" .. ((info.instance ~= "" and info.instance) or ns.GetRunKindLabel(adv)) .. " - " .. (info.date or "") .. "|r")
         local sel = (adv.id == ns.state.bookStoryId)

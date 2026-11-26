@@ -37,9 +37,10 @@ ns.Listen("setting", function(key)
 end)
 
 -- =========================================================
--- Floating [RP] button (draggable; stays where you put it)
+-- Floating RP button (draggable; stays where you put it). 0.6.6 (Mor):
+-- it shows the RP Chronicler logo, like the minimap button.
 -- =========================================================
-local miniBtn = UI.CreateSleekButton(UIParent, 38, 22, "|cffffd100RP|r", "gold")
+local miniBtn = UI.CreateSleekButton(UIParent, 34, 34, "", "gold")
 miniBtn:SetPoint("CENTER", UIParent, "CENTER", -300, -180)
 miniBtn:SetMovable(true)
 miniBtn:EnableMouse(true)
@@ -65,15 +66,23 @@ local function PlaceFloating()
 end
 
 -- 0.6.5 (Mor): feature ideas and bug reports. An addon can't go online,
--- so this shows the links to copy, with the bug report under them.
+-- so this shows the link to copy. 0.6.6 (Mor): a small popup first, with
+-- the issues link and the bug report as two separate choices; nothing is
+-- selected until the player picks one.
 ns.FEEDBACK_URL = "https://github.com/azaxyno/RPChronicler/issues/new/choose"
 function UI.OpenFeedback()
-    UI.ShowCopyBox("|cffffd100Feedback and bug reports|r",
-        "|cffb0bac5Select All, Ctrl+C, and open the first link in your browser. Or write a comment on RP Chronicler's CurseForge page.|r",
-        "Ideas and bug reports: " .. ns.FEEDBACK_URL .. "\n" ..
-        "Or comment on RP Chronicler's CurseForge page.\n\n" ..
-        "For a bug, say what you were doing and paste the report below (it holds no chat).\n\n" ..
-        ns.BuildDebugReport())
+    UI.ShowPrompt("|cffffd100Feedback and bug reports|r\n\n" ..
+        "|cffb0bac5Ideas and bugs go to RP Chronicler's GitHub issues, or write a comment on its CurseForge page. " ..
+        "For a bug, add the bug report (it holds no chat).|r",
+        "Feedback", function()
+            UI.AskLineCopy("|cffffd100Feedback link|r", ns.FEEDBACK_URL)
+        end,
+        "Copy bug report", function()
+            UI.ShowCopyBox("|cffffd100Bug report|r",
+                "|cffb0bac5Selected. Press Ctrl+C and paste it into your issue on GitHub.|r",
+                ns.BuildDebugReport())
+        end,
+        "Close", nil)
 end
 
 -- Right-click menu (0.4.0): Start/Stop, Pause/Resume, Mark Moment, Story
@@ -173,53 +182,81 @@ miniBtn:SetScript("OnClick", function(_, button)
     end
 end)
 
--- Recording indicator (Options > Recording can turn it off):
--- red label, pulsing red dot and border while a run records; dimmed with
--- an amber dot and border while paused; the normal gold look when idle.
+-- Recording look (0.6.6, Mor): a red glow pulses around the logo while a
+-- run records; paused dims the logo and shows a pause badge; idle is the
+-- plain logo on the gold button.
 do
-    local dot = miniBtn:CreateTexture(nil, "OVERLAY")
-    dot:SetSize(8, 8)
-    dot:SetPoint("CENTER", miniBtn, "TOPRIGHT", -2, -2)
-    dot:SetTexture(UI.ICONS.DOT)
-    dot:Hide()
+    local logo = miniBtn:CreateTexture(nil, "ARTWORK")
+    logo:SetPoint("TOPLEFT", 3, -3)
+    logo:SetPoint("BOTTOMRIGHT", -3, 3)
+    logo:SetTexture("Interface\\AddOns\\RPChronicler\\Media\\logo")
 
-    local state, acc = nil, 0
+    -- the glow sits on its own frame behind the button, so the button's
+    -- background can't cover it
+    local glowF = CreateFrame("Frame", nil, UIParent)
+    glowF:SetSize(72, 72)
+    glowF:SetPoint("CENTER", miniBtn, "CENTER")
+    glowF:SetFrameStrata(miniBtn:GetFrameStrata())
+    glowF:SetFrameLevel(math.max(0, miniBtn:GetFrameLevel() - 1))
+    glowF:Hide()
+    local glow = glowF:CreateTexture(nil, "BACKGROUND")
+    glow:SetAllPoints()
+    glow:SetTexture("Interface\\AddOns\\RPChronicler\\Media\\Scene\\glow")
+    glow:SetBlendMode("ADD")
+    glow:SetVertexColor(1, 0.12, 0.10, 1)
+
+    -- pause badge: two amber bars on a dark square, bottom right
+    local badge = CreateFrame("Frame", nil, miniBtn)
+    badge:SetSize(14, 14)
+    badge:SetPoint("BOTTOMRIGHT", 4, -4)
+    badge:SetFrameLevel(miniBtn:GetFrameLevel() + 3)
+    local bbg = badge:CreateTexture(nil, "BACKGROUND")
+    bbg:SetAllPoints()
+    bbg:SetColorTexture(0.05, 0.05, 0.06, 0.92)
+    for i = 1, 2 do
+        local bar = badge:CreateTexture(nil, "ARTWORK")
+        bar:SetColorTexture(1, 0.72, 0.30, 1)
+        bar:SetSize(3, 8)
+        bar:SetPoint("CENTER", (i == 1) and -2.5 or 2.5, 0)
+    end
+    badge:Hide()
+
+    local state = nil
     local function Apply(newState)
         state = newState
-        miniBtn:SetAlpha(1)
         if newState == "rec" then
-            dot:SetVertexColor(1, 0.15, 0.15, 1)
-            dot:Show()
-            miniBtn:SetText("|cffff4040RP|r")
+            logo:SetVertexColor(1, 1, 1)
+            logo:SetDesaturated(false)
+            badge:Hide()
+            if miniBtn:IsShown() then glowF:Show() end
             miniBtn:SetBackdropColor(0.28, 0.06, 0.06, 0.96)
         elseif newState == "paused" then
-            dot:SetVertexColor(1, 0.72, 0.30, 1)
-            dot:SetAlpha(1)
-            dot:Show()
-            miniBtn:SetText("|cffffb74dRP|r")
+            glowF:Hide()
+            logo:SetDesaturated(true)
+            logo:SetVertexColor(0.6, 0.6, 0.6)
+            badge:Show()
             miniBtn:UnlockHighlight()
             miniBtn:SetBackdropBorderColor(1, 0.72, 0.30, 0.95)
-            miniBtn:SetAlpha(0.55)
         else
-            dot:Hide()
-            miniBtn:SetText("|cffffd100RP|r")
+            glowF:Hide()
+            badge:Hide()
+            logo:SetDesaturated(false)
+            logo:SetVertexColor(1, 1, 1)
             miniBtn:UnlockHighlight() -- restores the normal gold look
         end
     end
+    miniBtn:HookScript("OnShow", function() if state == "rec" then glowF:Show() end end)
+    miniBtn:HookScript("OnHide", function() glowF:Hide() end)
 
-    miniBtn:HookScript("OnUpdate", function(_, elapsed)
-        acc = acc + elapsed
+    miniBtn:HookScript("OnUpdate", function()
         local run = ns.GetActiveAdventure()
         local want = run and (run.paused and "paused" or "rec") or nil
         if want ~= state then Apply(want) end
         if state == "rec" then
-            local a = 0.55 + 0.45 * math.sin(GetTime() * 4)
-            dot:SetAlpha(0.35 + 0.65 * math.abs(a))
-            if acc >= 0.1 then
-                acc = 0
-                if not miniBtn:IsMouseOver() then
-                    miniBtn:SetBackdropBorderColor(1, 0.25, 0.25, 0.55 + 0.4 * math.abs(a))
-                end
+            local a = math.abs(math.sin(GetTime() * 3))
+            glow:SetAlpha(0.35 + 0.65 * a)
+            if not miniBtn:IsMouseOver() then
+                miniBtn:SetBackdropBorderColor(1, 0.25, 0.25, 0.55 + 0.4 * a)
             end
         end
     end)

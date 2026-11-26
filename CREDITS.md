@@ -2,32 +2,6 @@
 
 RP Chronicler itself is licensed under the GNU General Public License v3.0 (see LICENSE). The parts below keep their own licenses.
 
-## StoryTracker (Recording & Event Engine Techniques)
-
-- **Source**: https://github.com/ninepointlabs/wow-storytracker-addon
-- **Copyright**: Copyright (c) 2026 Nine Point Labs
-- **License**: MIT License
-
-Ported and adapted components (API shims, localized format-string pattern compiler, quality-based loot filtering, GUID-based notable target engagement tracking, incoming damage killer attribution, 120-second reload run merging, baseline money diffing, and debounced combat-safe screenshot capture) are used under the terms of the MIT License:
-
-> Permission is hereby granted, free of charge, to any person obtaining a copy
-> of this software and associated documentation files (the "Software"), to deal
-> in the Software without restriction, including without limitation the rights
-> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-> copies of the Software, and to permit persons to whom the Software is
-> furnished to do so, subject to the following conditions:
->
-> The above copyright notice and this permission notice shall be included in all
-> copies or substantial portions of the Software.
->
-> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-> SOFTWARE.
-
 ## Cinzel (Story Viewer title font)
 
 - **Source**: https://fonts.google.com/specimen/Cinzel
@@ -35,3 +9,11 @@ Ported and adapted components (API shims, localized format-string pattern compil
 - **License**: SIL Open Font License 1.1 (https://openfontlicense.org)
 
 A small ASCII subset of Cinzel is embedded in StoryViewer.html for story titles.
+
+## Adventure icons (game-icons.net)
+
+- **Source**: https://game-icons.net (https://github.com/game-icons/icons)
+- **Authors**: Lorc (https://lorcblog.blogspot.com), Delapouite (https://delapouite.com), Sbed and Caro Asercion
+- **License**: Creative Commons Attribution 3.0 (CC BY 3.0, https://creativecommons.org/licenses/by/3.0/)
+
+The icons in `Media/Icons` are game-icons.net glyphs, recolored in gold and set on our own tinted backgrounds and frames (`tools/icons/make_icons.py`). Glyphs used: spyglass, treasure-map, snowflake-2, mountains, wave-crest, wheat, wolf-head, lion, snake, wolf-howl, octopus, gears, frozen-orb, stone-tablet, crystal-growth, dragon-breath, fire-wave, crowned-skull, volcano and dragon-head by Lorc; desert, forest, palm-tree, swamp, castle, dungeon-gate, pirate-flag, cage, cross-shield, ceremonial-mask, temple-gate, fire-shrine, castle-ruins and spell-book by Delapouite; death-skull by Sbed; boar by Caro Asercion.

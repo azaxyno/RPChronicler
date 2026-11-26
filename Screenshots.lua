@@ -1,33 +1,42 @@
--- Adapted from StoryTracker (MIT, Nine Point Labs)
--- v3.7.0 Fix: Use UIParent:SetAlpha(0/1) instead of UIParent:Hide()/Show()
--- to prevent ADDON_ACTION_BLOCKED errors on protected frames in combat.
+-- RP Chronicler screenshots: one shot per story moment, never in a way
+-- that touches protected frames. The interface is faded with
+-- UIParent:SetAlpha (never Hide/Show), so combat can't block it.
 local ADDON_NAME, ns = ...
 
-local SHOT_DELAY = 0.75
-local DEBOUNCE = 20
-local LOADING_RETRY = 1
-local LOADING_RETRIES = 10
+local SHOT_DELAY = 0.75     -- seconds between the moment and the shot
+local DEBOUNCE = 20         -- routine shots are at least this far apart
+local LOADING_RETRY = 1     -- while a loading screen shows, look again this often
+local LOADING_WAIT = 10     -- ... and give up after this many seconds
 local UI_RESTORE = 2.0
-local OWN_WINDOW = 6   -- seconds: a SCREENSHOT_SUCCEEDED this soon after our own shot is ours
+local OWN_WINDOW = 6        -- seconds: a SCREENSHOT_SUCCEEDED this soon after our own shot is ours
 
-local pending, lastShotAt, loading, uiFaded = nil, nil, false, false
-local ownShotAt = nil
+-- The shot waiting for its moment, and the shot state
+local S = { want = nil, lastAt = nil, ownAt = nil, loading = false, faded = false }
 
--- When two moments land inside the delay, the bigger one labels the shot.
-local PRIORITY = { story = 1, newzone = 2, quest = 3, mark = 4, levelup = 5, boss = 6 }
+-- When two moments land inside the delay, the higher rank names the shot.
+local RANK = { story = 1, newzone = 2, quest = 3, mark = 4, levelup = 5, boss = 6 }
 
 -- Boss kills and manual Mark Moment always get a shot, even right after
--- another one (the 20s debounce only thins out routine zone/quest shots).
+-- another one (the debounce only thins out routine zone/quest shots).
 local ALWAYS_SHOOT = { boss = true, mark = true }
 
 local function InCombat()
-    return (InCombatLockdown and InCombatLockdown())
-        or (UnitAffectingCombat and UnitAffectingCombat("player")) or false
+    if InCombatLockdown and InCombatLockdown() then return true end
+    return UnitAffectingCombat ~= nil and ns.SafeBool(UnitAffectingCombat("player")) == true
+end
+
+local function TooSoon(kind)
+    if ALWAYS_SHOOT[kind] or not S.lastAt then return false end
+    return (GetTime() - S.lastAt) < DEBOUNCE
+end
+
+local function After(sec, fn)
+    if C_Timer and C_Timer.After then C_Timer.After(sec, fn) else fn() end
 end
 
 local function RestoreUI()
-    if uiFaded and UIParent then
-        uiFaded = false
+    if S.faded and UIParent then
+        S.faded = false
         pcall(UIParent.SetAlpha, UIParent, 1)
     end
 end
@@ -38,6 +47,11 @@ local function ShotsOn()
     return ns.Get("autoShots") ~= "OFF"
 end
 
+local function Snap()
+    pcall(Screenshot)
+    After(UI_RESTORE, RestoreUI)
+end
+
 local function Capture(kind, description)
     if not ShotsOn() then return end
     local run = ns.GetActiveAdventure()
@@ -46,72 +60,56 @@ local function Capture(kind, description)
     -- 0.5.0: the per-run cap (Options > Full Log limits) stops new shots
     -- instead of dropping the oldest ones
     if not ns.RecordAdventureScreenshot(kind, description) then return end
-    lastShotAt = GetTime()
-    ownShotAt = GetTime()
-
-    local function Fire()
-        pcall(Screenshot)
-        if C_Timer and C_Timer.After then
-            C_Timer.After(UI_RESTORE, RestoreUI)
-        else
-            RestoreUI()
-        end
-    end
-
-    -- SetAlpha(0) hides UI visuals without calling protected Hide() on UIParent
+    S.lastAt, S.ownAt = GetTime(), GetTime()
+    -- out of combat the interface fades for a clean picture; in combat
+    -- the shot is taken as it is
     if UIParent and not InCombat() then
-        uiFaded = true
+        S.faded = true
         pcall(UIParent.SetAlpha, UIParent, 0)
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0.1, Fire)
-        else
-            Fire()
-        end
+        After(0.1, Snap)
     else
-        Fire()
+        Snap()
     end
 end
 
-local function FirePending(tries)
-    local p = pending
-    if not p then return end
-    if not ShotsOn() then
-        pending = nil
-        return
-    end
-    if loading and tries < LOADING_RETRIES then
-        if C_Timer and C_Timer.After then
-            C_Timer.After(LOADING_RETRY, function() FirePending(tries + 1) end)
+-- Runs SHOT_DELAY after the first moment: waits out a loading screen
+-- (up to LOADING_WAIT), then takes the best moment's shot.
+local function Flush()
+    local w = S.want
+    if not w then return end
+    if not ShotsOn() then S.want = nil; return end
+    if S.loading then
+        if GetTime() < w.giveUpAt and C_Timer and C_Timer.After then
+            C_Timer.After(LOADING_RETRY, Flush)
+        else
+            S.want = nil
         end
         return
     end
-    pending = nil
-    if loading then return end
-    if not ALWAYS_SHOOT[p.kind] and lastShotAt and (GetTime() - lastShotAt) < DEBOUNCE then return end
-    Capture(p.kind, p.description)
+    S.want = nil
+    if TooSoon(w.kind) then return end
+    Capture(w.kind, w.text)
 end
 
 function ns.RequestScreenshot(kind, description)
     if not ShotsOn() then return end
     if not (ns.GetActiveAdventure()) then return end
-    if not ALWAYS_SHOOT[kind] and lastShotAt and (GetTime() - lastShotAt) < DEBOUNCE then return end
-    if pending then
-        if (PRIORITY[kind] or 0) > (PRIORITY[pending.kind] or 0) then
-            pending.kind, pending.description = kind, description
-        end
+    if TooSoon(kind) then return end
+    local rank = RANK[kind] or 0
+    local w = S.want
+    if w then
+        if rank > w.rank then w.kind, w.text, w.rank = kind, description, rank end
         return
     end
-    pending = { kind = kind, description = description }
-    if C_Timer and C_Timer.After then
-        C_Timer.After(SHOT_DELAY, function() FirePending(0) end)
-    end
+    S.want = { kind = kind, text = description, rank = rank, giveUpAt = GetTime() + SHOT_DELAY + LOADING_WAIT }
+    if C_Timer and C_Timer.After then C_Timer.After(SHOT_DELAY, Flush) end
 end
 
 -- 0.5.0: your own Print Screen shots join the run too (with a caption),
 -- so the exporter can place them in the story
 local function OnManualShot()
-    if ownShotAt and (GetTime() - ownShotAt) < OWN_WINDOW then
-        ownShotAt = nil
+    if S.ownAt and (GetTime() - S.ownAt) < OWN_WINDOW then
+        S.ownAt = nil
         if ns.ConfirmLastShot then ns.ConfirmLastShot() end
         return
     end
@@ -129,13 +127,13 @@ ns.On({
 }, function(event)
     if event == "SCREENSHOT_SUCCEEDED" then pcall(OnManualShot) end
     if event == "LOADING_SCREEN_ENABLED" then
-        loading = true
+        S.loading = true
         RestoreUI()
     elseif event == "LOADING_SCREEN_DISABLED" then
-        loading = false
+        S.loading = false
     else
         if event ~= "PLAYER_REGEN_DISABLED" then
-            loading = false
+            S.loading = false
         end
         RestoreUI()
     end

@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.5"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.6"
 
 BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
 BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
@@ -469,6 +469,13 @@ function ns.SafeNum(val)
     return nil
 end
 
+-- 0.6.6: a plain true/false, or nil when the client hides the value as
+-- secret (comparing a secret boolean throws an error on the modern client).
+function ns.SafeBool(val)
+    if val == nil or ns.IsSecret(val) then return nil end
+    return val and true or false
+end
+
 function ns.ColorText(text, hex)
     if not text or text == "" then return "" end
     if not hex or hex == "" then return text end
@@ -636,12 +643,29 @@ function ns.NormalizeStoryText(raw)
     return s
 end
 
+-- A game format string ("%s receives loot: %s.", also numbered as in
+-- "%1$s") as an anchored Lua pattern: each %s or %d becomes a capture and
+-- every other character matches itself.
 function ns.FormatToPattern(fmt)
     if type(fmt) ~= "string" then return nil end
-    local p = fmt:gsub("%%%d?%$?s", "\001"):gsub("%%%d?%$?d", "\002")
-    p = p:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%0")
-    p = p:gsub("\001", "(.+)"):gsub("\002", "(%%d+)")
-    return "^" .. p .. "$"
+    local out, i, n = { "^" }, 1, #fmt
+    while i <= n do
+        local c = fmt:sub(i, i)
+        local num, conv = fmt:match("^%%(%d*%$?)([sd])", i)
+        if conv then
+            out[#out + 1] = (conv == "d") and "(%d+)" or "(.+)"
+            i = i + #num + 2
+        elseif fmt:sub(i, i + 1) == "%%" then
+            out[#out + 1] = "%%"
+            i = i + 2
+        else
+            if c:find("^[%^%$%(%)%%%.%[%]%*%+%-%?]") then c = "%" .. c end
+            out[#out + 1] = c
+            i = i + 1
+        end
+    end
+    out[#out + 1] = "$"
+    return table.concat(out)
 end
 
 function ns.NowStamp()
@@ -789,7 +813,7 @@ function ns.GetUnitRole(unit)
     local _, classFile = UnitClass(unit)
     classFile = ns.SafeStr(classFile) or ""
 
-    local isPlayer = UnitIsUnit and UnitIsUnit(unit, "player") == true
+    local isPlayer = UnitIsUnit and ns.SafeBool(UnitIsUnit(unit, "player")) == true
     local guess = (isPlayer and PlayerFormRole()) or AuraRole(unit)
     if not guess and isPlayer then guess = PlayerTalentRole(classFile) end
 

@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata
 
-ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.3"
+ns.VERSION = (GetAddOnMetadata and GetAddOnMetadata(ADDON_NAME, "Version")) or "0.6.4"
 
 BINDING_HEADER_RPCHRONICLER = "RP Chronicler"
 BINDING_NAME_RPCHRONICLER_OPEN = "Toggle RP Chronicler Window"
@@ -91,7 +91,7 @@ ns.LOG_GROUPS = {
     { key = "travel", label = "Travel and progress", cats = { "levels", "places", "milestones" },
       tip = "Level ups, new places, and milestones: new spells, pets, mounts, achievements and reputation." },
     { key = "loot", label = "Loot and gear", cats = { "loot", "lootSource", "gear" },
-      tip = "Green and better items, who got them and where they came from, and the gear you wore on the run." },
+      tip = "Green and better items, who got them and where they came from, and the gear you and your party wore on the run." },
     { key = "chat", label = "Group chat", cats = { "chat", "guildmates" },
       tip = "Say, yell, emotes, whispers and group chat, and which party members are your guildmates. Guild and world channels and OOC never go in." },
     -- 0.6.3: what you type with /rp note (or the Note button) during a run
@@ -151,11 +151,17 @@ ns.KNOWN_NOTE_MAX = 300
 -- =========================================================
 ns.SETTINGS = {
     { key = "rpCopy",            default = true,       label = "RP Copy (live scene copy)" },
+    -- 0.6.4: the RP button on the minimap (default) or floating
+    { key = "iconMode",          default = "MINIMAP",  choices = { "MINIMAP", "FLOAT" } },
     { key = "quickCtrlC",        default = true,       label = "Ctrl+C copies the scene" },
     { key = "copyMode",          default = "BOX",      choices = { "INSTANT", "BOX" } },
     { key = "messages",          default = 3,          min = 1, max = 10 },
-    { key = "autoRecord",        default = true,       label = "Auto-record dungeons and raids" },
-    { key = "promptOnGroup",     default = true,       label = "Ask to record on group join" },
+    -- 0.6.4: entering a dungeon or raid asks first (was autoRecord and
+    -- promptOnGroup)
+    { key = "instanceRecord",    default = "ASK",      choices = { "ASK", "AUTO", "OFF" } },
+    -- 0.6.4 (Mor): inspect each party member once while recording, for
+    -- the gear they wore (local only, can be turned off)
+    { key = "partyGear",         default = true,       label = "Record party gear" },
     { key = "autoShots",         default = "INSTANCE", choices = { "OFF", "INSTANCE", "ALL" } },
     { key = "logDetail",         default = "NORMAL",   choices = { "SHORT", "NORMAL", "RICH" } },
     { key = "logWarnChars",      default = 80000,      min = 10000, max = 2000000 },
@@ -166,8 +172,11 @@ ns.SETTINGS = {
     { key = "rpReplyLength",     default = "SHORT",    choices = { "SHORT", "MEDIUM", "LONG" } },
     -- 0.6.3: Ctrl+C first asks for a one-line instruction for the AI
     { key = "quickNote",         default = false,      label = "Ask for an instruction on Ctrl+C" },
+    -- 0.6.4: OFF puts the story rules in front of every Full Log copy, so
+    -- any AI chat works; ON keeps the short copy for a storyteller skill
+    { key = "aiHasSkill",        default = false,      label = "My AI has the skill" },
     -- 0.6.3: the 3D character on a story's cover (some clients draw no models)
-    { key = "storyCover",        default = true,       label = "Character on the story cover" },
+    { key = "storyCover",        default = true,       label = "Story scenes" },
     -- 0.6.3: RP Chronicler's own errors are kept in the saved file
     { key = "keepErrors",        default = true,       label = "Keep error reports" },
     -- 0.6.3: send only the version number to your group and guild
@@ -266,10 +275,10 @@ end
 ns.PRIVACY_TEXT =
     "|cffd8dee9RP Chronicler stores everything on your PC, in your WoW SavedVariables. It has no internet access and never sends your chat, recordings, stories or notes anywhere. " ..
     "No account, email or real-world personal data is collected.\n" ..
-    "RP Copy (one switch) keeps recent chat in memory for the live copy. Recording (only while a run is on) keeps a Full Log with in-character chat (never OOC), the notes you type with /rp note and the gear you wore. " ..
+    "RP Copy (one switch) keeps recent chat in memory for the live copy. Recording (only while a run is on) keeps a Full Log with in-character chat (never OOC), the notes you type with /rp note, the gear you wore, your party's race and sex (for their shadows in the story scene) and, unless you turn Record party gear off, the gear they wore (RP Chronicler inspects each member once, out of combat, like the game's own Inspect). " ..
     "Screenshots go to your normal WoW Screenshots folder. Error reports (RP Chronicler's own errors, never chat) are kept in the saved file for bug reports. Each of these can be turned off in Options.\n" ..
     "Update notices: RP Chronicler sends only its version number to your group and guild, through the game, so you hear when a newer one exists. No network, no recorded data. Turn it off in Options > Privacy.\n" ..
-    "StoryViewer.html (in the addon folder) runs only in your browser, offline, and reads only the folder you choose.\n" ..
+    "StoryViewer.html (in the addon folder, and the same page online) runs only in your browser and reads only the files you choose. It uploads nothing.\n" ..
     "Chat and log text only leave your PC if YOU paste them into your own AI tool, and that tool's own privacy terms apply then.\n" ..
     "You can delete everything at any time with |cff69ccf0/rp wipe|cffd8dee9 (or by deleting RPChronicler.lua in your SavedVariables folder).|r"
 
@@ -963,6 +972,14 @@ function ns.EnsureDB()
         pcall(ns.MergeCompanionNotes)
         for _, k in ipairs(ns.REMOVED_SETTINGS) do db[k] = nil end
         db.migratedV061 = true
+    end
+    -- 0.6.4: "Auto-record dungeons and raids" became Ask / Always / Never.
+    -- Off stays off; on becomes Ask. The group-join prompt is gone.
+    if not RPChroniclerDB.migratedV064 then
+        local db = RPChroniclerDB
+        if db.autoRecord == false and db.instanceRecord == nil then db.instanceRecord = "OFF" end
+        db.autoRecord, db.promptOnGroup = nil, nil
+        db.migratedV064 = true
     end
     for _, d in ipairs(ns.SETTINGS) do
         RPChroniclerDB[d.key] = Coerce(d, RPChroniclerDB[d.key])

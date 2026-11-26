@@ -193,6 +193,37 @@ do
     local cancelBtn = UI.CreateSleekButton(f, 90, 24, "Cancel", "danger")
     cancelBtn:SetPoint("BOTTOMRIGHT", -14, 11)
     cancelBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- 0.6.4: no AI? RP Chronicler writes a short chronicle of the picked
+    -- run itself (Narrator.lua). A second click confirms replacing a story.
+    local quickBtn = UI.CreateSleekButton(f, 160, 24, "Quick Chronicle (test)", "tool")
+    quickBtn:SetPoint("RIGHT", cancelBtn, "LEFT", -6, 0)
+    quickBtn.tipTitle = "|cffffd100Quick Chronicle|r |cffffb74d(test feature)|r"
+    quickBtn.tipText = "A test feature: the writing is still rough. No AI? RP Chronicler writes a short chronicle of the run picked above from its own log: chapters, fights, quotes and your notes. A journal, not a novel. A story from your AI replaces it later."
+    imp.quickBtn = quickBtn
+    quickBtn:SetScript("OnClick", function(self)
+        local adv = f.targetAdvId and ns.FindAdventure(f.targetAdvId)
+        if not adv then
+            imp.title:SetText("|cffff6b6bPick a run above first (use < and >).|r")
+            return
+        end
+        if ns.RunHasStory(adv) and not self.armed then
+            self.armed = true
+            self:SetText("Replace story?")
+            imp.title:SetText("|cffffb74dThis run has a story. Click again to replace it with a Quick Chronicle.|r")
+            return
+        end
+        self.armed = false
+        self:SetText("Quick Chronicle (test)")
+        local ok, storyId = ns.SaveQuickChronicle(adv)
+        if ok then
+            f:Hide()
+            UI.OpenStoryBook(storyId)
+            UI.SetStatus("Quick Chronicle (test feature) written. For a full story, copy the Full Log for your AI.", "good")
+        else
+            imp.title:SetText("|cffff6b6bCould not write a Quick Chronicle for this run.|r")
+        end
+    end)
 end
 
 -- Every run you can attach a story to: the live one first, then saved ones
@@ -249,6 +280,8 @@ local function OpenStoryImportModal(adv, st)
     if st and not adv then adv = ns.StoryRun(st) end
     imp.frame.targetAdvId = adv and adv.id or nil
     imp.title:SetText("|cffffd100Import Story from your AI|r")
+    imp.quickBtn.armed = false
+    imp.quickBtn:SetText("Quick Chronicle (test)")
     imp.editBox:SetText("")
     ShowImportRun()
     imp.frame:Show()
@@ -377,7 +410,7 @@ end
 A.summaryBtn = UI.CreateSleekButton(A.right, 66, 22, "Summary")
 A.fullBtn = UI.CreateSleekButton(A.right, 62, 22, "Full Log")
 A.fullBtn.tipTitle = "|cffffd100Full Log|r"
-A.fullBtn.tipText = "The whole run for your AI storyteller. Click Select All, then Ctrl+C."
+A.fullBtn.tipText = "The whole run for your AI storyteller. Click Copy for AI, then Ctrl+C, and paste it into any AI chat."
 A.storyBtn = UI.CreateSleekButton(A.right, 56, 22, "Story", "gold")
 A.storyBtn.tipTitle = "|cffffd100Story|r"
 -- 0.6.3: correct a wrong name before the story is written
@@ -658,10 +691,16 @@ function UI.RefreshAdventuresTab()
         A.fullBtn:LockHighlight()
         local text = ns.BuildAdventureFullLog(selected)
         A.editBox:SetText(text)
+        -- 0.6.4: the button selects the copy for the AI (story rules + log)
+        UI.SetButtonLabels(A.selectAllBtn, "Copy for AI", "Copy")
+        A.selectAllBtn.tipTitle = "|cffffd100Copy for AI|r"
+        A.selectAllBtn.tipText = ns.Get("aiHasSkill") and "Selects the Full Log for your storyteller skill. Press Ctrl+C and paste it into your AI."
+            or "Selects the Full Log with the story rules in front of it. Press Ctrl+C, paste it into any AI chat, then Import the story it writes."
         -- 0.6.1: one warning size (Options > Recording) instead of an AI picker
         if selected then
             local limit = ns.Get("logWarnChars")
-            local chars = #text
+            -- 0.6.4: the meter counts what is copied (rules included)
+            local chars = #(ns.BuildAiText(selected) or text)
             local tokens = math.floor(chars / 4 + 0.5)
             local pct = math.floor(chars * 100 / math.max(1, limit) + 0.5)
             local color = (pct > 100 and "ff6b6b") or (pct > 80 and "ffb74d") or "5cb85c"
@@ -674,6 +713,8 @@ function UI.RefreshAdventuresTab()
         end
     else
         A.meter:Hide()
+        UI.SetButtonLabels(A.selectAllBtn, "Select All", "All")
+        A.selectAllBtn.tipTitle, A.selectAllBtn.tipText = nil, nil
         A.summaryBtn:LockHighlight()
         A.editBox:SetText(ns.BuildAdventureSummary(selected))
     end
@@ -725,9 +766,18 @@ end)
 UI.GetSelectedAdventure = GetSelectedAdventure
 
 A.selectAllBtn:SetScript("OnClick", function()
+    local adv = GetSelectedAdventure()
+    local full = ns.state.adventureViewMode == "FULL" and adv
+    -- 0.6.4: Copy for AI swaps in the text for the AI (the view shows it
+    -- until you switch runs or views)
+    if full then A.editBox:SetText(ns.BuildAiText(adv)) end
     A.editBox:SetFocus()
     A.editBox:HighlightText()
-    UI.SetStatus("Text selected. Press Ctrl+C to copy it.", "good")
+    if full and not ns.Get("aiHasSkill") then
+        UI.SetStatus("Full Log and story rules selected. Press Ctrl+C, paste it into any AI chat, then Import the story.", "good")
+    else
+        UI.SetStatus("Text selected. Press Ctrl+C to copy it.", "good")
+    end
 end)
 
 A.runBtn:SetScript("OnClick", function()

@@ -21,7 +21,9 @@ local STORY_META = { "code", "title", "zone", "instanceName", "kind", "startDate
     "places", "levelStart", "levelEnd", "questsDone", "coin", "keyLoot", "highlights", "metCompanions",
     "pvpKills", "pvpDeaths", "skills", "milestones", "lastSeen",
     -- 0.6.3: the cover (who and what they wore), name fixes, version stamp
-    "char", "gear", "fixes", "addonVersion", "clientBuild" }
+    "char", "gear", "fixes", "addonVersion", "clientBuild",
+    -- 0.6.4: the story scene (dungeon art)
+    "ejInstance" }
 
 local function DeepCopy(v, depth)
     if type(v) ~= "table" then return v end
@@ -119,6 +121,7 @@ function ns.SetAdventureStory(advId, rawStoryText)
     local ok, colored = pcall(ns.AutoColorStory, cleaned, st)
     if ok and type(colored) == "string" then cleaned = colored; st.autoColored = ns.AUTOCOLOR_VERSION end
     st.story = cleaned
+    st.quick = nil   -- 0.6.4: a story from an AI replaces a Quick Chronicle
     st.importedAt = time()
     st.importedWith = ns.VERSION
     adv.storyId = st.id
@@ -369,8 +372,12 @@ function ns.StripTitleLabel(text)
     for line in (text .. "\n"):gmatch("([^\n]*)\n") do
         if not done and n < 3 and Trim(ns.StripColors(line)) ~= "" then
             n = n + 1
-            if Trim(ns.StripColors(line)):gsub("^#+%s*", ""):match("^[Tt]itle:") then
+            local plain = Trim(ns.StripColors(line)):gsub("^#+%s*", "")
+            if plain:match("^[Tt]itle:") then
                 line = line:gsub("[Tt]itle:%s*", "", 1)
+                done = true
+            elseif plain:match("^@[Tt]itle") then
+                line = line:gsub("@[Tt]itle:?%s*", "", 1)
                 done = true
             end
         end
@@ -401,8 +408,20 @@ function ns.ParseStoryMeta(text)
     -- line 2 is the "<place> | <duration> | <zone>" header, line 1 is the title
     if not titleAt and #lines >= 2 and lines[2]:find("|", 1, true)
         and not lines[1]:find("|", 1, true) and not lines[1]:match("^[Cc]hapter%s") and #lines[1] <= 120 then
-        meta.title = lines[1]:gsub("^#+%s*", "")
+        meta.title = lines[1]:gsub("^#+%s*", ""):gsub("^@[Tt]itle:?%s*", "")
         titleAt = 1
+    end
+    -- 0.6.4: "@title ..." or a heading line ("# ...", or a short first line
+    -- that isn't a sentence or a chapter) is the title too, so a story
+    -- whose AI dropped the "Title:" label never takes the zone's name
+    if not titleAt then
+        local first = lines[1]
+        local t = first:match("^@[Tt]itle:?%s*(.-)%s*$") or first:match("^#+%s*(.-)%s*$")
+        if not t and #first <= 100 and not first:find("|", 1, true) and not first:match("^[Cc]hapter%s")
+            and not first:match("[%.!?\"]$") and not first:lower():match("^%a+ ?%a*:%s") then
+            t = first
+        end
+        if t and t ~= "" then meta.title = t:sub(1, 120); titleAt = 1 end
     end
     local second = lines[(titleAt or 1) + 1] or ""
     if second:find("|", 1, true) then
@@ -512,6 +531,10 @@ function ns.BuildViewerText(st)
         end
     end
     for name, kind in pairs(ns.GetRunBossKinds(st)) do Put("boss", kind .. " " .. name) end
+    -- 0.6.4: items as "<quality> <class> <subclass> <name>", for colors and icons
+    for name, it in pairs(ns.RunItems(st)) do
+        Put("item", (it.q or 1) .. " " .. (it.cls or -1) .. " " .. (it.sub or -1) .. " " .. name)
+    end
     -- 0.6.3: the run's key moments for the viewer's timeline
     local run = ns.StoryRun(st)
     for _, line in ipairs(ns.TimelineMarks(run)) do Put("mark", line) end
@@ -528,6 +551,11 @@ end
 -- pastes it into the Viewer path box once, and it is kept from then on.
 -- A Windows path (E:\World of Warcraft\...) is turned into the
 -- browser-ready form ("file:///E:/World%20of%20Warcraft/...").
+-- 0.6.4: the same page, hosted on GitHub Pages for players who'd rather
+-- not look for the addon folder. It runs only in the browser, reads only
+-- the files the player picks and uploads nothing (its CSP blocks every
+-- network request).
+ns.HOSTED_VIEWER_URL = "https://azaxyno.github.io/RPChronicler/StoryViewer.html"
 ns.VIEWER_PATH_EXAMPLE = "file:///C:/Program%20Files%20(x86)/World%20of%20Warcraft/_forever_/Interface/AddOns/RPChronicler/StoryViewer.html"
 function ns.ViewerUrl(path)
     path = tostring(path or ""):gsub("[\r\n]", ""):match("^%s*(.-)%s*$")
@@ -624,6 +652,107 @@ local function BossIcon(kind)
     return BOSS_ICON_TEX[kind] or BOSS_ICON_TEX.skull
 end
 ns.BossIcon = BossIcon
+
+-- =========================================================
+-- 0.6.4: items in stories. Every item the run looted or that you wore
+-- shows in the reader with its icon and its quality color (gray, white,
+-- green, blue, purple, orange), found by its name, so an item never looks
+-- like a name or a place. The AI only has to write the name as the log
+-- does.
+-- =========================================================
+ns.QUALITY_HEX = { [0] = "9d9d9d", [1] = "ffffff", [2] = "1eff00", [3] = "0070dd", [4] = "a335ee", [5] = "ff8000", [6] = "e6cc80" }
+
+-- { name = { q, icon, cls, sub } } for a run or story
+function ns.RunItems(adv)
+    local items = {}
+    if type(adv) ~= "table" then return items end
+    local function Add(name, e)
+        name = type(name) == "string" and name:gsub("%s*[xX]%d+$", ""):match("^%s*(.-)%s*$") or nil
+        if not name or #name < 4 or type(e) ~= "table" then return end
+        local link = e.colored or e.link
+        local q = tonumber(e.q)
+        if not q and type(link) == "string" then q = ns.ItemQuality(link) end
+        -- runs from before 0.6.4 kept only the link: ask the game for the rest
+        local icon, cls, sub = e.icon, tonumber(e.cls), tonumber(e.sub)
+        if not icon and type(link) == "string" then
+            local d = ns.ItemDetails(link)
+            if d then icon, cls, sub = d.icon, d.cls, d.sub end
+        end
+        if not items[name] or (q or 0) > (items[name].q or 0) then
+            items[name] = { q = q, icon = icon, cls = cls, sub = sub }
+        end
+    end
+    for _, e in ipairs(type(adv.keyLoot) == "table" and adv.keyLoot or {}) do Add(e.plain, e) end
+    for _, g in ipairs(type(adv.gear) == "table" and adv.gear or {}) do Add(g.name, g) end
+    return items
+end
+
+-- 0.6.4: what one member of a story wore and won, for the scene's popup:
+-- { worn = { item... }, won = { item... } }, item = { name, q, icon, from }.
+-- Only your own gear is known (other players are never inspected); loot
+-- is everyone's. A boss gives the loot that came from it.
+function ns.MemberItems(st, name, isBoss)
+    local res = { worn = {}, won = {} }
+    if type(st) ~= "table" or type(name) ~= "string" then return res end
+    local function Item(e, nm, from)
+        local link = e.colored or e.link
+        local d = (not e.icon and type(link) == "string") and ns.ItemDetails(link) or nil
+        local q = tonumber(e.q) or (type(link) == "string" and ns.ItemQuality(link)) or nil
+        return { name = nm, q = q, icon = e.icon or (d and d.icon), from = from }
+    end
+    local low, first = name:lower(), (name:match("^(%S+)") or ""):lower()
+    local function Same(who)
+        who = tostring(who or ""):lower()
+        if who == "" then return false end
+        return who == low or (not who:find("%s") and who == first) or (not low:find("%s") and (who:match("^(%S+)") or "") == low)
+    end
+    local worn = (not isBoss and st.char and Same(st.char)) and st.gear or nil
+    -- 0.6.4: a party member's gear, from Record party gear
+    if not isBoss and not worn then
+        for _, p in ipairs(type(st.participants) == "table" and st.participants or {}) do
+            if type(p) == "table" and type(p.gear) == "table" and Same(p.name) then worn = p.gear break end
+        end
+    end
+    for _, g in ipairs(type(worn) == "table" and worn or {}) do
+        if type(g) == "table" and g.name then table.insert(res.worn, Item(g, g.name)) end
+    end
+    for _, e in ipairs(type(st.keyLoot) == "table" and st.keyLoot or {}) do
+        if type(e) == "table" and e.plain then
+            local src = tostring(e.source or "")
+            if isBoss then
+                if src:lower() == ("from " .. low) then table.insert(res.won, Item(e, e.plain, e.looter)) end
+            elseif Same(e.looter) then
+                table.insert(res.won, Item(e, e.plain, src ~= "" and src or nil))
+            end
+        end
+    end
+    return res
+end
+
+local function Escape(s) return (s:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")) end
+
+function ns.DecorateStoryItems(text, adv)
+    if type(text) ~= "string" or text == "" then return text end
+    local items = ns.RunItems(adv)
+    local names = {}
+    for n in pairs(items) do table.insert(names, n) end
+    if #names == 0 then return text end
+    table.sort(names, function(a, b) return #a > #b end)
+    local looks = {}
+    -- Longest names first, through placeholders, so "Crossbow" never
+    -- re-matches inside "Barbaric Crossbow"
+    for idx, name in ipairs(names) do
+        local it = items[name]
+        local hex = ns.QUALITY_HEX[it.q or 1] or "ffffff"
+        local icon = it.icon and ("|T" .. tostring(it.icon) .. ":14:14:0:-1|t") or ""
+        looks[idx] = icon .. "|cff" .. hex .. name .. "|r"
+        local pat, mark = Escape(name), "\001" .. idx .. "\002"
+        -- a name in its own color span: the span becomes the item's look
+        text = text:gsub("|c%x%x%x%x%x%x%x%x" .. pat .. "|r", mark)
+        text = text:gsub("%f[%w]" .. pat .. "%f[^%w]", mark)
+    end
+    return (text:gsub("\001(%d+)\002", function(i) return looks[tonumber(i)] end))
+end
 
 -- Boss name -> "skull" / "elite" / "rare" for a run
 function ns.GetRunBossKinds(adv)
@@ -871,3 +1000,50 @@ function ns.AutoColorStory(text, st)
     return table.concat(out)
 end
 
+
+-- 0.6.4: how to show a boss of a story: its display ID (recorded when
+-- you fought it, remembered from another run, or from the Encounter
+-- Journal), else its creature ID. Returns display, npc (either may be nil).
+function ns.BossLooks(st, name)
+    if type(name) ~= "string" then return nil, nil end
+    local info = type(st) == "table" and type(st.bossInfo) == "table" and st.bossInfo[name] or nil
+    local cache = type(RPChroniclerDB) == "table" and RPChroniclerDB.bossLooks and RPChroniclerDB.bossLooks[name] or nil
+    local display = (type(info) == "table" and tonumber(info.display)) or (cache and tonumber(cache.display)) or nil
+    local npc = (type(info) == "table" and tonumber(info.npc)) or (cache and tonumber(cache.npc)) or nil
+    if not display and ns.JournalBossDisplay then
+        -- the story's own header names the dungeon even when an older run
+        -- was named after the city around it
+        local book = type(st) == "table" and type(st.book) == "table" and st.book or {}
+        local enc = type(info) == "table" and info.encounter or nil
+        for _, inst in ipairs({ book.instance or false, type(st) == "table" and st.instanceName or false, type(st) == "table" and st.zone or false }) do
+            if display then break end
+            if inst then display = ns.JournalBossDisplay(inst, name, enc) end
+        end
+    end
+    return display, npc
+end
+
+-- 0.6.4: the bosses a story tells of, in the order it first names them:
+-- { "Oggleflint", ... }. A recorded kill the story leaves out is not one
+-- of them; a boss fought as an encounter is, even with no kill recorded.
+function ns.StoryBosses(st, text)
+    local list = {}
+    if type(st) ~= "table" then return list end
+    text = text or st.story
+    local plain = type(text) == "string" and ns.StripColors(text):lower() or nil
+    local found, seen = {}, {}
+    local function Add(b)
+        if type(b) ~= "string" or b == "" or seen[b] then return end
+        seen[b] = true
+        local at = plain and plain:find(b:lower(), 1, true)
+        if plain and not at then return end
+        table.insert(found, { name = b, at = at or (#found + 1) })
+    end
+    for _, b in ipairs(type(st.bossKills) == "table" and st.bossKills or {}) do Add(b) end
+    for b, info in pairs(type(st.bossInfo) == "table" and st.bossInfo or {}) do
+        if type(info) == "table" and info.encounter then Add(b) end
+    end
+    table.sort(found, function(a, b) return a.at < b.at end)
+    for _, f in ipairs(found) do table.insert(list, f.name) end
+    return list
+end

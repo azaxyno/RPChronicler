@@ -166,8 +166,10 @@ function UI.CreateSleekButton(parent, width, height, text, accentStyle)
 
     btn:SetScript("OnEnter", function(self)
         if self.isDisabled then return end
-        self:SetBackdropBorderColor(0.92, 0.76, 0.35, 0.95)
-        if not self.isLocked then
+        -- 0.6.4: guarded, so a frame without a backdrop that borrows this
+        -- handler can't raise an error
+        if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0.92, 0.76, 0.35, 0.95) end
+        if not self.isLocked and self.SetBackdropColor then
             if self.accentStyle == "tool" then
                 self:SetBackdropColor(0.15, 0.21, 0.30, 0.98)
             else
@@ -311,11 +313,15 @@ UI.frame = copyFrame
 copyFrame:SetSize(UI.DEFAULT_W, UI.DEFAULT_H)
 copyFrame:SetPoint("CENTER")
 copyFrame:SetFrameStrata("DIALOG")
+-- 0.6.4: always drawn over the quest tracker and other HUD frames, and
+-- raised when clicked (the tracker showed through the Story Book cover)
+copyFrame:SetFrameLevel(40)
+if copyFrame.SetToplevel then copyFrame:SetToplevel(true) end
 copyFrame:SetMovable(true)
 copyFrame:EnableMouse(true)
 copyFrame:RegisterForDrag("LeftButton")
 copyFrame:Hide()
-UI.ApplyDarkGlass(copyFrame, 0.05, 0.06, 0.08, 0.95, 0.78, 0.62, 0.28, 0.60)
+UI.ApplyDarkGlass(copyFrame, 0.05, 0.06, 0.08, 1.0, 0.78, 0.62, 0.28, 0.60)
 -- ESC closes the window (the game hides frames listed in UISpecialFrames)
 if type(UISpecialFrames) == "table" then
     table.insert(UISpecialFrames, "RPChroniclerFrame")
@@ -391,7 +397,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.3") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.4") .. "|r")
 end
 
 -- Left rail
@@ -915,6 +921,10 @@ end
 -- a story note (/rp note) and the Ctrl+C instruction for the AI.
 -- UI.AskLine{ title, sub, placeholder, okText, onAccept(text), onEscape() }
 -- Enter accepts (an empty line too); Esc calls onEscape, or just closes.
+-- 0.6.4: the box lays out top-down from its help text (a two-line help
+-- text no longer runs under the input), and UI.AskLineCopy(title, text)
+-- turns the same small box into a copy step: the text is selected in a
+-- compact box, Ctrl+C copies it and the box closes by itself.
 -- =========================================================
 do
     local f = CreateFrame("Frame", "RPChroniclerAskLineFrame", UIParent, UI.BACKDROP)
@@ -942,8 +952,8 @@ do
 
     local eb = CreateFrame("EditBox", "RPChroniclerAskLineBox", f, "InputBoxTemplate")
     eb:SetHeight(22)
-    eb:SetPoint("BOTTOMLEFT", 20, 40)
-    eb:SetPoint("BOTTOMRIGHT", -16, 40)
+    eb:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 6, -8)
+    eb:SetPoint("RIGHT", f, "RIGHT", -16, 0)
     eb:SetAutoFocus(false)
     eb:SetMaxLetters(240)
     local hint = eb:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -954,7 +964,28 @@ do
     local keys = UI.Label(f, "", "GameFontHighlightSmall")
     keys:SetPoint("LEFT", okBtn, "RIGHT", 8, 0)
 
+    -- The copy step: a compact read-only box with the text selected
+    local copyBg = CreateFrame("Frame", nil, f, UI.BACKDROP)
+    copyBg:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -8)
+    copyBg:SetPoint("RIGHT", f, "RIGHT", -14, 0)
+    copyBg:SetHeight(64)
+    UI.ApplyPanelLook(copyBg)
+    copyBg:Hide()
+    local copyScroll = CreateFrame("ScrollFrame", "RPChroniclerAskLineCopyScroll", copyBg, "UIPanelScrollFrameTemplate")
+    copyScroll:SetPoint("TOPLEFT", 6, -6)
+    copyScroll:SetPoint("BOTTOMRIGHT", -26, 6)
+    local copyEb = CreateFrame("EditBox", "RPChroniclerAskLineCopyBox", copyScroll)
+    copyEb:SetMultiLine(true)
+    copyEb:SetMaxLetters(0)
+    if copyEb.SetMaxBytes then pcall(copyEb.SetMaxBytes, copyEb, 0) end
+    copyEb:SetFontObject(ChatFontSmall or ChatFontNormal)
+    copyEb:SetWidth(380)
+    copyEb:SetHeight(200)
+    copyEb:SetAutoFocus(false)
+    copyScroll:SetScrollChild(copyEb)
+
     local opts
+    local copyText
     local function Close() f:Hide() end
     local function Accept()
         local o = opts
@@ -967,14 +998,46 @@ do
         f:Hide()
         if o and o.onEscape then pcall(o.onEscape) end
     end
+    copyEb:SetScript("OnEscapePressed", Close)
+    copyEb:SetScript("OnTextChanged", function(self, userInput)
+        -- read-only: typing puts the text back
+        if userInput and copyText then self:SetText(copyText); self:HighlightText() end
+        copyScroll:UpdateScrollChildRect()
+    end)
+    copyEb:SetScript("OnKeyDown", function(self, key)
+        if key == "C" and IsControlKeyDown() and copyText then
+            self:HighlightText()
+            ns.Debug("copy", "instruction popup Ctrl+C: len " .. #(self:GetText() or ""))
+            UI.ShowToast("|cffffd100Copied|r |cff5cb85cto clipboard!|r", 1.8, 0.36, 0.72, 0.36)
+            copyText = nil
+            if C_Timer and C_Timer.After then C_Timer.After(0.25, Close) else Close() end
+        end
+    end)
+    copyEb:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+
+    -- Height from the help text down: title, help, box, buttons
+    local function FitHeight(boxH)
+        f:SetHeight(30 + math.ceil(sub:GetStringHeight() or 14) + 8 + boxH + 10 + 22 + 10)
+    end
     eb:SetScript("OnEnterPressed", Accept)
     eb:SetScript("OnEscapePressed", Escape)
     eb:SetScript("OnTextChanged", function(self)
         if (self:GetText() or "") == "" then hint:Show() else hint:Hide() end
     end)
-    okBtn:SetScript("OnClick", Accept)
+    okBtn:SetScript("OnClick", function()
+        if copyBg:IsShown() then
+            copyEb:SetFocus()
+            copyEb:HighlightText()
+        else
+            Accept()
+        end
+    end)
     closeX:SetScript("OnClick", Close)
-    f:SetScript("OnHide", function() eb:ClearFocus() end)
+    f:SetScript("OnHide", function()
+        eb:ClearFocus()
+        copyEb:ClearFocus()
+        copyText = nil
+    end)
 
     function UI.AskLine(o)
         opts = o or {}
@@ -986,9 +1049,32 @@ do
         keys:SetText("|cff8f9ba8" .. (opts.keys or "Enter: OK   Esc: cancel") .. "|r")
         eb:SetText("")
         hint:Show()
-        f:SetHeight(math.max(104, 84 + math.ceil(sub:GetStringHeight() or 14)))
+        copyBg:Hide()
+        eb:Show()
+        copyText = nil
         f:Show()
+        FitHeight(22)
         eb:SetFocus()
+    end
+
+    function UI.AskLineCopy(titleText, body)
+        opts = {}
+        copyText = body or ""
+        title:SetText(titleText or "|cffffd100RP Chronicler|r")
+        sub:SetText("|cffb0bac5Selected. Press |cffffd100Ctrl+C|cffb0bac5 to copy, and this closes by itself.|r")
+        okBtn:SetText("Select all")
+        okBtn:SetWidth(UI.ButtonWidth(okBtn))
+        keys:SetText("|cff8f9ba8Ctrl+C: copy   Esc: close|r")
+        eb:ClearFocus()
+        eb:Hide()
+        copyBg:Show()
+        copyEb:SetWidth(math.max(200, (copyScroll:GetWidth() or 380)))
+        copyEb:SetText(copyText)
+        f:Show()
+        FitHeight(64)
+        copyEb:SetFocus()
+        copyEb:SetCursorPosition(0)
+        copyEb:HighlightText()
     end
     UI.askLine = f
 end

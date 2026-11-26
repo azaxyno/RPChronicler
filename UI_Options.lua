@@ -69,6 +69,7 @@ end
 
 -- mode: "STORY" (Dungeon/Raid Story), "ADVENTURE" (Adventure Story) or "RP"
 function UI.OpenSkillTemplateModal(mode)
+    if mode == "STORY" or mode == "ADVENTURE" then ns.MarkTemplateCopied() end
     if mode == "STORY" then
         tpl.title:SetText("|cffffd100Dungeon/Raid Story Template (press Ctrl+C to copy)|r")
         tpl.sub:SetText("|cffb0bac5Paste it into your AI once: one chapter per boss. Full Logs of dungeons and raids start with 'use " .. ns.STORY_SKILLS.dungeon .. "'.|r")
@@ -336,6 +337,8 @@ do
         { key = "rpCopy", label = "RP Copy",
           tip = "The live scene copy: the Copy view, Ctrl+C, slice tabs, Nearby companions and the RP reply template. OFF: none of it runs and RP Chronicler keeps no chat for it. Recordings, companions and the Story Book still work.",
           after = function() LayoutNav() end },
+        { key = "iconMode", label = "RP button", names = { MINIMAP = "On the minimap", FLOAT = "Floating" },
+          tip = "On the minimap (default): the RP button sits on the minimap's edge; drag it around. Floating: the RP button you can drag anywhere on the screen. Both open the window on left-click and the recording menu on right-click." },
     })
     local copyRows
     copyRows, y = SettingRows(p, y - 6, {
@@ -345,7 +348,7 @@ do
         { key = "copyMode", label = "Ctrl+C style", names = { INSTANT = "Instant", BOX = "Copy box" },
           tip = "Instant: hold Ctrl a blink, press C, done. Copy box: Ctrl+C shows the snapshot selected in a small box; Ctrl+C there copies it. Copy box is the default. With Instant, a Ctrl+key you press after holding Ctrl a moment can be taken by the copy." },
         { key = "quickNote", label = "Ask for an instruction on Ctrl+C",
-          tip = "Ctrl+C first opens a one-line box for a quick instruction to your AI (\"be flirty\", \"reply to Thrall\"). Enter copies the scene with it as its [Instruction] line; Esc or an empty line copies without one. Then press Ctrl+C once more in the box that shows the scene.",
+          tip = "Ctrl+C first opens a one-line box for a quick instruction to your AI (\"be flirty\", \"reply to Thrall\"). Enter selects the scene with it as its [Instruction] line (Esc or an empty line: without one), and Ctrl+C in the same small box copies it.",
           after = function() UI.SyncCopyChip() end },
     })
     local msgRefresh = NumberRow(p, 0, y - 4, "Chat messages per source", "messages",
@@ -539,10 +542,11 @@ end
 do
     local p = NewPage("RECORDING", "Recording")
     local rows, y = SettingRows(p, -24, {
-        { key = "autoRecord", label = "Auto-record dungeons and raids",
-          tip = "ON: a run starts by itself when you enter a dungeon or raid and ends when you leave. OFF: you start every run yourself." },
-        { key = "promptOnGroup", label = "Ask to record on group join",
-          tip = "In the open world, joining a group asks 'Start recording?'." },
+        { key = "instanceRecord", label = "Dungeons and raids",
+          names = { ASK = "Ask on entry", AUTO = "Always record", OFF = "Never" },
+          tip = "Ask on entry (default): entering a dungeon or raid asks 'Start recording?'. Always record: the run starts by itself. Never: you start every run yourself. An instance run ends when you leave the instance." },
+        { key = "partyGear", label = "Record party gear",
+          tip = "On (default): while a run records, RP Chronicler inspects each party member once, out of combat and in range, like the game's own Inspect, and keeps the gear they wore with the run (on your PC only). Their character window then lists it and their model wears it. Off: nobody is inspected." },
         { key = "autoShots", label = "Auto-screenshots",
           names = { OFF = "Off", INSTANCE = "Dungeons and raids", ALL = "Everywhere" },
           tip = "Screenshots on boss kills, level ups, new places and marked moments while a run records. Dungeons and raids (default): open-world runs only take one when you Mark Moment. Your own Print Screen shots always join the run.",
@@ -612,21 +616,24 @@ do
 
     local stories = CreateFrame("Frame", nil, p)
     stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
-    stories:SetHeight(220)
+    stories:SetHeight(248)
+    -- 0.6.4: every Full Log copy carries the story rules, so the skill is optional
     Note(stories,
-        "|cffffd100Your storyteller skills (one time each)|r\n" ..
-        "|cffd8dee9Copy a story template into your AI to make the skill: |cffffd100Dungeon/Raid|cffd8dee9 (one chapter per boss, logs start with 'use " .. ns.STORY_SKILLS.dungeon .. "') " ..
-        "or |cffffd100Adventure|cffd8dee9 (open world, 'use " .. ns.STORY_SKILLS.world .. "'). After a run, paste its Full Log into the AI and import the story. " ..
-        "The AI names the story on its first line, and you can rename it in Story Book > Details.|r",
+        "|cffffd100Your stories|r\n" ..
+        "|cffd8dee9After a run, open its Full Log and click |cffffd100Copy for AI|cffd8dee9. Paste it into any AI chat, copy the story back and Import it in the Story Book. " ..
+        "|cff9aa5b4Advanced: use a skill.|cffd8dee9 Make a template below a skill in your AI (Dungeon/Raid: 'use " .. ns.STORY_SKILLS.dungeon .. "', Adventure: 'use " .. ns.STORY_SKILLS.world .. "') " ..
+        "and turn on My AI has the skill, so copies stay short.|r",
         0, 0)
     local tplLayout = TemplateButtons(stories, -86)
     local tipRows = SettingRows(stories, -120, {
         { key = "exportTip", label = "Export tip in the Story Book",
           tip = "Shows how to read your stories with screenshots in StoryViewer.html, with Copy for viewer." },
-        { key = "storyCover", label = "Character on the story cover",
-          tip = "The Story Book shows your character on each story's cover, dressed in the gear you wore on that run. Turn it off if your client shows no models." },
+        { key = "aiHasSkill", label = "My AI has the skill",
+          tip = "Off: Copy for AI puts the story rules in front of the Full Log, so any AI chat writes the story. On: the copy stays short for a storyteller skill you made from a template (copy the template again when RP Chronicler says it changed)." },
+        { key = "storyCover", label = "Story scenes",
+          tip = "Each story opens with its party: you in 3D in the gear from that run, companions near you as they are, everyone else as a shadow of their race. Click anyone to see them up close with their items. Each boss gets a panel at its chapter. Turn it off if your client shows no models." },
     })
-    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -174)
+    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -202)
     O.refresh.AI = function()
         stories:ClearAllPoints()
         stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)

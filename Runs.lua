@@ -185,78 +185,191 @@ local function UpdateTimeline(adv, handle, entryText)
     return true
 end
 
+-- =========================================================
+-- Party roster (0.6.4). Each group member is one entry, found again by
+-- their GUID or name. A member only joins the roster once you have seen
+-- them near you during the run (inside the instance for a dungeon or
+-- raid), so someone invited by mistake and removed, or who never zoned
+-- in, is left out. Members in the group for under a minute in all are
+-- dropped when the run ends. The role kept is the one each member ended
+-- the run with (people fix their roles mid-run), unless they held it only
+-- briefly; then it is the role they held longest.
+-- =========================================================
+local ROSTER_MIN_SECS = 60    -- shorter group time: dropped at the end
+local ROLE_FINAL_SECS = 120   -- a last role held this long wins
+
+local function FirstOf(name)
+    return (tostring(name or ""):match("^(%S+)") or ""):lower()
+end
+local function HasLastName(name)
+    return tostring(name or ""):find("%S%s+%S") ~= nil
+end
+
+-- The entry for this member in list, or nil. "Morai" and "Morai Galeclaw"
+-- are one member when nobody else in the list is a Morai: first names
+-- repeat on Forever, only first and last name together are unique.
+local function FindMember(list, guid, name)
+    local low = name:lower()
+    for _, p in ipairs(list) do
+        if guid and p.guid == guid then return p end
+    end
+    for _, p in ipairs(list) do
+        if (p.name or ""):lower() == low and not (guid and p.guid and p.guid ~= guid) then return p end
+    end
+    local first, hit, hits = FirstOf(name), nil, 0
+    for _, p in ipairs(list) do
+        if FirstOf(p.name) == first and not (guid and p.guid and p.guid ~= guid) then
+            hit, hits = p, hits + 1
+        end
+    end
+    if hits == 1 and (not HasLastName(name) or not HasLastName(hit.name)) then return hit end
+    return nil
+end
+
+-- Seen near you: you, or a member your client can see (about 100 yards),
+-- and for a dungeon or raid only while you are inside it
+local function MemberHere(unit, run)
+    if unit == "player" then return true end
+    if run.kind ~= "world" then
+        local _, inside = ns.InstanceKind()
+        if not inside then return false end
+    end
+    if not UnitIsVisible then return true end
+    local ok, vis = pcall(UnitIsVisible, unit)
+    return ok and vis == true
+end
+
+-- Adds the time since the last check to the member's current role
+local function CountRoleTime(p, now)
+    if p.roleNow and p.roleAt then
+        p.roleTime = p.roleTime or {}
+        p.roleTime[p.roleNow] = (p.roleTime[p.roleNow] or 0) + math.max(0, now - p.roleAt)
+    end
+    p.roleAt = now
+end
+
+-- The role to show: the last assigned one while it is held (live) or if
+-- it was held long enough, else the assigned one held longest, else the
+-- guess
+local function ChooseRole(p, final)
+    local times = p.roleTime or {}
+    local last = p.roleLast
+    if last and ((not final and p.roleNow == last) or (times[last] or 0) >= ROLE_FINAL_SECS) then
+        p.role, p.roleGuessed = last, false
+        return
+    end
+    local best, bestT = nil, -1
+    for r, t in pairs(times) do
+        if t > bestT then best, bestT = r, t end
+    end
+    best = best or last
+    if best then
+        p.role, p.roleGuessed = best, false
+    elseif p.guessRole then
+        p.role, p.roleGuessed = p.guessRole, true
+    end
+end
+
+-- Adds the time since the last check to the member's group time
+local function CountGroupTime(p, now, inGroup)
+    if p.inGroup and p.groupAt then
+        p.groupSecs = (p.groupSecs or 0) + math.max(0, now - p.groupAt)
+    end
+    p.inGroup = inGroup or nil
+    p.groupAt = inGroup and now or nil
+end
+
 function ns.SyncAdventureRoster()
     if not activeRun or activeRun.paused then return end
-    activeRun.participants = activeRun.participants or {}
+    local run = activeRun
+    run.participants = run.participants or {}
+    run.candidates = run.candidates or {}
+    local now = time()
+    local seen = {}
 
     local function AddOrUpdateUnit(unit)
         if not UnitExists(unit) or not UnitIsPlayer(unit) then return end
         local fullName = ns.GetUnitFullName(unit) or ns.StripRealm(UnitName(unit))
         if not fullName or fullName == "" then return end
+        local guid = UnitGUID and ns.SafeStr(UnitGUID(unit)) or nil
+
+        local p = FindMember(run.participants, guid, fullName)
+        if not p then
+            p = FindMember(run.candidates, guid, fullName)
+            if not p then
+                p = { name = fullName }
+                table.insert(run.candidates, p)
+            end
+            -- a candidate joins the roster once seen near you
+            if MemberHere(unit, run) then
+                for i, c in ipairs(run.candidates) do
+                    if c == p then table.remove(run.candidates, i) break end
+                end
+                table.insert(run.participants, p)
+                ns.Debug("run", "roster: " .. fullName)
+            end
+        end
+        seen[p] = true
+        -- "Morai" becomes "Morai Galeclaw" once the full name is known
+        if HasLastName(fullName) and not HasLastName(p.name) then p.name = fullName end
+        p.guid = p.guid or guid
 
         local lvl = ns.SafeNum(UnitLevel(unit))
-        local lvlStr = (lvl and lvl > 0) and tostring(lvl) or ""
+        if lvl and lvl > 0 then p.level = tostring(lvl) end
+        -- 0.6.4: race and sex, for their shadow in the story scenes
+        if UnitRace then
+            local okR, raceName, _, raceID = pcall(UnitRace, unit)
+            raceID = okR and ns.SafeNum(raceID) or nil
+            raceName = okR and ns.SafeStr(raceName) or nil
+            if raceID then p.race = raceID end
+            if raceName and raceName ~= "" then p.raceName = raceName end
+        end
+        if UnitSex then
+            local okS, sex = pcall(UnitSex, unit)
+            sex = okS and ns.SafeNum(sex) or nil
+            if sex == 2 or sex == 3 then p.sex = sex end
+        end
         local clsLoc, clsFile = UnitClass(unit)
         clsLoc = ns.SafeStr(clsLoc) or ""
         clsFile = ns.SafeStr(clsFile) or ""
+        if clsLoc ~= "" then p.class = clsLoc end
+        if clsFile ~= "" then p.classFile = clsFile end
+
         local role, guessed = ns.GetUnitRole(unit)
-        role = role or "NONE"
+        CountRoleTime(p, now)
+        if role and role ~= "NONE" and not guessed then
+            p.roleNow, p.roleLast = role, role
+        else
+            p.roleNow = nil
+            if role and role ~= "NONE" then p.guessRole = role end
+        end
+        ChooseRole(p)
+        p.role = p.role or "NONE"
+        if p.roleGuessed == nil then p.roleGuessed = guessed end
 
         -- Guildmates: party members in your own guild
         local myGuild = ns.SafeStr(GetGuildInfo("player"))
         local theirGuild = ns.SafeStr(GetGuildInfo(unit))
-        local isMate = unit ~= "player" and myGuild and theirGuild and myGuild ~= "" and myGuild == theirGuild or false
+        if theirGuild and theirGuild ~= "" then p.guild = theirGuild end
+        if unit ~= "player" and myGuild and theirGuild and myGuild ~= "" and myGuild == theirGuild then p.guildmate = true end
 
         -- 0.5.0: the run keeps its own copy of the companion's notes, so an
         -- old Full Log still reads right after the companion is deleted
-        local note, comp = "", nil
         if RPChroniclerDB and RPChroniclerDB.players and unit ~= "player" then
-            local pKey = ns.FindPlayerKey(fullName, true)
-            comp = pKey and RPChroniclerDB.players[pKey]
-            if comp and (comp.note or "") ~= "" then note = comp.note end
+            local pKey = ns.FindPlayerKey(p.name, true)
+            local comp = pKey and RPChroniclerDB.players[pKey]
+            if comp then
+                if (comp.note or "") ~= "" then p.note = comp.note end
+                p.cid = comp.cid or p.cid
+                p.relationship = (comp.relationship or "") ~= "" and comp.relationship or p.relationship
+                p.tone = (comp.tone or "") ~= "" and comp.tone or p.tone
+            end
         end
+        p.note = p.note or ""
         -- Pet: "Name (Family)", e.g. "Snips (Crab)"
         local petUnit = (unit == "player" and "pet") or (unit:match("^party%d$") and ("partypet" .. unit:sub(6))) or (unit:match("^raid%d+$") and ("raidpet" .. unit:sub(5))) or nil
         local petDesc = petUnit and UnitExists(petUnit) and ns.GetPetDescriptor(petUnit) or nil
-
-        for _, p in ipairs(activeRun.participants) do
-            if p.name:lower() == fullName:lower() then
-                if lvlStr ~= "" then p.level = lvlStr end
-                if clsLoc ~= "" then p.class = clsLoc end
-                if clsFile ~= "" then p.classFile = clsFile end
-                -- An assigned role always wins; a guess only replaces another guess
-                if role ~= "NONE" and (not guessed or p.roleGuessed == true or not p.role or p.role == "NONE") then
-                    p.role = role
-                    p.roleGuessed = guessed
-                end
-                if note ~= "" then p.note = note end
-                if comp then
-                    p.cid = comp.cid or p.cid
-                    p.relationship = (comp.relationship or "") ~= "" and comp.relationship or p.relationship
-                    p.tone = (comp.tone or "") ~= "" and comp.tone or p.tone
-                end
-                if petDesc then p.pet = petDesc end
-                if theirGuild and theirGuild ~= "" then p.guild = theirGuild end
-                if isMate then p.guildmate = true end
-                return
-            end
-        end
-
-        table.insert(activeRun.participants, {
-            name = fullName,
-            level = lvlStr,
-            class = clsLoc,
-            classFile = clsFile,
-            role = role,
-            roleGuessed = guessed,
-            note = note,
-            relationship = comp and comp.relationship or nil,
-            tone = comp and comp.tone or nil,
-            cid = comp and comp.cid or nil,
-            pet = petDesc,
-            guild = theirGuild,
-            guildmate = isMate or nil,
-        })
+        if petDesc then p.pet = petDesc end
     end
 
     AddOrUpdateUnit("player")
@@ -265,15 +378,203 @@ function ns.SyncAdventureRoster()
     else
         for i = 1, 4 do AddOrUpdateUnit("party" .. i) end
     end
+    if ns.InspectPartyGear then ns.InspectPartyGear() end
+    -- group time, and the role clock stops for members who left
+    for _, list in ipairs({ run.participants, run.candidates }) do
+        for _, p in ipairs(list) do
+            CountGroupTime(p, now, seen[p])
+            if not seen[p] then
+                CountRoleTime(p, now)
+                p.roleNow = nil
+            end
+        end
+    end
+end
+
+-- Run end: closes the clocks, drops members who were in the group under
+-- a minute (never you), and clears the working fields (groupSecs stays,
+-- so a resumed run keeps counting)
+-- 0.6.4: a roster as it should read, for runs and stories recorded
+-- before the fix: "Morai" folds into "Morai Galeclaw" when only one Morai
+-- is listed, and a name listed twice is listed once. Returns new tables;
+-- the saved roster is unchanged.
+function ns.MergedRoster(list)
+    local out, byName = {}, {}
+    for _, p in ipairs(type(list) == "table" and list or {}) do
+        if type(p) == "table" and type(p.name) == "string" and p.name ~= "" then
+            local low = p.name:lower()
+            local e = byName[low]
+            if not e then
+                e = {}
+                for k, v in pairs(p) do e[k] = v end
+                byName[low] = e
+                table.insert(out, e)
+            else
+                for k, v in pairs(p) do if e[k] == nil then e[k] = v end end
+            end
+        end
+    end
+    for i = #out, 1, -1 do
+        local p = out[i]
+        if not HasLastName(p.name) then
+            local first, hit, hits = FirstOf(p.name), nil, 0
+            for _, q in ipairs(out) do
+                if q ~= p and HasLastName(q.name) and FirstOf(q.name) == first then hit, hits = q, hits + 1 end
+            end
+            if hits == 1 then
+                for k, v in pairs(p) do if hit[k] == nil or hit[k] == "" then hit[k] = v end end
+                table.remove(out, i)
+            end
+        end
+    end
+    return out
+end
+
+-- 0.6.4: race and sex for people already in your runs and stories. Older
+-- runs never recorded them, so their shadows were unknown; when you see
+-- that player again (group, target, mouseover) the gap is filled in.
+local learned = {}
+function ns.LearnLooks(unit)
+    if not unit or not UnitExists(unit) or not UnitIsPlayer(unit) or not UnitRace or not UnitSex then return end
+    local full = ns.GetUnitFullName and ns.GetUnitFullName(unit)
+    if not full or full == "" or learned[full] then return end
+    local okR, raceName, _, raceID = pcall(UnitRace, unit)
+    local okS, sex = pcall(UnitSex, unit)
+    raceID, sex = okR and ns.SafeNum(raceID) or nil, okS and ns.SafeNum(sex) or nil
+    if not raceID or not (sex == 2 or sex == 3) then return end
+    raceName = okR and ns.SafeStr(raceName) or nil
+    learned[full] = true
+    local low, first = full:lower(), FirstOf(full)
+    local function Fill(list)
+        if type(list) ~= "table" then return end
+        -- a short name counts only when no other "<first> <last>" is listed
+        local others = 0
+        for _, p in ipairs(list) do
+            if type(p) == "table" and HasLastName(p.name) and FirstOf(p.name) == first and (p.name or ""):lower() ~= low then others = others + 1 end
+        end
+        for _, p in ipairs(list) do
+            if type(p) == "table" and not p.race and type(p.name) == "string" then
+                local n = p.name:lower()
+                if n == low or (others == 0 and not HasLastName(p.name) and FirstOf(p.name) == first) then
+                    p.race, p.sex, p.raceName = raceID, sex, p.raceName or raceName
+                end
+            end
+        end
+    end
+    local db = RPChroniclerDB or {}
+    for _, adv in ipairs(type(db.adventures) == "table" and db.adventures or {}) do Fill(adv.participants) end
+    for _, st in ipairs(type(db.stories) == "table" and db.stories or {}) do Fill(st.participants) end
+    if activeRun then Fill(activeRun.participants) end
+end
+
+local function FinishRoster(run)
+    local now = time()
+    local kept = {}
+    for _, p in ipairs(run.participants or {}) do
+        CountGroupTime(p, now, false)
+        CountRoleTime(p, now)
+        p.roleNow = nil
+        ChooseRole(p, true)
+        p.role = p.role or "NONE"
+        local me = p.name == run.char or (p.guid and UnitGUID and p.guid == ns.SafeStr(UnitGUID("player")))
+        if me or p.groupSecs == nil or p.groupSecs >= ROSTER_MIN_SECS then
+            table.insert(kept, p)
+        else
+            ns.Debug("run", "roster: dropped " .. tostring(p.name) .. " (" .. tostring(p.groupSecs or 0) .. "s in group)")
+        end
+        p.guid, p.roleNow, p.roleAt, p.roleLast, p.roleTime = nil, nil, nil, nil, nil
+        p.guessRole, p.inGroup, p.groupAt = nil, nil, nil
+    end
+    run.participants = kept
+    run.candidates = nil
+end
+
+-- =========================================================
+-- 0.6.4 (Mor): Record party gear. While a run records, each party member
+-- is inspected once (the game's own Inspect), out of combat and in range,
+-- one at a time every few seconds, and the gear they wore is kept on
+-- their roster entry. Never while the player's own Inspect window is
+-- open; ClearInspectPlayer after each. Off (partyGear) = nobody inspected.
+-- =========================================================
+do
+    local busy, scheduled = nil, false
+    local tries = {}
+    local STEP, WAIT = 3, 4
+    local Step
+    local function Later(sec)
+        if scheduled or not (C_Timer and C_Timer.After) then return end
+        scheduled = true
+        C_Timer.After(sec, function() scheduled = false Step() end)
+    end
+    local function InspectOpen() return InspectFrame and InspectFrame.IsShown and InspectFrame:IsShown() end
+    local function UnitOf(name)
+        local hit
+        ns.ForEachGroupUnit(function(u) if not hit and ns.GetUnitFullName(u) == name then hit = u end end)
+        return hit
+    end
+    local function Done()
+        if busy and ClearInspectPlayer and not InspectOpen() then pcall(ClearInspectPlayer) end
+        busy = nil
+        Later(STEP)
+    end
+    Step = function()
+        local run = activeRun
+        if busy or not run or run.paused or not ns.Get("partyGear") or not NotifyInspect then return end
+        if (InCombatLockdown and InCombatLockdown()) or InspectOpen() then Later(STEP) return end
+        local me = ns.PlayerName()
+        for _, p in ipairs(run.participants or {}) do
+            if p.name ~= me and not p.gear and (tries[p.name] or 0) < 3 then
+                local u = UnitOf(p.name)
+                local can = u and CanInspect and select(2, pcall(CanInspect, u, false))
+                local near = u and (not CheckInteractDistance or select(2, pcall(CheckInteractDistance, u, 1)))
+                if can and near then
+                    tries[p.name] = (tries[p.name] or 0) + 1
+                    busy = { p = p, unit = u, guid = UnitGUID and ns.SafeStr(UnitGUID(u)) }
+                    local token = busy
+                    if not pcall(NotifyInspect, u) then busy = nil Later(STEP) return end
+                    C_Timer.After(WAIT, function() if busy == token then Done() end end)
+                    return
+                end
+            end
+        end
+        -- someone may come into range later
+        for _, p in ipairs(run.participants or {}) do
+            if p.name ~= me and not p.gear and (tries[p.name] or 0) < 3 then Later(10) return end
+        end
+    end
+    ns.On("INSPECT_READY", function(_, guid)
+        if not busy or (busy.guid and guid and ns.SafeStr(guid) ~= busy.guid) then return end
+        local token = busy
+        -- item links can trail the event by a moment
+        C_Timer.After(0.5, function()
+            if busy ~= token then return end
+            if ns.GetUnitFullName(token.unit) == token.p.name then
+                local gear = ns.UnitGear(token.unit)
+                if #gear > 0 then
+                    token.p.gear = gear
+                    ns.Debug("run", "party gear: " .. token.p.name .. " (" .. #gear .. ")")
+                end
+            end
+            Done()
+        end)
+    end)
+    function ns.InspectPartyGear()
+        if activeRun and ns.Get("partyGear") then Later(STEP) end
+    end
+    function ns.ResetPartyGearTries() tries = {} end
 end
 
 function ns.StartAdventure(customTitle, isAuto)
     ns.EnsureDB()
+    ns.ResetPartyGearTries()
     if activeRun then
         ns.EndAdventure("Started New Adventure")
     end
 
-    local zone = ns.GetCurrentWhere()
+    -- 0.6.4: inside an instance the run is named after it, never after
+    -- the zone text (which can still say Orgrimmar in Ragefire Chasm)
+    local instName, instID = ns.InstanceInfo()
+    local zone = instName or ns.GetCurrentWhere()
     local title = (customTitle and customTitle ~= "") and customTitle or zone
     recentDeathTimes = {}
     lastWipeTime = 0
@@ -307,7 +608,9 @@ function ns.StartAdventure(customTitle, isAuto)
         fullTimeline = {},
         shots = {},
         reloads = 0,
-        instanceName = ns.SafeStr(GetRealZoneText()) or zone,
+        instanceName = instName or ns.SafeStr(GetRealZoneText()) or zone,
+        instanceID = instID,
+        ejInstance = instName and ns.JournalInstance() or nil, -- 0.6.4: scene backdrop
         lastSeen = time(),
         paused = false,
         aggroHeld = {},
@@ -334,7 +637,7 @@ function ns.StartAdventure(customTitle, isAuto)
     }
     -- Persist the live run in SavedVariables so /reload or a disconnect can't lose it
     RPChroniclerDB.activeRun = activeRun
-    ns.NoteRunPlace(ns.SafeStr(GetRealZoneText()) or zone)
+    ns.NoteRunPlace(instName or ns.SafeStr(GetRealZoneText()) or zone)
     local startSub = ns.SafeStr(GetSubZoneText())
     if startSub and startSub ~= "" then ns.NoteRunPlace(startSub) end
 
@@ -350,6 +653,7 @@ function ns.EndAdventure(reason, endTime)
     if not activeRun then return nil end
     ns.EnsureDB()
     ns.SyncAdventureRoster()
+    FinishRoster(activeRun)
     RPChroniclerDB.activeRun = nil
     activeRun.paused = false
 
@@ -596,24 +900,69 @@ local function BossKind(cls, lvl)
     return "skull"
 end
 
-local function RecordBossInfo(bossName, unit)
+-- 0.6.4: also the boss's NPC id (from its GUID) and the encounter id,
+-- so the Story Book can show the boss in its story scene
+local function NpcIdOf(unit)
+    local guid = UnitGUID and ns.SafeStr(UnitGUID(unit))
+    local id = guid and guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+    return tonumber(id)
+end
+
+-- 0.6.4: what each boss looks like, kept across runs
+-- (RPChroniclerDB.bossLooks[name] = { npc, display }), so older stories
+-- can show a boss you meet again.
+function ns.RememberBossLooks(name, npc, display)
+    if type(name) ~= "string" or name == "" or not (npc or display) or type(RPChroniclerDB) ~= "table" then return end
+    RPChroniclerDB.bossLooks = RPChroniclerDB.bossLooks or {}
+    local e = RPChroniclerDB.bossLooks[name] or {}
+    e.npc, e.display = e.npc or npc, e.display or display
+    RPChroniclerDB.bossLooks[name] = e
+end
+
+-- A boss you target or point at: remembered when it is a boss of one of
+-- your runs and its look is not known yet
+local bossSeen = {}
+function ns.LearnBossLooks(unit)
+    if not unit or not UnitExists(unit) or UnitIsPlayer(unit) then return end
+    local name = ns.SafeStr(UnitName(unit))
+    if not name or bossSeen[name] or type(RPChroniclerDB) ~= "table" then return end
+    local looks = RPChroniclerDB.bossLooks and RPChroniclerDB.bossLooks[name]
+    if looks and looks.display then bossSeen[name] = true return end
+    if not (RPChroniclerDB.knownBosses and RPChroniclerDB.knownBosses[name]) then return end
+    bossSeen[name] = true
+    ns.RememberBossLooks(name, NpcIdOf(unit), ns.UnitDisplayId(unit))
+end
+
+local function RecordBossInfo(bossName, unit, encounterID)
     if not activeRun or not bossName then return end
     activeRun.bossInfo = activeRun.bossInfo or {}
-    if activeRun.bossInfo[bossName] then return end
+    local info = activeRun.bossInfo[bossName]
+    if info and info.npc and (info.encounter or not encounterID) then return end
+    if info and encounterID then info.encounter = info.encounter or encounterID end
     local units = unit and { unit } or { "boss1", "boss2", "boss3", "boss4", "boss5", "target", "focus" }
     for _, u in ipairs(units) do
         if UnitExists(u) and ns.SafeStr(UnitName(u)) == bossName then
-            local cls = ns.SafeStr(UnitClassification(u)) or "normal"
-            local lvl = ns.SafeNum(UnitLevel(u))
-            activeRun.bossInfo[bossName] = { cls = cls, level = lvl or 0, kind = BossKind(cls, lvl) }
-            return
+            if not info then
+                local cls = ns.SafeStr(UnitClassification(u)) or "normal"
+                local lvl = ns.SafeNum(UnitLevel(u))
+                info = { cls = cls, level = lvl or 0, kind = BossKind(cls, lvl) }
+                activeRun.bossInfo[bossName] = info
+            end
+            info.npc = info.npc or NpcIdOf(u)
+            -- 0.6.4: its look, so the story scene can show it later
+            info.display = info.display or ns.UnitDisplayId(u)
+            ns.RememberBossLooks(bossName, info.npc, info.display)
+            break
         end
+    end
+    if not info and encounterID then
+        activeRun.bossInfo[bossName] = { cls = "worldboss", level = 0, kind = "boss", encounter = encounterID }
     end
 end
 
-function ns.RecordAdventureBossEngage(bossName, unit)
+function ns.RecordAdventureBossEngage(bossName, unit, encounterID)
     if not activeRun or activeRun.paused or not bossName or bossName == "" then return end
-    RecordBossInfo(bossName, unit)
+    RecordBossInfo(bossName, unit, ns.SafeNum(encounterID))
     if not bossPullEngaged[bossName] then
         bossPullEngaged[bossName] = true
         activeBossPct = 100
@@ -825,11 +1174,15 @@ function ns.RecordAdventureLoot(coloredLink, plainText, looter, source, isNotabl
 
     if isNotable ~= false then
         activeRun.keyLoot = activeRun.keyLoot or {}
+        -- 0.6.4: quality, icon and kind, for the item's look in the story
+        local d = ns.ItemDetails(coloredLink) or {}
         table.insert(activeRun.keyLoot, {
             colored = coloredLink or cleanItem,
             plain = cleanItem,
             looter = who or "",
             source = source,
+            q = ns.ItemQuality(coloredLink),
+            icon = d.icon, cls = d.cls, sub = d.sub,
         })
     end
     if not ns.LogOn("loot") then return end

@@ -247,6 +247,20 @@ do
     local done = UI.CreateSleekButton(f, 70, 22, "Done", "gold")
     done:SetPoint("BOTTOMRIGHT", -14, 10)
     done:SetScript("OnClick", function() f:Hide() end)
+    -- 0.6.4: the online copy of the same page (shown to copy, never saved
+    -- as your path)
+    local online = UI.CreateSleekButton(f, 110, 22, "Online viewer", "tool")
+    online:SetPoint("LEFT", clear, "RIGHT", 8, 0)
+    online.tipTitle = "|cffffd100Online viewer|r"
+    online.tipText = "The same StoryViewer page on the web, for when you can't find the addon folder. It runs only in your browser, reads only the files you pick and uploads nothing."
+    online:SetScript("OnClick", function()
+        eb:SetText(ns.HOSTED_VIEWER_URL)
+        example:SetText("|cff8f9ba8Online copy (same page, nothing is uploaded). Press Ctrl+C:|r")
+        Sync()
+        eb:SetFocus()
+        eb:SetCursorPosition(0)
+        eb:HighlightText()
+    end)
     function UI.ShowViewerPath()
         local saved = ns.StoryViewerPath()
         if saved ~= "" then
@@ -318,7 +332,7 @@ do
     local inner = CreateFrame("Frame", nil, B.readBg, UI.BACKDROP)
     inner:SetPoint("TOPLEFT", 5, -5)
     inner:SetPoint("BOTTOMRIGHT", -5, 5)
-    UI.ApplyDarkGlass(inner, 0.11, 0.08, 0.06, 0.82, 0.82, 0.65, 0.30, 0.50)
+    UI.ApplyDarkGlass(inner, 0.11, 0.08, 0.06, 1.0, 0.82, 0.65, 0.30, 0.50)
 
     B.scroll = CreateFrame("ScrollFrame", "RPChroniclerBookReadScroll", inner, "UIPanelScrollFrameTemplate")
     B.scroll:SetPoint("TOPLEFT", 14, -12)
@@ -344,7 +358,8 @@ do
     B.cover:SetPoint("TOPLEFT", 0, 0)
     B.cover:SetPoint("TOPRIGHT", 0, 0)
     B.cover:SetHeight(200)
-    UI.ApplyDarkGlass(B.cover, 0.14, 0.10, 0.07, 0.65, 0.70, 0.55, 0.25, 0.55)
+    -- 0.6.4: opaque, so nothing behind the window shows through
+    UI.ApplyDarkGlass(B.cover, 0.14, 0.10, 0.07, 1.0, 0.70, 0.55, 0.25, 0.55)
     B.cover:Hide()
     local okModel, model = pcall(CreateFrame, "DressUpModel", nil, B.cover)
     if okModel and model then
@@ -382,9 +397,28 @@ local function DressCover(st)
 end
 
 -- Fills the cover; returns its height (0 when the story has none)
+-- 0.6.4: the story scene (UI_Scenes.lua) on top: the party, you in the
+-- middle in your run's gear, and a scene per boss
+local function CoverScene()
+    if B.scene or not UI.CreateStoryScene then return B.scene end
+    B.scene = UI.CreateStoryScene(B.cover, {
+        bigTip = "Shows this scene in a big window, where you can zoom and look around.",
+        onWheel = function(delta)
+            local fn = B.scroll:GetScript("OnMouseWheel")
+            if fn then fn(B.scroll, delta) end
+        end,
+        onBig = function(scene) UI.OpenBigScene(scene.story, scene.view, B.coverTitle:GetText()) end,
+    })
+    B.scene.frame:SetPoint("TOPLEFT", 6, -6)
+    B.scene.frame:SetPoint("TOPRIGHT", -6, -6)
+    return B.scene
+end
+
 function UI.LayoutStoryCover(st, info)
     local gear = type(st.gear) == "table" and st.gear or {}
-    if not ns.Get("storyCover") or #gear == 0 then
+    local party = type(st.participants) == "table" and st.participants or {}
+    if not ns.Get("storyCover") or (#gear == 0 and #party == 0) then
+        if B.scene then B.scene.frame:Hide() end
         B.cover:Hide()
         return 0
     end
@@ -405,6 +439,24 @@ function UI.LayoutStoryCover(st, info)
         table.insert(lines, "  |cff9e9e9eplain traveling clothes|r")
     end
     B.coverGear:SetText(table.concat(lines, "\n"))
+    local scene = #party > 0 and CoverScene()
+    if scene then
+        if B.model then B.model:Hide() end
+        local w = (B.child:GetWidth() or 320) - 12
+        local sceneH = math.floor(math.max(140, math.min(210, w * 0.42)))
+        scene.frame:SetHeight(sceneH)
+        B.cover:Show()
+        scene.frame:Show()
+        if scene.story ~= st then scene:SetStory(st) else scene:Refresh() end
+        B.coverTitle:ClearAllPoints()
+        B.coverTitle:SetPoint("TOPLEFT", 12, -(sceneH + 16))
+        B.coverTitle:SetPoint("RIGHT", -12, 0)
+        local h = sceneH + 16 + (B.coverTitle:GetStringHeight() or 20) + 10 + (#gear > 0 and (B.coverGear:GetStringHeight() or 40) or 0) + 16
+        if #gear == 0 then B.coverGear:SetText("") end
+        B.cover:SetHeight(math.ceil(h))
+        return math.ceil(h) + 10
+    end
+    if B.scene then B.scene.frame:Hide() end
     local x = 12
     if mine and B.model then
         B.model:Show()
@@ -461,11 +513,11 @@ do
     steps:SetSpacing(4)
     steps:SetText(
         "|cffffd100How to make a story:|r\n" ..
-        "|cfff5e6c81. One time:|r copy a story template below into your AI and make the storyteller skill.\n" ..
-        "   |cffffd100Dungeon/Raid Story|r for instance runs, |cffffd100Adventure Story|r for the open world.\n" ..
-        "|cfff5e6c82. Copy the run:|r in Adventures open |cff69ccf0Full Log|r, click |cffffd100Select All|r, press |cffffd100Ctrl+C|r.\n" ..
-        "|cfff5e6c83. Import:|r paste the log into your AI, copy its story, and click |cffffd100Import Story|r.\n\n" ..
-        "|cff9aa5b4Which AI? See the Requirements section of the README.|r")
+        "|cfff5e6c81. Copy the run:|r in Adventures open |cff69ccf0Full Log|r, click |cffffd100Copy for AI|r, press |cffffd100Ctrl+C|r.\n" ..
+        "|cfff5e6c82. Ask your AI:|r paste it into any AI chat. The story rules come with it.\n" ..
+        "|cfff5e6c83. Import:|r copy the story it writes and click |cffffd100Import Story|r.\n" ..
+        "|cff9aa5b4No AI? Import Story > Quick Chronicle (a test feature) writes a short one for you.|r\n\n" ..
+        "|cff9aa5b4Advanced: use a skill. Make a template below a skill in your AI and turn on My AI has the skill (Options > AI & Stories). Which AI? See the README's Requirements.|r")
 
     -- 0.6.1: the buttons stack and stretch to the pane, so they always fit
     local iBtn = UI.CreateSleekButton(e, 100, 24, "Import Story", "good")
@@ -482,8 +534,110 @@ do
     dBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("STORY") end)
 end
 
+-- 0.6.4 (Mor): the story text flows in pieces, with each boss's panel
+-- (its model, UI.CreateBossPanel) right under the header of the chapter
+-- that first names it. B.flow lists the pieces in order.
+B.chunks, B.panels, B.flow = { B.text }, {}, { B.text }
+local PANEL_GAP = 8
+local function Chunk(i)
+    local fs = B.chunks[i]
+    if not fs then
+        fs = B.child:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        fs:SetJustifyH("LEFT")
+        fs:SetJustifyV("TOP")
+        fs:SetSpacing(5)
+        fs:SetTextColor(0.95, 0.92, 0.86)
+        fs:SetShadowOffset(1, -1)
+        fs:SetShadowColor(0, 0, 0, 0.95)
+        pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", 14, "")
+        B.chunks[i] = fs
+    end
+    fs:SetWidth(B.text:GetWidth() or 316)
+    return fs
+end
+local function Panel(i)
+    local p = B.panels[i]
+    if not p and UI.CreateBossPanel then
+        p = UI.CreateBossPanel(B.child)
+        B.panels[i] = p
+    end
+    return p
+end
+
+-- Places the pieces under the cover; returns their total height
+local function LayoutFlow()
+    local y = 2 + (B.coverH or 0)
+    local w = B.text:GetWidth() or 316
+    for _, piece in ipairs(B.flow) do
+        piece:ClearAllPoints()
+        piece:SetPoint("TOPLEFT", B.child, "TOPLEFT", 2, -y)
+        local h
+        if piece.isBossPanel then
+            piece:SetWidth(w)
+            h = piece:GetHeight() or 170
+            y = y + PANEL_GAP
+            piece:ClearAllPoints()
+            piece:SetPoint("TOPLEFT", B.child, "TOPLEFT", 2, -y)
+            h = h + PANEL_GAP
+        else
+            h = piece:GetStringHeight() or 0
+        end
+        y = y + h
+    end
+    return y
+end
+
+-- Splits the story at its boss chapters and fills the pieces
+local function SetReaderText(text, st)
+    local bosses = (ns.Get("storyCover") and ns.StoryBosses) and ns.StoryBosses(st, text) or {}
+    local lines = {}
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do table.insert(lines, line) end
+    local plain = {}
+    for i, line in ipairs(lines) do plain[i] = ns.StripColors(line):lower() end
+    -- after which line each boss panel goes
+    local cuts = {}
+    for n, boss in ipairs(bosses) do
+        if n > 8 then break end
+        local low, at = boss:lower(), nil
+        for i, pl in ipairs(plain) do
+            if i > 3 and pl:find(low, 1, true) then at = i break end
+        end
+        if at then
+            local after = at - 1
+            for i = at, 4, -1 do
+                if plain[i]:match("^%s*chapter%s") then after = i break end
+            end
+            table.insert(cuts, { after = after, boss = boss })
+        end
+    end
+    table.sort(cuts, function(a, b) return a.after < b.after end)
+    for _, fs in ipairs(B.chunks) do fs:Hide() end
+    for _, p in ipairs(B.panels) do p:Hide() end
+    B.flow = {}
+    local from, nChunk = 1, 0
+    local function AddText(to)
+        if to < from then return end
+        nChunk = nChunk + 1
+        local fs = Chunk(nChunk)
+        fs:SetText(table.concat(lines, "\n", from, to))
+        fs:Show()
+        table.insert(B.flow, fs)
+        from = to + 1
+    end
+    for i, cut in ipairs(cuts) do
+        AddText(cut.after)
+        local p = Panel(i)
+        if p then
+            p:Show()
+            p:SetBoss(st, cut.boss)
+            table.insert(B.flow, p)
+        end
+    end
+    AddText(#lines)
+end
+
 local function UpdateReaderHeight()
-    local h = (B.text:GetStringHeight() or 200) + (B.coverH or 0)
+    local h = LayoutFlow()
     B.child:SetHeight(math.max(230, h + 32))
     B.scroll:UpdateScrollChildRect()
 end
@@ -563,6 +717,9 @@ end
 
 function UI.RefreshStoryBook()
     local list = StoryList()
+    -- 0.6.4: skill users hear once a session when the story rules changed
+    local notice = not B.noticeShown and ns.TemplateNotice()
+    if notice then B.noticeShown = true; UI.SetStatus(notice, "warn") end
     for _, c in ipairs(B.cards) do c:Hide() end
     for idx, adv in ipairs(list) do
         local card = B.cards[idx]
@@ -635,8 +792,6 @@ function UI.RefreshStoryBook()
     local okCover, coverH = pcall(UI.LayoutStoryCover, adv, info)
     B.coverH = okCover and coverH or 0
     if not okCover then B.cover:Hide() end
-    B.text:ClearAllPoints()
-    B.text:SetPoint("TOPLEFT", B.child, "TOPLEFT", 2, -(2 + B.coverH))
 
     local shown = ns.NormalizeStoryText(adv.story)
     shown = ns.CleanStoryHeader(shown)
@@ -651,12 +806,22 @@ function UI.RefreshStoryBook()
         end
     end
     shown = ns.StripShotMarkers(shown)
+    -- 0.6.4: the cover already shows the title, so the story's own first
+    -- line is dropped when it is the same title (it read twice)
+    if okCover and B.cover:IsShown() then
+        local want = ns.StripColors(info.name or ""):lower():gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+        local first, rest = shown:match("^%s*([^\n]*)\n?(.*)$")
+        if first and want ~= "" then
+            local plain = ns.StripColors(first):gsub("^#+%s*", ""):lower():gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+            if plain == want then shown = rest end
+        end
+    end
     -- 0.5.2: an open-world story written with an old template ends with a
     -- dungeon footer of zeros; hide that line (the stats are shown above)
     if adv.kind == "world" then
         shown = shown:gsub("\n[^\n]*Bosses:%s*0%s*|*%s*Wipes:%s*0[^\n]*%s*$", "")
     end
-    B.text:SetText(ns.DecorateStoryBosses(shown, adv))
+    SetReaderText(ns.DecorateStoryItems(ns.DecorateStoryBosses(shown, adv), adv), adv)
     UpdateReaderHeight()
     if B.shownId ~= adv.id then
         if B.shownId then PageTurn() end
@@ -804,7 +969,7 @@ UI.AddReflow(function()
     local w = B.scroll:GetWidth()
     if w and w > 50 then
         B.child:SetWidth(w)
-        B.text:SetWidth(w - 4)
+        for _, fs in ipairs(B.chunks) do fs:SetWidth(w - 4) end
         UpdateReaderHeight()
     end
 end)

@@ -58,7 +58,7 @@ code{background:#0f0b07;border:1px solid #3a2c18;border-radius:3px;padding:0 4px
 #reader h1{color:var(--gold);font-size:22px;margin:0}
 textarea{width:100%;min-height:140px;background:#0f0b07;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:8px;font:13px Consolas,monospace}
 .story{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px 24px}
-.bi{font-size:0.9em;margin-right:3px}.bi-elite{filter:sepia(1) saturate(5) hue-rotate(-12deg) brightness(1.1)}.bi-rare{filter:grayscale(1) brightness(1.4)}
+.bi{font-size:0.9em;margin-right:3px}.item{white-space:nowrap;text-shadow:0 0 1px #000}.ii{width:0.95em;height:0.95em;vertical-align:-0.12em;margin-right:3px}.bi-elite{filter:sepia(1) saturate(5) hue-rotate(-12deg) brightness(1.1)}.bi-rare{filter:grayscale(1) brightness(1.4)}
 figure.shot{margin:16px 0;text-align:center}figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:4px}
 figure.missing .ph{border:1px dashed var(--line);border-radius:4px;padding:28px 16px;color:var(--muted);font-size:14px;background:#120e09}
 figcaption{color:#b0a080;font-size:13px;font-style:italic;margin-top:4px}
@@ -384,7 +384,8 @@ function makeItem(meta, story, account) {
   return {
     account,
     title: String(book.title || meta.title || "Adventure"),
-    zone: String(book.zone || meta.zone || meta.instanceName || ""),
+    // 0.6.4: the dungeon (Ragefire Chasm), not the city around it
+    zone: String(book.instance || meta.instanceName || book.zone || meta.zone || ""),
     date: String(book.date || meta.startDate || ""),
     start: meta.startTime || null,
     end: end || null,
@@ -392,6 +393,7 @@ function makeItem(meta, story, account) {
     code: runCode(meta),
     shots: vals(meta.shots).filter(s => s && s.at).map((s, i) => ({ n: s.n || i + 1, at: s.at, file: s.file ? String(s.file) : "", caption: String(s.description || "") })),
     bosses: kinds,
+    items: runItems(meta),
     marks: [],
     version: String(meta.importedWith || meta.addonVersion || ""),
     story: String(story)
@@ -404,7 +406,7 @@ function parsePasted(text) {
   const at = text.indexOf("@story\n");
   if (!/RP Chronicler story/i.test(text.slice(0, 200)) || at < 0) return null;
   const head = text.slice(0, at).split("\n");
-  const it = { account: "Pasted", title: "Adventure", zone: "", date: "", start: null, end: null, duration: 0, code: "", shots: [], bosses: {}, marks: [], version: "", story: text.slice(at + 7) };
+  const it = { account: "Pasted", title: "Adventure", zone: "", date: "", start: null, end: null, duration: 0, code: "", shots: [], bosses: {}, items: {}, marks: [], version: "", story: text.slice(at + 7) };
   for (const line of head) {
     const m = /^@(\w+)\s?(.*)$/.exec(line.trim());
     if (!m) continue;
@@ -425,6 +427,7 @@ function parsePasted(text) {
     else if (k === "mark") { if (/^\d\d:\d\d:\d\d /.test(v)) it.marks.push(plain(v)); }
     else if (k === "version") it.version = v.trim();
     else if (k === "boss") { const p = /^(\w+)\s+(.+)$/.exec(v); if (p) it.bosses[p[2]] = p[1]; }
+    else if (k === "item") { const p = /^(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(.+)$/.exec(v); if (p) it.items[p[4].trim()] = { hex: QUALITY_HEX[+p[1]] || "ffffff", cls: +p[2], sub: +p[3] }; }
   }
   if (!it.end && it.start && it.duration) it.end = it.start + it.duration;
   if (!it.code && it.start) it.code = Math.floor(it.start).toString(36).toUpperCase();
@@ -490,6 +493,66 @@ function bossIcons(html, kinds) {
   return html.split(/(<[^>]+>)/).map(part => part.startsWith("<") ? part : part.replace(re, m => {
     const k = enc[m] || "skull";
     return '<span class="bi bi-' + k + '">' + (k === "skull" ? "&#x1F480;" : "&#x1F409;") + "</span>" + m;
+  })).join("");
+}
+
+// ---------- items (0.6.4): the WoW quality color and a small built-in icon ----------
+const QUALITY_HEX = { 0: "9d9d9d", 1: "ffffff", 2: "1eff00", 3: "0070dd", 4: "a335ee", 5: "ff8000", 6: "e6cc80" };
+// Each icon is drawn here (no network, no Blizzard art): 16x16 paths in the item's color
+const ITEM_SVG = {
+  sword: '<path d="M13 2 7 8l1 1 6-6V2zM4 9l3 3M5 11l-2 2m-1 1 1-1M3 10l3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+  dagger: '<path d="M12 3 7 8l1 1 5-5zM5 10l2 2M5 12l-2 2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+  axe: '<path d="M4 14 11 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9 2c3 0 5 2 5 5l-4-1z" fill="currentColor"/>',
+  mace: '<path d="M4 14 9 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="11" cy="5.5" r="3" fill="currentColor"/>',
+  staff: '<path d="M4 14 12 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12.5" cy="3.5" r="2" fill="none" stroke="currentColor" stroke-width="1.2"/>',
+  bow: '<path d="M4 2c6 2 10 6 10 12" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4 2 14 14M3 8l8-1" fill="none" stroke="currentColor" stroke-width="0.9"/>',
+  gun: '<path d="M2 6h11v2.5H7l-1 4H3.5l1-4H2z" fill="currentColor"/>',
+  shield: '<path d="M8 2 13 4v4c0 3-2 5-5 6-3-1-5-3-5-6V4z" fill="none" stroke="currentColor" stroke-width="1.5"/>',
+  cloth: '<path d="M6 2h4l3 3-2 1v8H5V6L3 5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>',
+  leather: '<path d="M5 2h6l2 3v9H3V5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 4v8" stroke="currentColor" stroke-width="1"/>',
+  mail: '<path d="M5 2h6l2 3v9H3V5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5 7h6M5 9.5h6M5 12h6" stroke="currentColor" stroke-width="0.9" stroke-dasharray="1 1"/>',
+  plate: '<path d="M5 2h6l2 3v9H3V5z" fill="currentColor"/><path d="M8 3v10" stroke="#000" stroke-opacity="0.35" stroke-width="1"/>',
+  ring: '<circle cx="8" cy="10" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 4h4l-2 2.5z" fill="currentColor"/>',
+  gem: '<path d="M4 3h8l3 4-7 7-7-7z" fill="currentColor"/>',
+  bag: '<path d="M5 5h6l2 9H3zM6 5V3.5h4V5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>',
+  potion: '<path d="M6.5 2h3v4l3 3.5V14h-9V9.5l3-3.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M4 11h8v3H4z" fill="currentColor"/>',
+  scroll: '<path d="M4 3h8v10H4z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6 6h4M6 8.5h4M6 11h3" stroke="currentColor" stroke-width="0.9"/>',
+  other: '<path d="M3 5 8 2l5 3v6l-5 3-5-3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>'
+};
+// Item class and subclass as GetItemInfoInstant returns them
+function itemShape(cls, sub) {
+  if (cls === 2) return ({ 0: "axe", 1: "axe", 2: "bow", 3: "gun", 4: "mace", 5: "mace", 6: "staff", 7: "sword", 8: "sword", 10: "staff", 13: "mace", 15: "dagger", 16: "dagger", 18: "bow", 19: "staff", 20: "staff" })[sub] || "sword";
+  if (cls === 4) return ({ 0: "ring", 1: "cloth", 2: "leather", 3: "mail", 4: "plate", 6: "shield" })[sub] || "cloth";
+  return ({ 0: "potion", 1: "bag", 3: "gem", 9: "scroll" })[cls] || "other";
+}
+function hexOfColored(c) { const m = /\|c[0-9a-fA-F]{2}([0-9a-fA-F]{6})/.exec(String(c || "")); return m ? m[1].toLowerCase() : null; }
+// { name: { hex, cls, sub } } from a run's loot and gear (best quality wins)
+function runItems(meta) {
+  const items = {}, rank = {};
+  const add = (name, e) => {
+    name = String(name || "").replace(/\s*[xX]\d+$/, "").trim();
+    if (name.length < 4 || !e || typeof e !== "object") return;
+    const q = e.q != null ? +e.q : null;
+    const hex = (q != null && QUALITY_HEX[q]) || hexOfColored(e.colored) || hexOfColored(e.link) || "ffffff";
+    const r = q != null ? q : Object.keys(QUALITY_HEX).find(k => QUALITY_HEX[k] === hex) || 1;
+    if (items[name] && rank[name] >= +r) return;
+    rank[name] = +r;
+    items[name] = { hex, cls: e.cls != null ? +e.cls : -1, sub: e.sub != null ? +e.sub : -1 };
+  };
+  vals(meta.keyLoot).forEach(e => e && add(e.plain, e));
+  vals(meta.gear).forEach(g => g && add(g.name, g));
+  return items;
+}
+function itemIcons(html, items) {
+  const names = Object.keys(items).filter(n => n.length >= 4).sort((a, b) => b.length - a.length);
+  if (!names.length) return html;
+  const enc = {};
+  names.forEach(n => { enc[esc(n)] = items[n]; });
+  const re = new RegExp("(?<![\\w])(" + names.map(n => esc(n).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?![\\w])", "g");
+  return html.split(/(<[^>]+>)/).map(part => part.startsWith("<") ? part : part.replace(re, m => {
+    const it = enc[m] || {};
+    const svg = '<svg class="ii" viewBox="0 0 16 16" aria-hidden="true">' + ITEM_SVG[itemShape(it.cls, it.sub)] + "</svg>";
+    return '<span class="item" style="color:#' + (it.hex || "ffffff") + '">' + svg + m + "</span>";
   })).join("");
 }
 
@@ -673,7 +736,7 @@ async function renderStory(it, forSave) {
     return null;
   };
   let story = dropTitleLine(repairHeader(it.story.replace(/\r/g, "")), it.title);
-  let html = bossIcons(storyHtml(story), it.bosses);
+  let html = itemIcons(bossIcons(storyHtml(story), it.bosses), it.items || {});
   html = placeShots(html, shots, it, srcOf);
   html = html.replace(MARK_RE, "");
   const meta = [it.zone, it.date].filter(Boolean).map(esc).join(" - ");

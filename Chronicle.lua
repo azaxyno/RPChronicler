@@ -755,20 +755,35 @@ function ns.IsQuestItem(link)
 end
 
 -- =========================================================
--- Prompts: start recording on group join, and the interrupted-run
--- question after a logout or disconnect. 0.6.1: the recorder asks through
+-- Prompts: start recording when you enter a dungeon or raid (0.6.4; it
+-- used to ask on group join), and the interrupted-run question after a
+-- logout or disconnect. 0.6.1: the recorder asks through
 -- ns.Notify("prompt", ...); the window (UI_Shell) shows it.
 -- =========================================================
 local function Prompt(text, b1, f1, b2, f2)
     ns.Notify("prompt", text, b1, f1, b2, f2)
 end
 
-local function OfferStart(reason)
-    if Run() or (ns.GetActiveAdventure()) or InInstance() then return end
-    Prompt("|cffffd100RP Chronicler|r " .. reason .. "\nStart recording an adventure?", "Start recording", function()
-        local _, why = ns.StartRun()
-        if why then print("|cffffd100RP Chronicler|r " .. why) end
-    end, "Not now", nil)
+-- The instance you said "Not now" to. It is not asked again until you
+-- enter a different instance or leave your group.
+local declinedInstance = nil
+
+function ns.OfferInstanceStart(name, id)
+    local key = tostring(id or name or "?")
+    if declinedInstance and declinedInstance ~= key then declinedInstance = nil end
+    if declinedInstance == key then return end
+    -- after the loading screen, so the window is ready
+    Later(2, function()
+        if (ns.GetActiveAdventure()) or not InInstance() then return end
+        Prompt("|cffffd100RP Chronicler|r You entered |cffeceff1" .. tostring(name or "an instance") .. "|r.\nStart recording this run?", "Start recording", function()
+            if (ns.GetActiveAdventure()) or not InInstance() then return end
+            local current = ns.InstanceInfo() or name
+            local run = ns.StartAdventure(current, true)
+            if run then ns.Notify("runChanged", run) end
+        end, "Not now", function()
+            declinedInstance = key
+        end)
+    end)
 end
 
 function ns.OfferInterruptedRun(run)
@@ -779,10 +794,6 @@ function ns.OfferInterruptedRun(run)
         print("|cffffd100RP Chronicler|r " .. tostring(msg))
         ns.Notify("runChanged")
     end, "Keep saved", nil)
-end
-
-local function After(sec, fn)
-    if C_Timer and C_Timer.After then C_Timer.After(sec, fn) else fn() end
 end
 
 -- =========================================================
@@ -821,9 +832,8 @@ do
             if wasGrouped == nil then wasGrouped = (IsInGroup and IsInGroup()) and true or false end
         elseif event == "GROUP_ROSTER_UPDATE" or event == "GROUP_JOINED" then
             local grouped = (IsInGroup and IsInGroup()) and true or false
-            if grouped and wasGrouped == false and ns.Get("promptOnGroup") then
-                After(1.5, function() OfferStart("You joined a group.") end)
-            end
+            -- leaving your group forgets a "Not now" on the instance prompt
+            if not grouped and wasGrouped then declinedInstance = nil end
             wasGrouped = grouped
         elseif event == "PLAYER_LEVEL_UP" then
             local lvl = ns.SafeNum(a1)

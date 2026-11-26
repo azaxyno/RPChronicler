@@ -12,6 +12,7 @@ local UI = ns.UI
 local B = { cards = {} }
 UI.storyBook = B
 local root = UI.NewSection("BOOK", "Story Book", "The stories your AI wrote from your runs.")
+B.root = root
 UI.AddRailButton("BOOK", "Story Book", UI.ICONS.STORY, "Read, share and edit the stories your AI wrote from your runs.")
 
 local function StoryList()
@@ -27,8 +28,11 @@ local function SelectedStory(list)
 end
 
 -- Opens the Story Book, on a story when given
+-- 0.6.6: with a story it opens the reader, without one the shelf
+-- (UI_Shelf.lua)
 function UI.OpenStoryBook(storyId)
     if storyId then ns.state.bookStoryId = storyId end
+    ns.state.bookView = storyId and "READ" or "SHELF"
     if not UI.frame:IsShown() then
         RPChronicler_Open("", "BOOK")
     elseif ns.state.section ~= "BOOK" then
@@ -306,7 +310,9 @@ end
 -- and the font size (UI.FlowRow): the row wraps instead of overlapping
 function UI.LayoutStoryBook()
     if (B.right:GetWidth() or 0) < 50 then return end
-    local rowH = UI.FlowRow(B.right, { B.shareBtn, B.editBtn, B.reimportBtn, B.recBtn }, { B.delBtn }, { y = 76 })
+    -- 0.6.6: UI_Shelf.lua puts its Shelf, Chronicle and Prev/Next buttons in front
+    B.rowLeft = B.rowLeft or { B.shareBtn, B.editBtn, B.reimportBtn, B.recBtn }
+    local rowH = UI.FlowRow(B.right, B.rowLeft, { B.delBtn }, { y = 76 })
     local top = 76 + rowH + 4
     B.tip:ClearAllPoints()
     B.tip:SetPoint("TOPLEFT", 0, -top)

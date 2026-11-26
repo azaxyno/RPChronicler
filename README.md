@@ -325,7 +325,14 @@ The header has the run type, zone, date and duration, levels gained, quests comp
 
 ## The Story Book
 
-The Story Book has its own place on the rail. Every run and story shows its own icon: one per dungeon and raid (raids in a gold frame), and one per kind of land for the open world (desert, forest, snow, coast, the capitals and more). Every story your AI wrote is there under the title the AI gave it on its first line (`Title: Shadows Over Pyrewood`), with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
+The Story Book has its own place on the rail. It opens on **your shelf**.
+
+- **Chronicles.** Put stories that belong together in a volume, for example the whole road of an alt you level with a friend. **+ New chronicle** on the shelf makes one (a name of up to 32 letters); in the reader, **Chronicle** puts the story you are reading in a volume, moves it to another or takes it out. Each volume stands on the shelf as a colored spine with its name (the full name shows when you point at it); stories in no volume stand at the end as thin loose books.
+- **Open a volume** and it swings open with the game's book sound: on the left its cover, with the party scene of its first story (or the one you pick with **Cover**), its name and dates; on the right its contents. Point at a story for its date, place, kind of run, party and length; click it to read it. **Up** and **Down** set the order, **Out** takes a story out (it stays in the Story Book), and **<** and **>** move the volume on the shelf. **Rename**, **Color** and **Delete** change the volume; deleting a volume never deletes its stories.
+- **Read on.** In a volume's story, **< Prev** and **Next >** turn to the story before or after it. **Shelf** goes back.
+- **Search** on the shelf finds stories by title, place, party member, date or chronicle.
+
+Every run and story shows its own icon: one per dungeon and raid (raids in a gold frame), and one per kind of land for the open world (desert, forest, snow, coast, the capitals and more). Every story your AI wrote is there under the title the AI gave it on its first line (`Title: Shadows Over Pyrewood`), with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
 
 - **Read** it in game, with gold chapter titles, class-colored party names, crimson bosses and foes, sea-green pets and turquoise places. Bosses get an icon: a skull, a gold dragon for an elite, a silver dragon for a rare.
 - **Auto-color.** Names the AI left plain are colored from the run itself: party (with surnames), pets and their species, places, foes, NPCs and quest givers, and items. A name the AI colored once is colored everywhere. It works on stories you already imported too.
@@ -477,9 +484,10 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 18 | `UI_Adventures.lua` | Adventures view, record bar, run list, size meter, story import |
 | 19 | `UI_Scenes.lua` | Story scenes: the party (3D or shadows) and each boss, zoom and the big scene window |
 | 20 | `UI_StoryBook.lua` | Story Book section: library, reader, Share, Details, Re-Import, Delete |
-| 21 | `UI_Options.lua` | Options pages and the template window |
-| 22 | `UI_Setup.lua` | First-run setup |
-| 23 | `UI_Commands.lua` | The Ctrl+C binding, the RP button (minimap or floating) and its menu, `/rp` commands |
+| 21 | `UI_Shelf.lua` | The Story Book's shelf: chronicles, loose stories, search, the open volume (cover and contents), Prev/Next |
+| 22 | `UI_Options.lua` | Options pages and the template window |
+| 23 | `UI_Setup.lua` | First-run setup |
+| 24 | `UI_Commands.lua` | The Ctrl+C binding, the RP button (minimap or floating) and its menu, `/rp` commands |
 | | `Bindings.xml` | Key Bindings entries |
 | | `StoryViewer.html` | Reads your stories and screenshots in the browser, offline, and saves a story as one web page |
 | | `Export_Stories.bat` | Windows exporter (GitHub zip only): all stories, text and Full Logs at once |
@@ -498,6 +506,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | `players[name]` | Companions: kind, names, relationship, tone, your note, include mode, level, race, class, guild, first met, last seen, last 5 chat lines |
 | `adventures` | Up to 40 runs: type, zone, dates, party, places, levels, quests, kills and foe counts, PvP, bosses, loot, milestones, highlights, timeline, screenshots |
 | `stories` | Imported stories, each with its own copy of the run's details and its Story Book fields (title included), so it survives deleting the recording |
+| `chronicles` | Your Story Book volumes: name, color, cover story and the ids of their stories in order (deleting one never deletes its stories) |
 | `activeRun` | The run being recorded right now, so it survives `/reload` and disconnects |
 | `capture`, `logGroups` | What chat is kept, and which Full Log groups are on |
 | `setupVersion`, `wipedAt` | Which setup you've seen, and when you last deleted everything |

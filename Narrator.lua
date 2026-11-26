@@ -557,7 +557,7 @@ function ns.BuildQuickChronicle(adv)
     local dur = ns.FormatDuration(ns.GetRunDuration(adv)):gsub(" 00s$", "")
     table.insert(out, C(MUTED, place .. " | " .. dur .. (#others > 0 and (" | " .. table.concat(others, ", ")) or "")))
     table.insert(out, C(MUTED, "Date: " .. tostring(adv.startDate or "-") .. (#names > 1 and (" | Party: " .. table.concat(names, ", ")) or "")))
-    table.insert(out, C(MUTED, "Quick Chronicle (test feature), written by RP Chronicler without AI. For a full story, open the Full Log, click Copy for AI and paste it into any AI chat."))
+    table.insert(out, C(MUTED, "Quick Chronicle (test feature), written by RP Chronicler without AI. For a full story, open the Full Log, tick Include AI instructions, click Copy for AI and paste it into any AI chat."))
     table.insert(out, "")
 
     if brief then

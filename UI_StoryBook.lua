@@ -515,7 +515,7 @@ do
     steps:SetSpacing(4)
     steps:SetText(
         "|cffffd100How to make a story:|r\n" ..
-        "|cfff5e6c81. Copy the run:|r in Adventures open |cff69ccf0Full Log|r, click |cffffd100Copy for AI|r, press |cffffd100Ctrl+C|r.\n" ..
+        "|cfff5e6c81. Copy the run:|r in Adventures open |cff69ccf0Full Log|r, tick |cffffd100Include AI instructions|r, click |cffffd100Copy for AI|r, press |cffffd100Ctrl+C|r.\n" ..
         "|cfff5e6c82. Ask your AI:|r paste it into any AI chat. The story rules come with it.\n" ..
         "|cfff5e6c83. Import:|r copy the story it writes and click |cffffd100Import Story|r.\n" ..
         "|cff9aa5b4No AI? Import Story > Quick Chronicle (a test feature) writes a short one for you.|r\n\n" ..

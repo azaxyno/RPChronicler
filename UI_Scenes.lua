@@ -35,6 +35,21 @@ local FIG_ASPECT = 196 / 256
 local CAP_W, CAP_H = 716 / 596, 896 / 780     -- capture size / crop size
 local CAP_X = 60 / 596                        -- crop left inside the capture
 local MAX_MEMBERS = 5
+-- 0.6.7 (Mor's test): where each shadow's head is, as a share of the
+-- texture's height (its feet stand at about 0.955). A live figure in the
+-- party scene is fitted to its own race's shadow, so you stand exactly as
+-- tall as a shadow of your race would (measured from Media/Shadows).
+local SHADOW_TOP = {
+    f_bloodelf = 0.305, f_draenei = 0.156, f_dwarf = 0.441, f_gnome = 0.531, f_goblin = 0.484,
+    f_human = 0.316, f_nightelf = 0.191, f_orc = 0.242, f_skyborne_highorder = 0.312,
+    f_skyborne_windshaper = 0.312, f_tauren = 0.039, f_troll = 0.156, f_undead = 0.332, f_worgen = 0.133,
+    m_bloodelf = 0.250, m_draenei = 0.078, m_dwarf = 0.430, m_gnome = 0.562, m_goblin = 0.488,
+    m_human = 0.266, m_nightelf = 0.145, m_orc = 0.223, m_skyborne_highorder = 0.234,
+    m_skyborne_windshaper = 0.230, m_tauren = 0.0, m_troll = 0.176, m_undead = 0.355, m_worgen = 0.129,
+    unknown = 0.152,
+}
+local SHADOW_FEET = 0.955
+local DRESS_FILL = 0.86     -- how much of a model box a full-body model fills
 
 -- Class colors, as in the story palette (Priest gray, never white)
 local CLASS_RGB = {
@@ -145,6 +160,17 @@ end
 local function SlotModel(s)
     if s.model ~= nil then return s.model or nil end
     s.model = false
+    -- 0.6.7: the party scene uses a dressing-room model, which frames the
+    -- whole figure in its box; FitModel sizes that box to the shadow
+    if s.useDress then
+        local ok, m = pcall(CreateFrame, "DressUpModel", nil, s)
+        if not ok or not m or not m.SetUnit then ok, m = pcall(CreateFrame, "PlayerModel", nil, s) end
+        if not ok or not m or not m.SetUnit then return nil end
+        m.dress = true
+        m:EnableMouse(false)
+        s.model = m
+        return m
+    end
     local ok, m = pcall(CreateFrame, "ModelScene", nil, s)
     if not ok or not m or not m.CreateActor then return nil end
     pcall(m.SetCameraNearClip, m, 0.1)
@@ -161,6 +187,7 @@ local function SlotModel(s)
 end
 
 local function ClearSlotModel(s)
+    if s.model and s.model.dress then pcall(s.model.ClearModel, s.model) end
     if s.model and s.model.actor then pcall(s.model.actor.ClearModel, s.model.actor) end
     if s.model then s.model:Hide() end
 end
@@ -170,6 +197,20 @@ end
 local function ShowReal(s, unit, gear)
     local m = SlotModel(s)
     if not m then return false end
+    if m.dress then
+        if not pcall(m.SetUnit, m, unit) then return false end
+        if gear and m.Undress and m.TryOn then
+            pcall(m.Undress, m)
+            for _, g in ipairs(gear) do
+                if type(g) == "table" and g.link then pcall(m.TryOn, m, g.link) end
+            end
+        end
+        if m.SetPortraitZoom then pcall(m.SetPortraitZoom, m, 0) end
+        if m.SetCamDistanceScale then pcall(m.SetCamDistanceScale, m, 1) end
+        if m.SetFacing then pcall(m.SetFacing, m, 0) end
+        m:Show()
+        return true
+    end
     local a = m.actor
     local ok = pcall(a.SetModelByUnit, a, unit, false, true, false, true)
     if not ok then return false end
@@ -188,6 +229,15 @@ end
 -- Places the model box over the slot's figure box (w x h)
 local function FitModel(s, w, h)
     if not s.model then return end
+    if s.model.dress then
+        -- the box around where this race's shadow would stand
+        local top, feet = h * (s.fitTop or 0.2), h * SHADOW_FEET
+        local boxH = (feet - top) / DRESS_FILL
+        s.model:ClearAllPoints()
+        s.model:SetSize(math.max(w, boxH * 0.8), boxH)
+        s.model:SetPoint("CENTER", s, "TOPLEFT", w / 2, -(top + feet) / 2)
+        return
+    end
     local mw, mh = w * CAP_W, h * CAP_H
     s.model:ClearAllPoints()
     s.model:SetSize(mw, mh)
@@ -381,6 +431,7 @@ local function Slot(self, i)
     local s = self.slots[i]
     if not s then
         s = NewSlot(self.stage)
+        s.useDress = true
         self.slots[i] = s
     end
     return s
@@ -424,6 +475,8 @@ function Scene:Refresh()
         s.glow:SetVertexColor(rgb[1], rgb[2], rgb[3], 0.85)
         s.name:SetText("|cff" .. Hex(rgb) .. tostring(p.name) .. "|r")
         local unit = m.isYou and "player" or NearUnit(p.name)
+        local key = tostring((ns.ShadowTexture(p.race, p.sex))):match("([%w_]+)%.png$")
+        s.fitTop = SHADOW_TOP[key or ""] or SHADOW_TOP.unknown
         local real = unit and ShowReal(s, unit, (m.isYou and st.gear) or (not m.isYou and p.gear) or nil)
         if real then
             s.shadow:Hide()

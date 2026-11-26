@@ -12,8 +12,8 @@ local UI = ns.UI
 --
 -- Pages are measured, not scrolled: K.Paginate lays every item out with
 -- the real fonts at the real page size (again after a resize), and
--- K.Render draws the two pages on show. Turn with the page corners, the
--- mouse wheel or Contents. The open, turn and close animations are Scale
+-- K.Render draws the two pages on show. Turn with the Previous / Next
+-- arrows under the pages, the mouse wheel or Contents. The open, turn and close animations are Scale
 -- and Alpha AnimationGroups (Options: Book animations); without them, or
 -- on a client that lacks them, everything simply happens at once.
 -- On parchment, story colors are inked darker so they read on paper
@@ -44,10 +44,20 @@ do
         local r = Lin(tonumber(hex:sub(1, 2), 16) / 255)
         local g = Lin(tonumber(hex:sub(3, 4), 16) / 255)
         local b = Lin(tonumber(hex:sub(5, 6), 16) / 255)
+        -- 0.6.7 (Mor's test): the first ink (luminance 0.07) read pale in
+        -- game. Grays and near-whites (a story's body color) become the
+        -- body ink; every other color is darkened to 0.035 and made a bit
+        -- more saturated, so names stay colored but read like ink.
+        local hi, lo = math.max(r, g, b), math.min(r, g, b)
+        if hi <= 0 or (hi - lo) / hi < 0.22 then
+            cache[hex] = "1c1208"
+            return "1c1208"
+        end
+        r, g, b = r - lo * 0.6, g - lo * 0.6, b - lo * 0.6
         local lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-        local k = lum > 0.07 and 0.07 / lum or 1
-        local out = string.format("%02x%02x%02x",
-            math.floor(Srgb(r * k) * 255 + 0.5), math.floor(Srgb(g * k) * 255 + 0.5), math.floor(Srgb(b * k) * 255 + 0.5))
+        local k = lum > 0.035 and 0.035 / lum or 1
+        local function C(v) return math.floor(Srgb(math.min(1, v * k)) * 255 + 0.5) end
+        local out = string.format("%02x%02x%02x", C(r), C(g), C(b))
         cache[hex] = out
         return out
     end
@@ -66,7 +76,7 @@ function K.Style()
     if K.Night() then
         return { body = { 0.93, 0.88, 0.78 }, head = "ffd100", muted = "b8a27a", shadow = 0.9, tex = "night" }
     end
-    return { body = { 0.17, 0.11, 0.05 }, head = "5a1a10", muted = "6a4a26", shadow = 0, tex = "page" }
+    return { body = { 0.11, 0.07, 0.03 }, head = "5e1208", muted = "5a3a1a", shadow = 0, tex = "page" }
 end
 
 -- The color code still open at the end of `text` (to carry over a split)
@@ -115,7 +125,7 @@ do
     K.menuBtn = UI.CreateSleekButton(f, 64, 22, "Book")
     K.menuBtn:SetPoint("TOPRIGHT", -12, -8)
     K.menuBtn.tipTitle = GOLD .. "Book|r"
-    K.menuBtn.tipText = "Share, read outside the game, details, chronicles and more."
+    K.menuBtn.tipText = "Share, read outside the game, details, re-import and delete."
     K.tocBtn = UI.CreateSleekButton(f, 72, 22, "Contents")
     K.tocBtn:SetPoint("RIGHT", K.menuBtn, "LEFT", -6, 0)
     K.tocBtn.tipTitle = GOLD .. "Contents|r"
@@ -166,28 +176,19 @@ do
         p.num:SetPoint("BOTTOM", 0, 9)
         pcall(p.num.SetFont, p.num, B.TITLE_FONT, 11, "")
         p.fs, p.tex, p.links = {}, {}, {}
-        -- dog-eared corners: back at the bottom left, on at the bottom right
-        for _, d in ipairs({ -1, 1 }) do
-            local corner = CreateFrame("Button", nil, p)
-            corner:SetSize(34, 34)
-            corner:SetFrameLevel(p:GetFrameLevel() + 20)
-            corner.t = corner:CreateTexture(nil, "OVERLAY")
-            corner.t:SetAllPoints(corner)
-            corner.t:SetTexture(B.Art("curl"))
-            if d < 0 then corner.t:SetTexCoord(1, 0, 0, 1) end
-            corner:SetPoint(d < 0 and "BOTTOMLEFT" or "BOTTOMRIGHT", 0, 0)
-            corner:SetAlpha(0.85)
-            corner:SetScript("OnEnter", function(self)
-                self:SetAlpha(1)
-                UI.Tooltip(self, GOLD .. (d < 0 and "Previous page" or "Next page") .. "|r", "Or use the mouse wheel over the book.")
-            end)
-            corner:SetScript("OnLeave", function(self) self:SetAlpha(0.85) UI.HideTooltip() end)
-            corner:SetScript("OnClick", function() K.Turn(d) end)
-            corner:Hide()
-            if d < 0 then p.back = corner else p.on = corner end
-        end
         K.pages[i] = p
     end
+    -- 0.6.7 (Mor): clear arrows at the bottom of the pages (the dog-eared
+    -- corners of the first build went unnoticed); the wheel still turns
+    local function Arrow(d)
+        local b = UI.CreateSleekButton(tome, 96, 22, d < 0 and "< Previous" or "Next >", "gold")
+        b:SetFrameLevel((tome:GetFrameLevel() or 1) + 30)
+        b.tipTitle = GOLD .. (d < 0 and "Previous page" or "Next page") .. "|r"
+        b.tipText = "Or the mouse wheel over the book."
+        b:SetScript("OnClick", function() K.Turn(d) end)
+        return b
+    end
+    K.prevBtn, K.nextBtn = Arrow(-1), Arrow(1)
 
     -- a hidden FontString that measures text for the page layout
     K.measure = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -218,6 +219,10 @@ function K.Layout()
         K.pageW = math.floor(w / 2)
     end
     K.pageH = h
+    K.prevBtn:ClearAllPoints()
+    K.prevBtn:SetPoint("BOTTOMLEFT", l, "BOTTOMLEFT", 10, 5)
+    K.nextBtn:ClearAllPoints()
+    K.nextBtn:SetPoint("BOTTOMRIGHT", K.single and l or r, "BOTTOMRIGHT", -10, 5)
     -- the text area of a page and its type size
     K.cw = K.pageW - PAD_X - PAD_GUTTER
     K.ch = K.pageH - PAD_TOP - PAD_BOTTOM
@@ -225,6 +230,10 @@ function K.Layout()
     local style = K.Style()
     l.bg:SetTexture(B.Art(style.tex))
     r.bg:SetTexture(B.Art(style.tex))
+    -- 0.6.7: parchment a shade deeper, so it never washes out to white
+    local tone = K.Night() and 1 or 0.88
+    l.bg:SetVertexColor(tone, tone * 0.97, tone * 0.92)
+    r.bg:SetVertexColor(tone, tone * 0.97, tone * 0.92)
     l.bg:SetTexCoord(0, 1, 0, 1)
     r.bg:SetTexCoord(1, 0, 0, 1)
     -- page numbers in a faded ink
@@ -279,6 +288,16 @@ local function PlainLower(line)
     return ns.StripColors(line or ""):gsub("|T.-|t", ""):gsub("|A.-|a", ""):lower():match("^%s*(.-)%s*$") or ""
 end
 
+-- A chapter heading: "Chapter 1: ...", or a Prologue / Epilogue line
+function K.IsChapterHead(pl)
+    local bare = pl:gsub("^#+%s*", "")
+    if bare:match("^chapter%s") then return true end
+    for _, w in ipairs({ "prologue", "epilogue", "interlude" }) do
+        if bare == w or bare:match("^" .. w .. "%s*[:%-]") then return #bare <= 80 end
+    end
+    return false
+end
+
 -- The story's lines without its header (title, place line, date and
 -- party) and its closing tally: the title page shows those
 function K.StoryBody(st, info)
@@ -294,10 +313,14 @@ function K.StoryBody(st, info)
             local bare = pl:gsub("^#+%s*", "")
             -- line 1 is the title when it is the book's name, labeled, or
             -- a short line that is not a sentence
-            local header = (seen == 1 and (bare == want or pl:match("^title:") or pl:match("^@title")
-                    or (#bare <= 100 and not bare:match("[%.!?\"]$") and not bare:match("^chapter%s"))))
-                or pl:find(" | ", 1, true) or pl:match("^date:") or pl:match("^party:")
-            if pl:match("^chapter%s") or not header then break end
+            -- 0.6.7: and a short place line under it ("Ragefire Chasm -
+            -- Beneath Orgrimmar"), which used to fill a page of its own
+            local head = K.IsChapterHead(pl)
+            local header = not head and ((seen == 1 and (bare == want or pl:match("^title:") or pl:match("^@title")
+                    or (#bare <= 100 and not bare:match("[%.!?\"]$"))))
+                or (seen <= 3 and #bare <= 80 and not bare:match("[%.!?\":,;]$"))
+                or pl:find(" | ", 1, true) or pl:match("^date:") or pl:match("^party:"))
+            if not header then break end
             lines[i] = ""
         end
         i = i + 1
@@ -315,7 +338,7 @@ function K.StoryBody(st, info)
     local chapters, cur = {}, nil
     for _, line in ipairs(lines) do
         local pl = PlainLower(line)
-        if pl:match("^#*%s*chapter%s") then
+        if K.IsChapterHead(pl) then
             cur = { head = ns.StripColors(line):gsub("^%s*#+%s*", ""):match("^%s*(.-)%s*$"), paras = {} }
             table.insert(chapters, cur)
         elseif pl ~= "" then
@@ -768,16 +791,14 @@ function K.Render(sides)
     local l, r = K.pages[1], K.pages[2]
     if K.single then
         if not sides or sides[1] then K.DrawPage(1, K.at) end
-        l.back:SetShown(K.at > 1)
-        l.on:SetShown(K.at < n)
+        if K.at > 1 then K.prevBtn:Enable() else K.prevBtn:Disable() end
+        if K.at < n then K.nextBtn:Enable() else K.nextBtn:Disable() end
         K.pageText:SetText("|cffd7c4a3" .. K.at .. " of " .. n .. "|r")
     else
         if not sides or sides[1] then K.DrawPage(1, K.at) end
         if not sides or sides[2] then K.DrawPage(2, K.at + 1) end
-        l.back:SetShown(K.at > 1)
-        l.on:Hide()
-        r.back:Hide()
-        r.on:SetShown(K.at + 1 < n)
+        if K.at > 1 then K.prevBtn:Enable() else K.prevBtn:Disable() end
+        if K.at + 1 < n then K.nextBtn:Enable() else K.nextBtn:Disable() end
         K.pageText:SetText("|cffd7c4a3" .. K.at .. (K.at + 1 <= n and ("-" .. (K.at + 1)) or "") .. " of " .. n .. "|r")
     end
     if K.list and K.list[K.at] and K.list[K.at].storyId then ns.state.bookStoryId = K.list[K.at].storyId end
@@ -1207,7 +1228,7 @@ do
         local open = ns.state.bookOpen
         if st then
             H("|cff8f9ba8This story:|r |cfff5e6c8" .. B.Cut(ns.StripColors(ns.GetBookInfo(st).name or ""), 24) .. "|r")
-            R("Add to a chronicle...", function() S.OpenChronicleMenu(K.menuBtn, st.id) end, "gold")
+            if B.CHRONICLES then R("Add to a chronicle...", function() S.OpenChronicleMenu(K.menuBtn, st.id) end, "gold") end
             R("Share as plain text", function() B.Share(st) end)
             R("Read outside the game", function() UI.ShowViewerPath() end)
             R("Copy for viewer", function() B.CopyForViewer(st) end)
@@ -1217,7 +1238,7 @@ do
             R("Open the run", function() B.OpenRun(st) end, nil, not ns.StoryRun(st))
             R("Delete story...", function() B.DeleteStory(st) end, "danger")
         end
-        if open and open.kind == "chronicle" then
+        if B.CHRONICLES and open and open.kind == "chronicle" then
             local c = ns.FindChronicle(open.id)
             if c then
                 if st then y = y - 4 end

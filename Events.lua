@@ -28,13 +28,23 @@ local function IsBossUnit(unit)
 end
 ns.IsBossUnit = IsBossUnit
 
--- 0.6.4: entering a dungeon or raid asks "Start recording?" (Options >
+-- 0.6.4: entering a dungeon asks "Start recording?" (Options >
 -- Recording: Ask, Always or Never). The run is named from the instance
 -- itself, and an instance run ends when you leave it.
 local function CheckInstanceAdventureState()
     ns.EnsureDB()
-    local isDungeonOrRaid = ns.InstanceKind() ~= "world"
+    local kind = ns.InstanceKind()
     local active = ns.GetActiveAdventure()
+    -- 0.6.5 (Mor): raids are "coming soon". Entering one offers nothing
+    -- (a run you started yourself keeps recording).
+    if kind == "raid" then
+        if active and active.isAuto and not active.paused and active.kind ~= "raid" then
+            ns.EndAdventure("Left Instance")
+            ns.Notify("runChanged")
+        end
+        return
+    end
+    local isDungeonOrRaid = kind ~= "world"
 
     if isDungeonOrRaid then
         local instName, instID = ns.InstanceInfo()
@@ -44,7 +54,7 @@ local function CheckInstanceAdventureState()
             if instID and active.instanceID then
                 same = instID == active.instanceID
             else
-                same = instName == active.instanceName
+                same = instName == (active.instanceRecorded or active.instanceName)
             end
             if not same then
                 -- A different dungeon than the run we were recording

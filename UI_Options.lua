@@ -71,8 +71,8 @@ end
 function UI.OpenSkillTemplateModal(mode)
     if mode == "STORY" or mode == "ADVENTURE" then ns.MarkTemplateCopied() end
     if mode == "STORY" then
-        tpl.title:SetText("|cffffd100Dungeon/Raid Story Template (press Ctrl+C to copy)|r")
-        tpl.sub:SetText("|cffb0bac5Paste it into your AI once: one chapter per boss. Full Logs of dungeons and raids start with 'use " .. ns.STORY_SKILLS.dungeon .. "'.|r")
+        tpl.title:SetText("|cffffd100Dungeon Story Template (press Ctrl+C to copy)|r")
+        tpl.sub:SetText("|cffb0bac5Paste it into your AI once: one chapter per boss. Full Logs of dungeons start with 'use " .. ns.STORY_SKILLS.dungeon .. "'.|r")
         tpl.editBox:SetText(EscapeForEditBox(ns.DUNGEON_STORY_TEMPLATE))
     elseif mode == "ADVENTURE" then
         tpl.title:SetText("|cffffd100Adventure Story Template (press Ctrl+C to copy)|r")
@@ -315,9 +315,9 @@ UI.OptionsCheckGrid = CheckGrid
 -- 0.6.3: returns a layout function; the two buttons flow (UI.FlowRow)
 -- and wrap under each other on a narrow page. It returns the height used.
 local function TemplateButtons(p, y)
-    local dBtn = UI.CreateSleekButton(p, 160, 24, "Dungeon/Raid Template", "gold")
+    local dBtn = UI.CreateSleekButton(p, 160, 24, "Dungeon Template", "gold")
     dBtn:SetIcon(UI.ICONS.STORY, 16)
-    UI.SetButtonLabels(dBtn, "Dungeon/Raid Template", "Dungeon/Raid")
+    UI.SetButtonLabels(dBtn, "Dungeon Template", "Dungeon")
     dBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("STORY") end)
     local aBtn = UI.CreateSleekButton(p, 150, 24, "Adventure Template", "gold")
     aBtn:SetIcon(UI.ICONS.STORY, 16)
@@ -348,7 +348,7 @@ do
         { key = "copyMode", label = "Ctrl+C style", names = { INSTANT = "Instant", BOX = "Copy box" },
           tip = "Instant: hold Ctrl a blink, press C, done. Copy box: Ctrl+C shows the snapshot selected in a small box; Ctrl+C there copies it. Copy box is the default. With Instant, a Ctrl+key you press after holding Ctrl a moment can be taken by the copy." },
         { key = "quickNote", label = "Ask for an instruction on Ctrl+C",
-          tip = "Ctrl+C first opens a one-line box for a quick instruction to your AI (\"be flirty\", \"reply to Thrall\"). Enter selects the scene with it as its [Instruction] line (Esc or an empty line: without one), and Ctrl+C in the same small box copies it.",
+          tip = "Ctrl+C first opens a one-line box for a quick instruction to your AI (\"be flirty\", \"reply to Thrall\"). Type it and press Ctrl+C right there: the scene is copied with it as its [Instruction] line. Esc copies without one.",
           after = function() UI.SyncCopyChip() end },
     })
     local msgRefresh = NumberRow(p, 0, y - 4, "Chat messages per source", "messages",
@@ -360,6 +360,12 @@ do
     resetBtn.tipTitle = "|cffffd100Reset Window|r"
     resetBtn.tipText = "Puts the window back to its default size in the middle of the screen."
     resetBtn:SetScript("OnClick", function() UI.ResetWindow() end)
+    -- 0.6.5: feature ideas and bug reports (links to copy, plus the report)
+    local fbBtn = UI.CreateSleekButton(p, 150, 24, "Feedback", "gold")
+    fbBtn:SetPoint("LEFT", resetBtn, "RIGHT", 8, 0)
+    fbBtn.tipTitle = "|cffffd100Feedback|r"
+    fbBtn.tipText = "An idea or a bug? Shows where to send it, with a bug report (version and RP Chronicler's own saved errors, never chat) to paste in."
+    fbBtn:SetScript("OnClick", function() UI.OpenFeedback() end)
     O.refresh.GENERAL = function()
         rows()
         copyRows()
@@ -416,7 +422,7 @@ do
     S.prefix:SetPoint("TOPLEFT", 6, -56)
     S.prefix:SetPoint("TOPRIGHT", -2, -56)
     S.prefix:SetAutoFocus(false)
-    Note(ed, "|cff8f9ba8e.g. |cff69ccf0use my-character|cff8f9ba8. Clear it to copy raw data only.|r", 0, -80)
+    Note(ed, "|cff8f9ba8Default: |cff69ccf0use|r |cff8f9ba8and your character's first name. Clear it to copy raw data only.|r", 0, -80)
 
     UI.Label(ed, "Included in this slice:"):SetPoint("TOPLEFT", 0, -100)
     -- The scene sections, then the chat sources (both lists live in Core.lua)
@@ -459,7 +465,7 @@ do
         local sel = Selected()
         ns.state.selectedOptionTabId = sel.id
         S.name:SetText(sel.label or "")
-        S.prefix:SetText(sel.prefix or "")
+        S.prefix:SetText(ns.SkillCall(sel.prefix or ""))
         for key, cb in pairs(S.checks) do cb:SetChecked(sel[key] and true or false) end
         S.del.armedAt = nil
         S.del:SetText("Delete Tab")
@@ -486,6 +492,9 @@ do
 
     S.save:SetScript("OnClick", function()
         local fields = { label = S.name:GetText(), prefix = S.prefix:GetText() }
+        -- 0.6.5: left as this character's default, it stays per character
+        local cur = Selected().prefix
+        if cur == ns.DEFAULT_TRIGGER and (fields.prefix or ""):match("^%s*(.-)%s*$") == ns.SkillCall(cur) then fields.prefix = cur end
         for key, cb in pairs(S.checks) do fields[key] = cb:GetChecked() and true or false end
         local t = ns.SaveTab(Selected().id, fields)
         S.name:ClearFocus()
@@ -542,14 +551,14 @@ end
 do
     local p = NewPage("RECORDING", "Recording")
     local rows, y = SettingRows(p, -24, {
-        { key = "instanceRecord", label = "Dungeons and raids",
+        { key = "instanceRecord", label = "Dungeons",
           names = { ASK = "Ask on entry", AUTO = "Always record", OFF = "Never" },
-          tip = "Ask on entry (default): entering a dungeon or raid asks 'Start recording?'. Always record: the run starts by itself. Never: you start every run yourself. An instance run ends when you leave the instance." },
+          tip = "Ask on entry (default): entering a dungeon asks 'Start recording?'. Always record: the run starts by itself. Never: you start every run yourself. A dungeon run ends when you leave the dungeon. Raids: coming soon (TBA)." },
         { key = "partyGear", label = "Record party gear",
           tip = "On (default): while a run records, RP Chronicler inspects each party member once, out of combat and in range, like the game's own Inspect, and keeps the gear they wore with the run (on your PC only). Their character window then lists it and their model wears it. Off: nobody is inspected." },
         { key = "autoShots", label = "Auto-screenshots",
-          names = { OFF = "Off", INSTANCE = "Dungeons and raids", ALL = "Everywhere" },
-          tip = "Screenshots on boss kills, level ups, new places and marked moments while a run records. Dungeons and raids (default): open-world runs only take one when you Mark Moment. Your own Print Screen shots always join the run.",
+          names = { OFF = "Off", INSTANCE = "Dungeons", ALL = "Everywhere" },
+          tip = "Screenshots on boss kills, level ups, new places and marked moments while a run records. Dungeons (default): open-world runs only take one when you Mark Moment. Your own Print Screen shots always join the run.",
 },
         { key = "logDetail", label = "Log detail",
           names = { SHORT = "Short", NORMAL = "Normal", RICH = "Rich" },
@@ -558,13 +567,10 @@ do
     UI.Label(p, "|cffd8dee9Full Log keeps:|r", "GameFontHighlightSmall"):SetPoint("TOPLEFT", 0, y - 6)
     local groupRefresh
     groupRefresh, y = CheckGrid(p, y - 22, ns.LOG_GROUPS, function() return RPChroniclerDB.logGroups end, "RPChroniclerOptLog_")
-    local warnRefresh = NumberRow(p, 0, y - 8, "Full Log warning size (chars)", "logWarnChars",
-        "The size meter turns orange near this length and red past it. About 60000 suits free AI plans; paid plans take much more.", 64)
     Note(p, "|cff8f9ba8Open-world runs: click Start Recording in Adventures or use the RP icon's right-click menu. A run cut short by a logout or disconnect is saved as interrupted, never lost, and a /reload keeps recording. The Full Log never keeps OOC chat.|r", 0, y - 40)
     O.refresh.RECORDING = function()
         rows()
         groupRefresh()
-        warnRefresh()
     end
 end
 
@@ -599,7 +605,7 @@ do
     Note(rpPart,
         "|cffffd100Your character skill (one time)|r\n" ..
         "|cffd8dee9Copy the RP Template, fill in your character, and make it a Skill in Gemini, a Project in ChatGPT, or a Skill or Project in Claude. " ..
-        "Use its trigger (like |cff69ccf0use my-character|cffd8dee9) as the Skill Call in Slice Tabs.|r",
+        "Name its trigger after your character (like |cff69ccf0" .. ns.SkillCall(ns.DEFAULT_TRIGGER) .. "|cffd8dee9, the Skill Call every tab uses unless you change it in Slice Tabs).|r",
         0, -4)
     local rpBtn = UI.CreateSleekButton(rpPart, 130, 24, "RP Template", "gold")
     rpBtn:SetPoint("TOPLEFT", 0, -78)
@@ -617,19 +623,17 @@ do
     local stories = CreateFrame("Frame", nil, p)
     stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
     stories:SetHeight(248)
-    -- 0.6.4: every Full Log copy carries the story rules, so the skill is optional
+    -- 0.6.5: Copy for AI adds the story rules, so the skill is optional
     Note(stories,
         "|cffffd100Your stories|r\n" ..
-        "|cffd8dee9After a run, open its Full Log and click |cffffd100Copy for AI|cffd8dee9. Paste it into any AI chat, copy the story back and Import it in the Story Book. " ..
-        "|cff9aa5b4Advanced: use a skill.|cffd8dee9 Make a template below a skill in your AI (Dungeon/Raid: 'use " .. ns.STORY_SKILLS.dungeon .. "', Adventure: 'use " .. ns.STORY_SKILLS.world .. "') " ..
-        "and turn on My AI has the skill, so copies stay short.|r",
+        "|cffd8dee9After a run, open its Full Log and click |cffffd100Copy for AI|cffd8dee9 (it adds the story rules). Paste it into any AI chat, copy the story back and Import it in the Story Book. " ..
+        "|cff9aa5b4Advanced: use a skill.|cffd8dee9 Make a template below a skill in your AI (Dungeon: 'use " .. ns.STORY_SKILLS.dungeon .. "', Adventure: 'use " .. ns.STORY_SKILLS.world .. "') " ..
+        "and click Copy for AI, then Log only, to copy the log without the rules.|r",
         0, 0)
     local tplLayout = TemplateButtons(stories, -86)
     local tipRows = SettingRows(stories, -120, {
         { key = "exportTip", label = "Export tip in the Story Book",
           tip = "Shows how to read your stories with screenshots in StoryViewer.html, with Copy for viewer." },
-        { key = "aiHasSkill", label = "My AI has the skill",
-          tip = "Off: Copy for AI puts the story rules in front of the Full Log, so any AI chat writes the story. On: the copy stays short for a storyteller skill you made from a template (copy the template again when RP Chronicler says it changed)." },
         { key = "storyCover", label = "Story scenes",
           tip = "Each story opens with its party: you in 3D in the gear from that run, companions near you as they are, everyone else as a shadow of their race. Click anyone to see them up close with their items. Each boss gets a panel at its chapter. Turn it off if your client shows no models." },
     })

@@ -1,5 +1,7 @@
 # Credits & Third-Party Licenses
 
+RP Chronicler itself is licensed under the GNU General Public License v3.0 (see LICENSE). The parts below keep their own licenses.
+
 ## StoryTracker (Recording & Event Engine Techniques)
 
 - **Source**: https://github.com/ninepointlabs/wow-storytracker-addon

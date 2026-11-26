@@ -467,8 +467,10 @@ end
 -- Book fields with fallbacks to the run's data. Edited fields win.
 function ns.GetBookInfo(adv)
     local b = (adv and type(adv.book) == "table") and adv.book or {}
+    -- 0.6.5: each member once ("Morai" and "Morai Galeclaw" are one)
     local partyNames = {}
-    for _, p in ipairs((adv and adv.participants) or {}) do table.insert(partyNames, p.name) end
+    local roster = ns.MergedRoster and ns.MergedRoster((adv and adv.participants) or {}) or ((adv and adv.participants) or {})
+    for _, p in ipairs(roster) do table.insert(partyNames, p.name) end
     local info = {
         title = b.title or (adv and adv.title) or "Untitled Story",
         instance = b.instance or (adv and (adv.instanceName or adv.zone)) or "",
@@ -485,6 +487,39 @@ function ns.GetBookInfo(adv)
         chapters = b.chapters or {},
         kind = (adv and adv.kind) or "world",
     }
+    -- 0.6.5: a dungeon or raid saved before the instance name was
+    -- recorded was named after the city at its entrance (Orgrimmar): its
+    -- first boss tells the real place (Ragefire Chasm)
+    if adv and info.kind ~= "world" and (info.instance == "" or info.instance == adv.zone) then
+        local real
+        for i, boss in ipairs(type(adv.bossKills) == "table" and adv.bossKills or {}) do
+            if real or i > 4 or not ns.JournalInstanceOfBoss then break end
+            real = ns.JournalInstanceOfBoss(boss)
+        end
+        if real and real ~= "" then
+            if info.zone == "" then info.zone = info.instance end
+            info.instance = real
+        end
+    end
+    -- an old book's party line kept the duplicates: merge it the same way
+    -- (a short name goes when exactly one full name starts with it)
+    if b.party then
+        local names, firsts = {}, {}
+        for n in tostring(b.party):gmatch("[^,]+") do
+            n = Trim(n)
+            if n ~= "" then table.insert(names, n) end
+        end
+        for _, n in ipairs(names) do
+            local f = n:match("^(%S+)%s+%S")
+            if f then firsts[f] = (firsts[f] or 0) + 1 end
+        end
+        local keep, seen = {}, {}
+        for _, n in ipairs(names) do
+            if not seen[n] and not (not n:find("%s") and firsts[n] == 1) then table.insert(keep, n) end
+            seen[n] = true
+        end
+        info.party = table.concat(keep, ", ")
+    end
     if info.zone ~= "" and info.zone:lower() == (info.instance or ""):lower() then info.zone = "" end
     info.name = info.title
     return info
@@ -691,6 +726,27 @@ end
 -- { worn = { item... }, won = { item... } }, item = { name, q, icon, from }.
 -- Only your own gear is known (other players are never inspected); loot
 -- is everyone's. A boss gives the loot that came from it.
+-- 0.6.5: a loot entry that counts as won gear: green or better, a weapon
+-- or armor (class 2 or 4; unknown class falls back to quality alone), and
+-- looted or won, not crafted, bought, given or gathered
+local NOT_WON = { "^crafted", "^quest", "^bought", "^mail", "^traded", "^gathered", "^received" }
+function ns.IsWonGear(e)
+    local link = e.colored or e.link
+    local q = tonumber(e.q) or (type(link) == "string" and ns.ItemQuality(link)) or nil
+    if not q or q < 2 then return false end
+    local cls = tonumber(e.cls)
+    if not cls and type(link) == "string" then
+        local d = ns.ItemDetails(link)
+        cls = d and tonumber(d.cls)
+    end
+    if cls and cls ~= 2 and cls ~= 4 then return false end
+    local src = tostring(e.source or ""):lower()
+    for _, pat in ipairs(NOT_WON) do
+        if src:find(pat) then return false end
+    end
+    return true
+end
+
 function ns.MemberItems(st, name, isBoss)
     local res = { worn = {}, won = {} }
     if type(st) ~= "table" or type(name) ~= "string" then return res end
@@ -716,13 +772,27 @@ function ns.MemberItems(st, name, isBoss)
     for _, g in ipairs(type(worn) == "table" and worn or {}) do
         if type(g) == "table" and g.name then table.insert(res.worn, Item(g, g.name)) end
     end
+    -- 0.6.5 (Mor): only real wins (a won roll or loot that went to them),
+    -- only gear (weapons and armor), green and better, each drop once
+    local wonAt = {}
     for _, e in ipairs(type(st.keyLoot) == "table" and st.keyLoot or {}) do
-        if type(e) == "table" and e.plain then
+        if type(e) == "table" and e.plain and ns.IsWonGear(e) then
             local src = tostring(e.source or "")
+            local key = tostring(e.looter or ""):lower() .. "|" .. tostring(e.plain):lower()
+            local it
             if isBoss then
-                if src:lower() == ("from " .. low) then table.insert(res.won, Item(e, e.plain, e.looter)) end
+                if src:lower() == ("from " .. low) then it = Item(e, e.plain, e.looter) end
             elseif Same(e.looter) then
-                table.insert(res.won, Item(e, e.plain, src ~= "" and src or nil))
+                it = Item(e, e.plain, src ~= "" and src or nil)
+            end
+            if it then
+                local had = wonAt[key]
+                if not had then
+                    table.insert(res.won, it)
+                    wonAt[key] = it
+                elseif src == "won roll" and not isBoss then
+                    had.from = src
+                end
             end
         end
     end
@@ -1015,7 +1085,8 @@ function ns.BossLooks(st, name)
         -- was named after the city around it
         local book = type(st) == "table" and type(st.book) == "table" and st.book or {}
         local enc = type(info) == "table" and info.encounter or nil
-        for _, inst in ipairs({ book.instance or false, type(st) == "table" and st.instanceName or false, type(st) == "table" and st.zone or false }) do
+        local fromBoss = ns.JournalInstanceOfBoss and ns.JournalInstanceOfBoss(name) or false
+        for _, inst in ipairs({ fromBoss, book.instance or false, type(st) == "table" and st.instanceName or false, type(st) == "table" and st.zone or false }) do
             if display then break end
             if inst then display = ns.JournalBossDisplay(inst, name, enc) end
         end

@@ -10,7 +10,7 @@ local UI = ns.UI
 -- combat. Re-open with /rp setup or Options > Privacy.
 -- Everything here can be changed later in Options.
 -- =========================================================
-local SETUP_VERSION = 4   -- 0.6.4: dungeons and raids ask before recording, RP button
+local SETUP_VERSION = 4   -- 0.6.4: dungeons ask before recording, RP button
 -- Mor (0.6.4): the setup stays basic, 4 choices at most (what to use,
 -- dungeon recording, screenshots, RP button). Everything else that is on
 -- by default (party gear, update notices, error reports) is named in one
@@ -31,14 +31,14 @@ local USES = {
 -- label, a one-line why, and how it reads and writes the settings.
 local CHOICES = {
     { since = 2, kind = "use" },
-    { since = 4, key = "instanceRecord", label = "Ask to record dungeons and raids",
-      why = "Entering a dungeon or raid asks if you want to record it. The run ends when you leave.",
+    { since = 4, key = "instanceRecord", label = "Ask to record dungeons",
+      why = "Entering a dungeon asks if you want to record it. The run ends when you leave. Raids: coming soon.",
       get = function() return ns.Get("instanceRecord") ~= "OFF" end,
       set = function(v)
           if not v then ns.Set("instanceRecord", "OFF")
           elseif ns.Get("instanceRecord") == "OFF" then ns.Set("instanceRecord", "ASK") end
       end },
-    { since = 2, key = "shots", label = "Screenshots in dungeons and raids",
+    { since = 2, key = "shots", label = "Screenshots in dungeons",
       why = "On boss kills, level ups and moments you mark.",
       get = function() return ns.Get("autoShots") ~= "OFF" end,
       set = function(v)
@@ -251,7 +251,7 @@ local function Finish()
         print("|cffffd100RP Chronicler|r |cff9aa5b4RP Copy, next:|r type /rp, open Options > AI & Stories, copy the RP Template into your AI as a character skill, and put its trigger in Options > Slice Tabs as the Skill Call. Then Ctrl+C copies the scene.")
     end
     if S.use ~= "COPY" then
-        print("|cffffd100RP Chronicler|r |cff9aa5b4Stories, next:|r type /rp, open Adventures and press Start (dungeons and raids ask when you enter). When the run ends, open its Full Log, click Copy for AI, paste it into any AI chat, then import the story it writes in the Story Book.")
+        print("|cffffd100RP Chronicler|r |cff9aa5b4Stories, next:|r type /rp, open Adventures and press Start (dungeons ask when you enter). When the run ends, open its Full Log, click Copy for AI, paste it into any AI chat, then import the story it writes in the Story Book.")
     end
     ns.Debug("info", "setup saved (v" .. SETUP_VERSION .. ", use " .. tostring(S.use) .. ")")
 end

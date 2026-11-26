@@ -63,6 +63,51 @@ function ns.JournalInstance()
     return (id and id > 0) and id or nil
 end
 
+-- 0.6.5 (Mor): Forever's dungeons (levels 1-60) for picking a run's
+-- dungeon by hand: from the Encounter Journal when it lists them (guarded,
+-- the journal tier is put back), else this built-in list. Each entry:
+-- { name, levels, ej (journal id or nil) }.
+ns.DUNGEONS = {
+    { "Ragefire Chasm", "13-18" }, { "Wailing Caverns", "17-24" }, { "The Deadmines", "17-26" },
+    { "Shadowfang Keep", "22-30" }, { "Blackfathom Deeps", "24-32" }, { "The Stockade", "24-32" },
+    { "Gnomeregan", "29-38" }, { "Razorfen Kraul", "29-38" }, { "Scarlet Monastery", "34-45" },
+    { "Razorfen Downs", "37-46" }, { "Uldaman", "41-51" }, { "Zul'Farrak", "42-46" },
+    { "Maraudon", "46-55" }, { "Sunken Temple", "50-56" }, { "Blackrock Depths", "52-60" },
+    { "Lower Blackrock Spire", "55-60" }, { "Upper Blackrock Spire", "58-60" }, { "Dire Maul", "55-60" },
+    { "Scholomance", "58-60" }, { "Stratholme", "58-60" },
+}
+local dungeonList
+function ns.DungeonList()
+    if dungeonList then return dungeonList end
+    local list = {}
+    if EJ_GetNumTiers and EJ_SelectTier and EJ_GetInstanceByIndex then
+        local okT, oldTier = pcall(EJ_GetCurrentTier)
+        local okN, tiers = pcall(EJ_GetNumTiers)
+        local seen = {}
+        for t = 1, math.min(okN and tonumber(tiers) or 0, 3) do
+            pcall(EJ_SelectTier, t)
+            for i = 1, 60 do
+                local ok, id, name = pcall(EJ_GetInstanceByIndex, i, false)
+                name = ok and ns.SafeStr(name) or nil
+                if not id or not name then break end
+                if not seen[name] then
+                    seen[name] = true
+                    local levels
+                    for _, d in ipairs(ns.DUNGEONS) do if d[1] == name then levels = d[2] end end
+                    table.insert(list, { name = name, levels = levels, ej = ns.SafeNum(id) })
+                end
+            end
+        end
+        if okT and oldTier then pcall(EJ_SelectTier, oldTier) end
+    end
+    if #list < 5 then
+        list = {}
+        for _, d in ipairs(ns.DUNGEONS) do table.insert(list, { name = d[1], levels = d[2] }) end
+    end
+    dungeonList = list
+    return list
+end
+
 -- 0.6.4: the creature display ID of a unit (a boss), read through a
 -- hidden model, so its story scene can show it later with no target.
 -- nil when the client can't tell.
@@ -123,6 +168,41 @@ function ns.JournalBossDisplay(instanceName, bossName, encounterID)
         if okT and oldTier then pcall(EJ_SelectTier, oldTier) end
     end
     ejCache[key] = found or false
+    return found
+end
+
+-- 0.6.5: the dungeon or raid a boss belongs to, from the Encounter
+-- Journal, for runs saved before the instance name was recorded (they
+-- were named after the city around the entrance). Guarded and cached.
+local ejInstCache = {}
+function ns.JournalInstanceOfBoss(bossName)
+    if type(bossName) ~= "string" or bossName == "" then return nil end
+    local want = bossName:lower()
+    if ejInstCache[want] ~= nil then return ejInstCache[want] or nil end
+    local found
+    if EJ_GetNumTiers and EJ_SelectTier and EJ_GetInstanceByIndex and EJ_GetEncounterInfoByIndex then
+        local okT, oldTier = pcall(EJ_GetCurrentTier)
+        local okN, tiers = pcall(EJ_GetNumTiers)
+        for t = 1, (okN and tonumber(tiers) or 0) do
+            if found then break end
+            pcall(EJ_SelectTier, t)
+            for _, raid in ipairs({ false, true }) do
+                if found then break end
+                for i = 1, 200 do
+                    local ok, id, name = pcall(EJ_GetInstanceByIndex, i, raid)
+                    if not ok or not id then break end
+                    for j = 1, 40 do
+                        local okE, eName = pcall(EJ_GetEncounterInfoByIndex, j, id)
+                        if not okE or not eName then break end
+                        if type(eName) == "string" and eName:lower() == want then found = ns.SafeStr(name) break end
+                    end
+                    if found then break end
+                end
+            end
+        end
+        if okT and oldTier then pcall(EJ_SelectTier, oldTier) end
+    end
+    ejInstCache[want] = found or false
     return found
 end
 

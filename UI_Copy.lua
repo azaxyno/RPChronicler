@@ -139,24 +139,31 @@ function UI.ShowQuickNotePopup()
     UI.DisarmCtrlCopy()
     local tabCfg = ns.GetTabConfig(RPChroniclerDB.lastSliceId)
     Q.label = (tabCfg and tabCfg.label) or "Chat"
-    local function CopyWith(note)
+    local head = "|cffffd100Copy for your AI|r  |cff69ccf0[" .. Q.label .. "]|r"
+    local function Build(note)
         local ok, snap = pcall(ns.BuildSnapshot, tabCfg and tabCfg.id or "CHAT", note or "", false)
         if not ok or type(snap) ~= "string" or ns.IsSecret(snap) then
             CopyLog("error", "Quick copy (instruction): snapshot failed: " .. tostring(snap))
             UI.ShowToast("|cffff6b6bRP Chronicler:|r the snapshot failed to build. See /rp debug.", 3.0, 0.75, 0.28, 0.28)
-            return
+            return nil
         end
         CopyLog("copy", "instruction popup: len " .. #snap .. ((note or "") ~= "" and ", with instruction" or ""))
-        UI.AskLineCopy("|cffffd100Copy for your AI|r  |cff69ccf0[" .. Q.label .. "]|r", snap)
+        return snap
     end
+    local function CopyWith(note)
+        local snap = Build(note)
+        if snap then UI.AskLineCopy(head, snap) end
+    end
+    -- 0.6.5 (Mor): type, then Ctrl+C right in the line copies it all
     UI.AskLine({
         title = "Instruction for the AI  |cff69ccf0[" .. Q.label .. "]|r",
-        sub = "A quick direction for this reply, like \"be flirty\" or \"reply to Thrall\". Leave it empty for none.",
-        placeholder = "Type an instruction, or just press Enter",
+        sub = "A quick direction for this reply, like \"be flirty\" or \"reply to Thrall\". Type it and press |cffffd100Ctrl+C|r: the scene is copied with it.",
+        placeholder = "Type an instruction, then Ctrl+C",
         okText = "Copy",
-        keys = "Enter: copy   Esc: copy without it",
+        keys = "Ctrl+C: copy   Esc: copy without it",
         onAccept = function(text) CopyWith(text) end,
         onEscape = function() CopyWith("") end,
+        ctrlCopy = function(text) return Build(text), head end,
     })
     return true
 end

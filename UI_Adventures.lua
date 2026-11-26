@@ -295,7 +295,7 @@ UI.OpenStoryImportModal = OpenStoryImportModal
 -- 0.5.0: Adventures holds the recordings only; the Story Book is its own
 -- section right below it (UI_StoryBook.lua)
 local view = UI.NewSection("ADVENTURES", "Adventures", "Your recorded runs: Summary, Full Log for your AI, and a link to each story.")
-UI.AddRailButton("ADVENTURES", "Adventures", UI.ICONS.ADVENTURES, "Record dungeon, raid and open-world runs.")
+UI.AddRailButton("ADVENTURES", "Adventures", UI.ICONS.ADVENTURES, "Record dungeon and open-world runs (raids: coming soon).")
 
 local A = { cards = {} }
 UI.adventures = A
@@ -353,8 +353,32 @@ do
     header:SetPoint("TOPLEFT", 10, -8)
 end
 
+-- 0.6.5 (Mor): runs sorted by type. The last tab you used is kept
+-- (RPChroniclerDB.advFilter, not a setting). Raids: coming soon.
+A.KIND_TABS = {
+    { key = "all", label = "All" },
+    { key = "world", label = "World", tip = "Open-world adventures." },
+    { key = "dungeon", label = "Dgn", tip = "Dungeon runs." },
+    { key = "raid", label = "Raid", tip = "Raids are coming soon (TBA).", soon = true },
+}
+A.kindBtns = {}
+for i, t in ipairs(A.KIND_TABS) do
+    local b = UI.CreateSleekButton(A.list, 40, 18, t.label, t.soon and nil or "tool")
+    b:SetPoint("TOPLEFT", 6 + (i - 1) * 43, -26)
+    b.tipTitle = "|cffffd100" .. (t.key == "all" and "All runs" or t.label) .. "|r"
+    b.tipText = t.tip or "Every recording."
+    b.kind = t.key
+    if t.soon then b:Disable() end
+    b:SetScript("OnClick", function()
+        RPChroniclerDB.advFilter = t.key
+        A.pickFirst = true
+        UI.RefreshAdventuresTab()
+    end)
+    A.kindBtns[i] = b
+end
+
 A.listScroll = CreateFrame("ScrollFrame", "RPChroniclerAdvListScroll", A.list, "UIPanelScrollFrameTemplate")
-A.listScroll:SetPoint("TOPLEFT", 6, -26)
+A.listScroll:SetPoint("TOPLEFT", 6, -48)
 A.listScroll:SetPoint("BOTTOMRIGHT", -26, 6)
 A.listChild = CreateFrame("Frame", nil, A.listScroll)
 A.listChild:SetSize(156, 10)
@@ -410,14 +434,15 @@ end
 A.summaryBtn = UI.CreateSleekButton(A.right, 66, 22, "Summary")
 A.fullBtn = UI.CreateSleekButton(A.right, 62, 22, "Full Log")
 A.fullBtn.tipTitle = "|cffffd100Full Log|r"
-A.fullBtn.tipText = "The whole run for your AI storyteller. Click Copy for AI, then Ctrl+C, and paste it into any AI chat."
+A.fullBtn.tipText = "The whole run for your AI storyteller. Click Copy for AI (it adds the story rules), then Ctrl+C, and paste it into any AI chat."
 A.storyBtn = UI.CreateSleekButton(A.right, 56, 22, "Story", "gold")
 A.storyBtn.tipTitle = "|cffffd100Story|r"
 -- 0.6.3: correct a wrong name before the story is written
-A.fixBtn = UI.CreateSleekButton(A.right, 70, 22, "Fix names", "tool")
-UI.SetButtonLabels(A.fixBtn, "Fix names", "Fix")
-A.fixBtn.tipTitle = "|cffffd100Fix names|r"
-A.fixBtn.tipText = "A wrong name in this run (a player, boss, foe, companion or pet)? Replace it before you copy the Full Log. The recording keeps the original, so every fix can be undone."
+-- 0.6.5: the run's editor (names, and the dungeon and roles)
+A.fixBtn = UI.CreateSleekButton(A.right, 70, 22, "Edit run", "tool")
+UI.SetButtonLabels(A.fixBtn, "Edit run", "Edit")
+A.fixBtn.tipTitle = "|cffffd100Edit run|r"
+A.fixBtn.tipText = "Fix this run before you copy the Full Log, even while it records: pick its dungeon, set a member's role, or replace a wrong name. The recording keeps the originals, so every change can be undone."
 
 A.delBtn = UI.CreateSleekButton(A.right, 56, 22, "Delete", "danger")
 A.delBtn.tipTitle = "|cffff6b6bDelete|r"
@@ -437,9 +462,8 @@ A.meterText:SetJustifyH("LEFT")
 A.meterText:SetWordWrap(false)
 A.meter:SetScript("OnEnter", function(self)
     UI.Tooltip(self, "|cffffd100Full Log size|r",
-        "The Full Log's length. It turns orange near, and red past, the warning size you set in Options > Recording.",
-        "Too long? Pick a shorter Log detail there, or turn off busy groups.",
-        "README: see the Requirements section for free vs paid plans.")
+        "The length of what you copy. " .. math.floor(ns.LOG_SIZE_BASELINE / 1000) .. "k fits most free AI chats; paid ones take much more.",
+        "Too long? Pick a shorter Log detail in Options > Recording, or turn off busy groups.")
 end)
 A.meter:SetScript("OnLeave", UI.HideTooltip)
 A.meter:SetScript("OnClick", function()
@@ -556,7 +580,7 @@ local function UpdateHero(adv, isLive)
     if not adv then
         A.heroIcon:SetTexture(UI.ICONS.ADVENTURES)
         A.heroTitle:SetText("|cffffd100No Adventure Selected|r")
-        A.heroMeta:SetText("|cff9aa5b4Enter a dungeon or raid, or click Start Recording above.|r")
+        A.heroMeta:SetText("|cff9aa5b4Enter a dungeon, or click Start Recording above.|r")
         A.heroStats:SetText("")
         return
     end
@@ -622,9 +646,26 @@ function UI.RefreshAdventuresTab()
 
     for _, card in ipairs(A.cards) do card:Hide() end
     local entries = {}
-    if active then table.insert(entries, { adv = active, isLive = true }) end
-    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do
-        table.insert(entries, { adv = adv, isLive = false })
+    local filter = RPChroniclerDB.advFilter or "all"
+    local counts = { all = 0 }
+    local function Add(adv, isLive)
+        local k = adv.kind or "world"
+        counts.all, counts[k] = counts.all + 1, (counts[k] or 0) + 1
+        if filter == "all" or k == filter then table.insert(entries, { adv = adv, isLive = isLive }) end
+    end
+    if active then Add(active, true) end
+    for _, adv in ipairs(RPChroniclerDB.adventures or {}) do Add(adv, false) end
+    if A.pickFirst then
+        A.pickFirst = nil
+        local inList = false
+        for _, e in ipairs(entries) do if e.adv.id == ns.state.selectedAdventureId then inList = true end end
+        if not inList and entries[1] then ns.state.selectedAdventureId = entries[1].adv.id end
+    end
+    for _, b in ipairs(A.kindBtns) do
+        if b.kind == filter then b:LockHighlight() else b:UnlockHighlight() end
+        if b.kind ~= "raid" then
+            b.tipText = (b.kind == "all" and "Every recording" or (b.kind == "world" and "Open-world adventures" or "Dungeon runs")) .. ": " .. (counts[b.kind] or 0) .. "."
+        end
     end
 
     for idx, item in ipairs(entries) do
@@ -680,7 +721,7 @@ function UI.RefreshAdventuresTab()
     A.storyBtn.tipText = hasStory and "Open this run's story in the Story Book." or "Import a story for this run from your AI."
     if selected then A.storyBtn:Enable(); A.fixBtn:Enable() else A.storyBtn:Disable(); A.fixBtn:Disable() end
     local nFix = selected and type(selected.fixes) == "table" and #selected.fixes or 0
-    UI.SetButtonLabels(A.fixBtn, nFix > 0 and ("Fix names (" .. nFix .. ")") or "Fix names", nFix > 0 and ("Fix " .. nFix) or "Fix")
+    UI.SetButtonLabels(A.fixBtn, nFix > 0 and ("Edit run (" .. nFix .. ")") or "Edit run", "Edit")
     if UI.fixNames and UI.fixNames:IsShown() then UI.RefreshFixNames() end
     A.summaryBtn:UnlockHighlight()
     A.fullBtn:UnlockHighlight()
@@ -689,24 +730,28 @@ function UI.RefreshAdventuresTab()
     if mode ~= "FULL" then mode = "SUMMARY" end
     if mode == "FULL" then
         A.fullBtn:LockHighlight()
-        local text = ns.BuildAdventureFullLog(selected)
+        -- 0.6.5: the box shows the log alone; Copy for AI adds the story
+        -- rules (until you switch runs or views, or click Log only)
+        local withRules = selected and A.rulesFor == selected.id or false
+        local text = ns.BuildAiText(selected, withRules)
         A.editBox:SetText(text)
-        -- 0.6.4: the button selects the copy for the AI (story rules + log)
-        UI.SetButtonLabels(A.selectAllBtn, "Copy for AI", "Copy")
-        A.selectAllBtn.tipTitle = "|cffffd100Copy for AI|r"
-        A.selectAllBtn.tipText = ns.Get("aiHasSkill") and "Selects the Full Log for your storyteller skill. Press Ctrl+C and paste it into your AI."
-            or "Selects the Full Log with the story rules in front of it. Press Ctrl+C, paste it into any AI chat, then Import the story it writes."
-        -- 0.6.1: one warning size (Options > Recording) instead of an AI picker
+        if withRules then
+            UI.SetButtonLabels(A.selectAllBtn, "Log only", "Log")
+            A.selectAllBtn.tipTitle = "|cffffd100Log only|r"
+            A.selectAllBtn.tipText = "Takes the story rules out again and selects the Full Log alone, for an AI that has the storyteller skill."
+        else
+            UI.SetButtonLabels(A.selectAllBtn, "Copy for AI", "Copy")
+            A.selectAllBtn.tipTitle = "|cffffd100Copy for AI|r"
+            A.selectAllBtn.tipText = "Puts the story rules in front of the Full Log and selects it all. Press Ctrl+C, paste it into any AI chat, then Import the story it writes."
+        end
         if selected then
-            local limit = ns.Get("logWarnChars")
-            -- 0.6.4: the meter counts what is copied (rules included)
-            local chars = #(ns.BuildAiText(selected) or text)
-            local tokens = math.floor(chars / 4 + 0.5)
+            -- 0.6.5: one fixed baseline; the meter counts what is copied
+            local limit = ns.LOG_SIZE_BASELINE
+            local chars = #text
             local pct = math.floor(chars * 100 / math.max(1, limit) + 0.5)
             local color = (pct > 100 and "ff6b6b") or (pct > 80 and "ffb74d") or "5cb85c"
-            local warn = (pct > 100) and "  |cffff6b6bLonger than your warning size: see Options > Recording|r" or ""
-            A.meterText:SetText(string.format("|cff8f9ba8Size:|r |cff%s%.1fk chars (~%.1fk tokens), %d%% of %dk|r%s",
-                color, chars / 1000, tokens / 1000, pct, math.floor(limit / 1000), warn))
+            A.meterText:SetText(string.format("|cff8f9ba8Size:|r |cff%s%.1fk chars (%d%% of %dk).|r |cff8f9ba8%dk fits most free AI chats; paid ones take much more.|r",
+                color, chars / 1000, pct, math.floor(limit / 1000), math.floor(limit / 1000)))
             A.meter:Show()
         else
             A.meter:Hide()
@@ -745,6 +790,7 @@ function UI.ShowAdventuresSub(sub, advId)
 end
 
 local function SetMode(mode)
+    A.rulesFor = nil
     ns.state.adventureViewMode = mode
     UI.RefreshAdventuresTab()
 end
@@ -768,13 +814,18 @@ UI.GetSelectedAdventure = GetSelectedAdventure
 A.selectAllBtn:SetScript("OnClick", function()
     local adv = GetSelectedAdventure()
     local full = ns.state.adventureViewMode == "FULL" and adv
-    -- 0.6.4: Copy for AI swaps in the text for the AI (the view shows it
-    -- until you switch runs or views)
-    if full then A.editBox:SetText(ns.BuildAiText(adv)) end
+    -- 0.6.5: Copy for AI adds the story rules, Log only takes them out
+    local addRules = full and A.rulesFor ~= adv.id
+    if full then
+        A.rulesFor = addRules and adv.id or nil
+        UI.RefreshAdventuresTab()
+    end
     A.editBox:SetFocus()
     A.editBox:HighlightText()
-    if full and not ns.Get("aiHasSkill") then
+    if addRules then
         UI.SetStatus("Full Log and story rules selected. Press Ctrl+C, paste it into any AI chat, then Import the story.", "good")
+    elseif full then
+        UI.SetStatus("Full Log selected (no story rules). Press Ctrl+C to copy it.", "good")
     else
         UI.SetStatus("Text selected. Press Ctrl+C to copy it.", "good")
     end
@@ -845,11 +896,12 @@ do
     UI.fixNames = f
     local F = { chips = {}, rows = {} }
 
+    F.roleRows = {}
     F.title = UI.Label(f, "", "GameFontNormal")
     F.title:SetPoint("TOPLEFT", 14, -12)
     F.title:SetPoint("RIGHT", -36, 0)
     F.title:SetWordWrap(false)
-    F.sub = UI.Label(f, "|cffb0bac5A wrong name in the recording? Replace it here before you copy the Full Log. The recording keeps the original, so Undo brings it back.|r", "GameFontHighlightSmall")
+    F.sub = UI.Label(f, "|cffb0bac5Fix the run before you copy the Full Log, even while it records. The recording keeps the originals, so Undo brings them back.|r", "GameFontHighlightSmall")
     F.sub:SetPoint("TOPLEFT", 14, -30)
     F.sub:SetPoint("RIGHT", -14, 0)
     F.sub:SetWordWrap(true)
@@ -880,12 +932,156 @@ do
 
     local function Run() return f.advId and ns.FindAdventure(f.advId) end
 
+    -- 0.6.5 (Mor): the dungeon, picked from a list (dungeon runs only)
+    F.dunLbl = UI.Label(f, "", "GameFontHighlightSmall")
+    F.dunLbl:SetWordWrap(false)
+    F.dunBtn = UI.CreateSleekButton(f, 90, 20, "Change", "gold")
+    F.dunUndo = UI.CreateSleekButton(f, 52, 20, "Undo", "danger")
+    local pick = CreateFrame("Frame", nil, f, UI.BACKDROP)
+    pick:SetFrameStrata("TOOLTIP")
+    pick:SetClampedToScreen(true)
+    pick:EnableMouse(true)
+    pick:Hide()
+    UI.ApplyDarkGlass(pick, 0.04, 0.05, 0.07, 0.98, 0.82, 0.65, 0.30, 0.90)
+    F.pickBtns = {}
+    local function ShowPick()
+        if pick:IsShown() then pick:Hide() return end
+        local list = ns.DungeonList()
+        local cols = 2
+        local rows = math.ceil(#list / cols)
+        for _, b in ipairs(F.pickBtns) do b:Hide() end
+        for i, d in ipairs(list) do
+            local b = F.pickBtns[i]
+            if not b then
+                b = UI.CreateSleekButton(pick, 200, 18, "")
+                F.pickBtns[i] = b
+            end
+            local c, r = math.floor((i - 1) / rows), (i - 1) % rows
+            b:ClearAllPoints()
+            b:SetPoint("TOPLEFT", 6 + c * 204, -6 - r * 20)
+            b:SetText(d.name .. (d.levels and ("  |cff8f9ba8" .. d.levels .. "|r") or ""))
+            b:SetScript("OnClick", function()
+                pick:Hide()
+                local adv = Run()
+                if not adv then return end
+                local ok, why = ns.SetRunDungeon(adv.id, d.name, d.ej)
+                UI.SetStatus(ok and ("Dungeon set: " .. d.name .. ".") or why, ok and "good" or "error")
+                UI.RefreshFixNames()
+            end)
+            b:Show()
+        end
+        pick:SetSize(12 + cols * 204, 12 + rows * 20)
+        pick:ClearAllPoints()
+        pick:SetPoint("TOPLEFT", F.dunBtn, "BOTTOMLEFT", 0, -2)
+        pick:Show()
+    end
+    F.dunBtn:SetScript("OnClick", ShowPick)
+    F.dunUndo:SetScript("OnClick", function()
+        local adv = Run()
+        if not adv then return end
+        local ok, why = ns.SetRunDungeon(adv.id, nil)
+        UI.SetStatus(ok and "The recorded dungeon is back." or why, ok and "good" or "error")
+        UI.RefreshFixNames()
+    end)
+    f:HookScript("OnHide", function() pick:Hide() end)
+
+    -- 0.6.5 (Mor): each member's role; only the roles their class can take
+    F.roleHead = UI.Label(f, "|cffd8dee9Roles (a role you set wins over the game's):|r", "GameFontHighlightSmall")
+    local ROLE_NAMES = { TANK = "Tank", HEALER = "Healer", DAMAGER = "Damage" }
+    local function RoleRow(i)
+        local r = F.roleRows[i]
+        if r then return r end
+        r = { name = UI.Label(f, "", "GameFontHighlightSmall"), btns = {} }
+        r.name:SetWordWrap(false)
+        for k = 1, 3 do r.btns[k] = UI.CreateSleekButton(f, 62, 18, "") end
+        r.auto = UI.CreateSleekButton(f, 52, 18, "Undo", "danger")
+        F.roleRows[i] = r
+        return r
+    end
+    local function LayoutRoles(adv, y, W)
+        for _, r in ipairs(F.roleRows) do
+            r.name:Hide(); r.auto:Hide()
+            for _, b in ipairs(r.btns) do b:Hide() end
+        end
+        local roster = ns.MergedRoster(adv.participants)
+        F.roleHead:ClearAllPoints()
+        F.roleHead:SetPoint("TOPLEFT", 14, -y)
+        if #roster == 0 then F.roleHead:Hide() return y end
+        F.roleHead:Show()
+        y = y + 16
+        for i, p in ipairs(roster) do
+            if i > 10 then break end
+            local r = RoleRow(i)
+            local tok = ns.ClassToken(p.classFile) or ns.ClassToken(p.class)
+            local color = tok and ns.CLASS_COLORS[tok] or "f5e6c8"
+            r.name:ClearAllPoints()
+            r.name:SetPoint("TOPLEFT", 18, -(y + 3))
+            r.name:SetWidth(150)
+            r.name:SetText("|cff" .. tostring(color) .. tostring(p.name) .. "|r")
+            r.name:Show()
+            local roles = ns.ClassRoles(tok)
+            local x = 172
+            if #roles <= 1 then
+                local b = r.btns[1]
+                b:ClearAllPoints()
+                b:SetPoint("TOPLEFT", x, -y)
+                b:SetText(ROLE_NAMES[roles[1] or "DAMAGER"] or "Damage")
+                b:LockHighlight()
+                b:Disable()
+                b:Show()
+            else
+                for k, role in ipairs(roles) do
+                    local b = r.btns[k]
+                    b:Enable()
+                    b:ClearAllPoints()
+                    b:SetPoint("TOPLEFT", x + (k - 1) * 66, -y)
+                    b:SetText(ROLE_NAMES[role])
+                    if p.role == role then b:LockHighlight() else b:UnlockHighlight() end
+                    b:SetScript("OnClick", function()
+                        local ok, why = ns.SetMemberRole(adv.id, p.name, role)
+                        UI.SetStatus(ok and (p.name .. " is " .. ROLE_NAMES[role] .. " now.") or why, ok and "good" or "error")
+                        UI.RefreshFixNames()
+                    end)
+                    b:Show()
+                end
+                if p.roleByHand then
+                    r.auto:ClearAllPoints()
+                    r.auto:SetPoint("TOPLEFT", x + #roles * 66 + 4, -y)
+                    r.auto:SetScript("OnClick", function()
+                        ns.SetMemberRole(adv.id, p.name, nil)
+                        UI.SetStatus("The recorded role is back for " .. p.name .. ".", "good")
+                        UI.RefreshFixNames()
+                    end)
+                    r.auto:Show()
+                end
+            end
+            y = y + 22
+        end
+        return y + 6
+    end
+
     function UI.RefreshFixNames()
         local adv = Run()
         if not adv then f:Hide() return end
-        F.title:SetText("|cffffd100Fix names:|r |cfff5e6c8" .. (adv.title or "Adventure") .. "|r")
+        F.title:SetText("|cffffd100Edit run:|r |cfff5e6c8" .. (adv.title or "Adventure") .. "|r")
         local W = f:GetWidth() - 28
         local y = 30 + math.ceil(F.sub:GetStringHeight() or 28) + 10
+        if adv.kind ~= "world" then
+            F.dunLbl:ClearAllPoints()
+            F.dunLbl:SetPoint("TOPLEFT", 14, -(y + 3))
+            F.dunLbl:SetPoint("RIGHT", f, "RIGHT", -170, 0)
+            F.dunLbl:SetText("|cffd8dee9Dungeon:|r |cfff5e6c8" .. tostring(adv.instanceName or adv.zone or "?") .. "|r")
+            F.dunBtn:ClearAllPoints()
+            F.dunBtn:SetPoint("TOPRIGHT", -70, -y)
+            F.dunUndo:ClearAllPoints()
+            F.dunUndo:SetPoint("TOPRIGHT", -14, -y)
+            F.dunLbl:Show(); F.dunBtn:Show()
+            if adv.instanceRecorded then F.dunUndo:Show() else F.dunUndo:Hide() end
+            y = y + 28
+        else
+            F.dunLbl:Hide(); F.dunBtn:Hide(); F.dunUndo:Hide()
+        end
+        y = LayoutRoles(adv, y, W)
         F.chipHead:ClearAllPoints()
         F.chipHead:SetPoint("TOPLEFT", 14, -y)
         y = y + 16
@@ -913,7 +1109,7 @@ do
         F.chipBox:SetPoint("TOPLEFT", 14, -y)
         F.chipBox:SetSize(W, 20)
         local chipH = (#list > 0) and UI.FlowRow(F.chipBox, list, nil, { width = W, rowH = 18, gap = 4 }) or 0
-        if #list == 0 then F.chipHead:SetText("|cff8f9ba8No names recorded in this run yet.|r") else F.chipHead:SetText("|cffd8dee9Names in this run (click one):|r") end
+        if #list == 0 then F.chipHead:SetText("|cff8f9ba8No names recorded in this run yet.|r") else F.chipHead:SetText("|cffd8dee9Fix a name (click one):|r") end
         y = y + chipH + 12
         F.fromLbl:ClearAllPoints(); F.fromLbl:SetPoint("TOPLEFT", 14, -y)
         F.toLbl:ClearAllPoints(); F.toLbl:SetPoint("TOPLEFT", 214, -y)

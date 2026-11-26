@@ -451,8 +451,10 @@ function UI.LayoutStoryCover(st, info)
         B.coverTitle:ClearAllPoints()
         B.coverTitle:SetPoint("TOPLEFT", 12, -(sceneH + 16))
         B.coverTitle:SetPoint("RIGHT", -12, 0)
-        local h = sceneH + 16 + (B.coverTitle:GetStringHeight() or 20) + 10 + (#gear > 0 and (B.coverGear:GetStringHeight() or 40) or 0) + 16
-        if #gear == 0 then B.coverGear:SetText("") end
+        -- 0.6.5 (Mor): no gear list under the scene; clicking a figure
+        -- shows what they wore in the character window
+        B.coverGear:SetText("")
+        local h = sceneH + 16 + (B.coverTitle:GetStringHeight() or 20) + 16
         B.cover:SetHeight(math.ceil(h))
         return math.ceil(h) + 10
     end
@@ -528,7 +530,7 @@ do
     aBtn:SetPoint("BOTTOMLEFT", iBtn, "TOPLEFT", 0, 6)
     aBtn:SetPoint("BOTTOMRIGHT", iBtn, "TOPRIGHT", 0, 6)
     aBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("ADVENTURE") end)
-    local dBtn = UI.CreateSleekButton(e, 100, 24, "Dungeon/Raid Story Template", "gold")
+    local dBtn = UI.CreateSleekButton(e, 100, 24, "Dungeon Story Template", "gold")
     dBtn:SetPoint("BOTTOMLEFT", aBtn, "TOPLEFT", 0, 6)
     dBtn:SetPoint("BOTTOMRIGHT", aBtn, "TOPRIGHT", 0, 6)
     dBtn:SetScript("OnClick", function() UI.OpenSkillTemplateModal("STORY") end)

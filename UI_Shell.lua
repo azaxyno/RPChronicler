@@ -397,7 +397,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.4") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.5") .. "|r")
 end
 
 -- Left rail
@@ -1004,8 +1004,21 @@ do
         if userInput and copyText then self:SetText(copyText); self:HighlightText() end
         copyScroll:UpdateScrollChildRect()
     end)
+    -- 0.6.5: set when Ctrl in the instruction line switched to the copy
+    -- step; any other key than C then goes back to the line (Ctrl+V,
+    -- Ctrl+A ... keep working there)
+    local backTo
     copyEb:SetScript("OnKeyDown", function(self, key)
+        if backTo and key ~= "C" and key ~= "LCTRL" and key ~= "RCTRL" then
+            local b = backTo
+            backTo = nil
+            UI.AskLine(b.opts)
+            eb:SetText(b.text)
+            eb:SetCursorPosition(#b.text)
+            return
+        end
         if key == "C" and IsControlKeyDown() and copyText then
+            backTo = nil
             self:HighlightText()
             ns.Debug("copy", "instruction popup Ctrl+C: len " .. #(self:GetText() or ""))
             UI.ShowToast("|cffffd100Copied|r |cff5cb85cto clipboard!|r", 1.8, 0.36, 0.72, 0.36)
@@ -1020,6 +1033,19 @@ do
         f:SetHeight(30 + math.ceil(sub:GetStringHeight() or 14) + 8 + boxH + 10 + 22 + 10)
     end
     eb:SetScript("OnEnterPressed", Accept)
+    -- 0.6.5 (Mor): Ctrl in the instruction line selects the whole copy
+    -- right away (instruction included), so the C of Ctrl+C copies it: one
+    -- Ctrl+C, no Enter and no second press. An addon can't write to the
+    -- clipboard; the game copies the selected text itself.
+    eb:SetScript("OnKeyDown", function(self, key)
+        if (key ~= "LCTRL" and key ~= "RCTRL") or not (opts and opts.ctrlCopy) then return end
+        local text = ((self:GetText() or ""):gsub("||", "|")):match("^%s*(.-)%s*$")
+        local ok, body, head = pcall(opts.ctrlCopy, text)
+        if not ok or type(body) ~= "string" then return end
+        local keep = { opts = opts, text = self:GetText() or "" }
+        UI.AskLineCopy(head, body)
+        backTo = keep
+    end)
     eb:SetScript("OnEscapePressed", Escape)
     eb:SetScript("OnTextChanged", function(self)
         if (self:GetText() or "") == "" then hint:Show() else hint:Hide() end
@@ -1041,6 +1067,7 @@ do
 
     function UI.AskLine(o)
         opts = o or {}
+        backTo = nil
         title:SetText("|cffffd100" .. (opts.title or "RP Chronicler") .. "|r")
         sub:SetText("|cffb0bac5" .. (opts.sub or "") .. "|r")
         hint:SetText(opts.placeholder or "")
@@ -1059,6 +1086,7 @@ do
 
     function UI.AskLineCopy(titleText, body)
         opts = {}
+        backTo = nil
         copyText = body or ""
         title:SetText(titleText or "|cffffd100RP Chronicler|r")
         sub:SetText("|cffb0bac5Selected. Press |cffffd100Ctrl+C|cffb0bac5 to copy, and this closes by itself.|r")

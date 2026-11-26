@@ -64,6 +64,18 @@ local function PlaceFloating()
     end
 end
 
+-- 0.6.5 (Mor): feature ideas and bug reports. An addon can't go online,
+-- so this shows the links to copy, with the bug report under them.
+ns.FEEDBACK_URL = "https://github.com/azaxyno/RPChronicler/issues/new/choose"
+function UI.OpenFeedback()
+    UI.ShowCopyBox("|cffffd100Feedback and bug reports|r",
+        "|cffb0bac5Select All, Ctrl+C, and open the first link in your browser. Or write a comment on RP Chronicler's CurseForge page.|r",
+        "Ideas and bug reports: " .. ns.FEEDBACK_URL .. "\n" ..
+        "Or comment on RP Chronicler's CurseForge page.\n\n" ..
+        "For a bug, say what you were doing and paste the report below (it holds no chat).\n\n" ..
+        ns.BuildDebugReport())
+end
+
 -- Right-click menu (0.4.0): Start/Stop, Pause/Resume, Mark Moment, Story
 -- Book, Clear logs. A plain frame, so it works in combat too.
 do
@@ -84,6 +96,8 @@ do
             if run then UI.OpenRecording(run.id, "FULL") end
         end },
         { key = "book", label = "Story Book", fn = function() UI.OpenStoryBook() end },
+        -- 0.6.5: ideas and bug reports
+        { key = "feedback", label = "Feedback / bug report", fn = function() UI.OpenFeedback() end },
         { key = "clear", label = "Clear chat logs", fn = function()
             ns.ClearSessionLogs()
             print("|cff00ff00[RP Chronicler]|r All logs cleared.")
@@ -429,6 +443,8 @@ SlashCmdList["RPCHRONICLER"] = function(msg)
     elseif low == "wipe" then
         UI.ShowPrompt("|cffff6b6bDelete ALL RP Chronicler data?|r\nEvery recording, story, companion and setting is removed, then the UI reloads. This cannot be undone.",
             "Delete everything", function() ns.WipeAllData() end, "Cancel", nil)
+    elseif low == "feedback" or low == "bug" then
+        UI.OpenFeedback()
     elseif low == "debug" then
         UI.ShowCopyBox("|cffffd100RP Chronicler debug report|r",
             "|cffb0bac5Select All, Ctrl+C, and paste it into your bug report. It holds no chat.|r",

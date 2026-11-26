@@ -156,7 +156,12 @@ do
     S.newBtn.tipTitle = GOLD .. "New chronicle|r"
     S.newBtn.tipText = "A volume for stories that belong together, like the road of an alt you level with a friend."
     S.importBtn = UI.CreateSleekButton(f, 64, 20, "+ Import")
-    S.importBtn:SetPoint("RIGHT", S.newBtn, "LEFT", -6, 0)
+    if B.CHRONICLES then
+        S.importBtn:SetPoint("RIGHT", S.newBtn, "LEFT", -6, 0)
+    else
+        S.newBtn:Hide()
+        S.importBtn:SetPoint("TOPRIGHT", -12, -10)
+    end
     S.importBtn.tipTitle = GOLD .. "Import Story from AI|r"
     S.importBtn.tipText = "Paste the colored story your AI wrote and pick the run it belongs to."
     S.importBtn:SetScript("OnClick", function() UI.OpenStoryImportModal(nil) end)
@@ -179,7 +184,7 @@ do
         S.Refresh()
     end)
     box:SetScript("OnEnter", function(self)
-        UI.Tooltip(self, GOLD .. "Search|r", "Finds stories by title, place, party member, date or chronicle, on every shelf.")
+        UI.Tooltip(self, GOLD .. "Search|r", B.CHRONICLES and "Finds stories by title, place, party member, date or chronicle, on every shelf." or "Finds stories by title, place, party member or date.")
     end)
     box:SetScript("OnLeave", UI.HideTooltip)
     S.search = box
@@ -436,7 +441,7 @@ function S.Refresh()
             local r = S.rows[i] or MakeRow(S.child)
             S.rows[i] = r
             local info = ns.GetBookInfo(st)
-            local c = ns.ChronicleOf(st.id)
+            local c = B.CHRONICLES and ns.ChronicleOf(st.id)
             r.story = st
             r:ClearAllPoints()
             r:SetPoint("TOPLEFT", 0, -(i - 1) * 38)
@@ -502,19 +507,23 @@ function S.Refresh()
     end
 
     local vols, loose = {}, {}
-    for _, c in ipairs(ns.GetChronicles()) do
+    for _, c in ipairs(B.CHRONICLES and ns.GetChronicles() or {}) do
         local stories = ns.ChronicleStories(c)
         local new = false
         for _, st in ipairs(stories) do if B.IsNew(st) then new = true end end
         table.insert(vols, { open = { kind = "chronicle", id = c.id }, title = c.title, new = new,
             w = 44 + math.min(6, #stories) * 3, h = 140 + (B.Hash(c.id) % 24) })
     end
-    for _, st in ipairs(ns.LooseStories()) do
+    for _, st in ipairs(B.CHRONICLES and ns.LooseStories() or ns.GetStories()) do
         table.insert(loose, { open = { kind = "story", id = st.id }, title = ns.GetBookInfo(st).name, new = B.IsNew(st),
             w = 32 + (B.Hash(st.id) % 7), h = 120 + (B.Hash(st.id .. "h") % 26) })
     end
-    Group("|cffc8b48cCHRONICLES|r" .. (#vols == 0 and "   |cff8f9ba8None yet: + New chronicle makes a volume for stories that belong together.|r" or ""), vols)
-    if #loose > 0 then Group("|cffc8b48cLOOSE STORIES|r", loose) end
+    if B.CHRONICLES then
+        Group("|cffc8b48cCHRONICLES|r" .. (#vols == 0 and "   |cff8f9ba8None yet: + New chronicle makes a volume for stories that belong together.|r" or ""), vols)
+        if #loose > 0 then Group("|cffc8b48cLOOSE STORIES|r", loose) end
+    else
+        Group("|cffc8b48cYOUR STORIES|r   |cff8f9ba8Newest first. Click a book to open it.|r", loose)
+    end
     S.child:SetHeight(math.max(10, y))
 end
 

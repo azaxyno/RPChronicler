@@ -327,12 +327,10 @@ The header has the run type, zone, date and duration, levels gained, quests comp
 
 The Story Book has its own place on the rail. It opens on **your shelf**: a wall of wooden shelves where every story stands as a leather book with gold bands and its title on the spine.
 
-- **The shelf.** Each book takes its color from its kind of run (a chronicle keeps the color you give it), and a story you imported this session glows until you open it. Point at a book for its date, place, kind of run, party and length; click it to open it. **Search** finds stories by title, place, party member, date or chronicle, and **+ Import** adds a new story.
-- **Chronicles.** Put stories that belong together in one thick volume, for example the whole road of an alt you level with a friend. **+ New chronicle** on the shelf makes one (a name of up to 32 letters), and **Book > Add to a chronicle** puts the story you are reading in one, moves it to another or takes it out. Stories in no volume stand at the end as thin loose books.
-- **The open book.** A book opens across the whole window as two facing pages, with the game's book sound. The first page of a story is its title page: the party scene, the title, the place, the date and the run's numbers, with a list of its chapters (click one to go there). Every chapter starts on a new page. Turn pages with the page corners (bottom left and right) or the mouse wheel; **Contents** goes back to the start. **< Close book** closes it and puts it back on the shelf. In a narrow window the book shows one page at a time.
-- **A chronicle as a book.** A volume opens on its cover (its name, dates and the party scene of its first story, or the one you pick), then its contents, then each story in order on its own pages. Point at a story in the contents for **Up**, **Down**, **Cover** and **Out** (Out takes it out of the volume; it stays on the shelf).
-- **The Book menu** (top right of the open book) holds everything else: for the story you are reading, **Add to a chronicle**, **Share as plain text**, **Read outside the game**, **Copy for viewer**, **Edit details**, **Re-import**, **Open the run** and **Delete story**; for a chronicle, **Rename**, **Change color**, **Move left** or **right** on the shelf and **Delete chronicle** (its stories stay on the shelf).
-- **Pages:** parchment by default, with the story's colors inked darker so they read well on paper, or **Night** pages (dark, with the story's own bright colors) in **Options > AI & Stories > Pages**. **Book animations** (the cover opening, page turns, the book closing) can be turned off there too.
+- **The shelf.** Your stories stand newest first, each book colored by its kind of run. A story you imported this session glows until you open it. Point at a book for its date, place, kind of run, party and length; click it to open it. **Search** finds stories by title, place, party member or date, and **+ Import** adds a new story.
+- **The open book.** A book opens across the whole window as two facing pages, with the game's book sound. The first page of a story is its title page: the party scene, the title, the place, the date and the run's numbers, with a list of its chapters (click one to go there). Every chapter starts on a new page. Turn pages with **< Previous** and **Next >** under the pages, or the mouse wheel; **Contents** goes back to the start. **< Close book** closes it and puts it back on the shelf. In a narrow window the book shows one page at a time.
+- **The Book menu** (top right of the open book) holds everything else for the story you are reading: **Share as plain text**, **Read outside the game**, **Copy for viewer**, **Edit details**, **Re-import**, **Open the run** and **Delete story**.
+- **Pages:** parchment by default, with the story's colors inked dark so they read well on paper, or **Night** pages (dark, with the story's own bright colors) in **Options > AI & Stories > Pages**. **Book animations** (the cover opening, page turns, the book closing) can be turned off there too.
 
 Every run shows its own icon (in Adventures, and on a story's title page when scenes are off): one per dungeon and raid (raids in a gold frame), and one per kind of land for the open world (desert, forest, snow, coast, the capitals and more). Every story your AI wrote is there under the title the AI gave it on its first line (`Title: Shadows Over Pyrewood`), with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
 
@@ -485,8 +483,8 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 18 | `UI_Adventures.lua` | Adventures view, record bar, run list, size meter, story import |
 | 19 | `UI_Scenes.lua` | Story scenes: the party (3D or shadows) and each boss, zoom and the big scene window |
 | 20 | `UI_StoryBook.lua` | Story Book section: what it shows (shelf or book), story text, Share, Details, Re-Import, Delete |
-| 21 | `UI_Shelf.lua` | The Story Book's shelf: leather books on wooden shelves, chronicles, loose stories, search |
-| 22 | `UI_Book.lua` | The open book: two facing pages, title page, chapters, page turns, contents of a chronicle, the Book menu |
+| 21 | `UI_Shelf.lua` | The Story Book's shelf: leather books on wooden shelves, search |
+| 22 | `UI_Book.lua` | The open book: two facing pages, title page, chapters, page turns, the Book menu |
 | 23 | `UI_Options.lua` | Options pages and the template window |
 | 24 | `UI_Setup.lua` | First-run setup |
 | 25 | `UI_Commands.lua` | The Ctrl+C binding, the RP button (minimap or floating) and its menu, `/rp` commands |
@@ -509,7 +507,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | `players[name]` | Companions: kind, names, relationship, tone, your note, include mode, level, race, class, guild, first met, last seen, last 5 chat lines |
 | `adventures` | Up to 40 runs: type, zone, dates, party, places, levels, quests, kills and foe counts, PvP, bosses, loot, milestones, highlights, timeline, screenshots |
 | `stories` | Imported stories, each with its own copy of the run's details and its Story Book fields (title included), so it survives deleting the recording |
-| `chronicles` | Your Story Book volumes: name, color, cover story and the ids of their stories in order (deleting one never deletes its stories) |
+| `chronicles` | Story Book volumes (hidden for now; any you made are kept) |
 | `activeRun` | The run being recorded right now, so it survives `/reload` and disconnects |
 | `capture`, `logGroups` | What chat is kept, and which Full Log groups are on |
 | `setupVersion`, `wipedAt` | Which setup you've seen, and when you last deleted everything |

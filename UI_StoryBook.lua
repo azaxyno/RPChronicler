@@ -13,6 +13,10 @@ local UI = ns.UI
 -- =========================================================
 local B = {}
 UI.storyBook = B
+-- 0.6.7 (Mor): Chronicles are hidden for now: the shelf holds stories
+-- only and every story opens as its own book. Saved chronicles are kept
+-- (RPChroniclerDB.chronicles), just not shown; true brings them back.
+B.CHRONICLES = false
 local root = UI.NewSection("BOOK", "Story Book", "The stories your AI wrote from your runs.")
 B.root = root
 UI.AddRailButton("BOOK", "Story Book", UI.ICONS.STORY, "Read, share and edit the stories your AI wrote from your runs.")
@@ -30,7 +34,9 @@ end
 -- is in one, at the story's first page); without one, the shelf.
 function UI.OpenStoryBook(storyId)
     if storyId and ns.FindStory(storyId) then
-        local c = ns.ChronicleOf(storyId)
+        -- 0.6.7 (Mor): chronicles are hidden for now, so a story always
+        -- opens as its own book
+        local c = B.CHRONICLES and ns.ChronicleOf(storyId)
         ns.state.bookView = "BOOK"
         ns.state.bookOpen = c and { kind = "chronicle", id = c.id } or { kind = "story", id = storyId }
         ns.state.bookStoryId = storyId
@@ -373,7 +379,7 @@ function UI.RefreshStoryBook()
     -- 0.6.4: skill users hear once a session when the story rules changed
     local notice = not B.noticeShown and ns.TemplateNotice()
     if notice then B.noticeShown = true; UI.SetStatus(notice, "warn") end
-    if #ns.GetStories() == 0 and #ns.GetChronicles() == 0 then
+    if #ns.GetStories() == 0 and not (B.CHRONICLES and #ns.GetChronicles() > 0) then
         if B.HideBook then B.HideBook() end
         if B.HideShelf then B.HideShelf() end
         B.empty:Show()
@@ -381,7 +387,7 @@ function UI.RefreshStoryBook()
     end
     B.empty:Hide()
     local open = ns.state.bookOpen
-    local exists = open and ((open.kind == "story" and ns.FindStory(open.id)) or (open.kind == "chronicle" and ns.FindChronicle(open.id)))
+    local exists = open and ((open.kind == "story" and ns.FindStory(open.id)) or (B.CHRONICLES and open.kind == "chronicle" and ns.FindChronicle(open.id)))
     if ns.state.bookView == "BOOK" and exists and B.ShowBook then
         if B.HideShelf then B.HideShelf() end
         B.ShowBook()

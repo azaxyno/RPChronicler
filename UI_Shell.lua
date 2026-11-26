@@ -18,7 +18,7 @@ UI.BACKDROP = BackdropTemplateMixin and "BackdropTemplate" or nil
 UI.ICONS = {
     COPY       = "Interface\\Icons\\INV_Scroll_03",
     PLAYERS    = "Interface\\Icons\\Spell_Holy_PrayerOfFortitude",
-    ADVENTURES = "Interface\\AddOns\\RPChronicler\\Media\\Icons\\tab_adventures", -- 0.6.6: our spyglass, used nowhere else
+    ADVENTURES = "Interface\\AddOns\\RPChronicler\\Media\\Icons\\tab_adventures.png", -- 0.6.6: our spyglass, used nowhere else (0.6.7: with .png)
     OPTIONS    = "Interface\\Icons\\INV_Misc_Gear_01",
     STORY      = "Interface\\Icons\\INV_Misc_Book_09",
     MARK       = "Interface\\Icons\\INV_Misc_Note_01",
@@ -397,7 +397,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.6") .. "|r")
+    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.7") .. "|r")
 end
 
 -- Left rail

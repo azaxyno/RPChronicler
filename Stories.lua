@@ -1082,17 +1082,16 @@ function ns.BossLooks(st, name)
     local cache = type(RPChroniclerDB) == "table" and RPChroniclerDB.bossLooks and RPChroniclerDB.bossLooks[name] or nil
     local display = (type(info) == "table" and tonumber(info.display)) or (cache and tonumber(cache.display)) or nil
     local npc = (type(info) == "table" and tonumber(info.npc)) or (cache and tonumber(cache.npc)) or nil
+    -- 0.6.8: the journal by the fight's encounter ID or the boss's name
+    -- (the game hides creatures inside dungeons, so a look recorded from
+    -- the unit is rare), then the built-in list (SceneData.lua)
     if not display and ns.JournalBossDisplay then
-        -- the story's own header names the dungeon even when an older run
-        -- was named after the city around it
-        local book = type(st) == "table" and type(st.book) == "table" and st.book or {}
-        local enc = type(info) == "table" and info.encounter or nil
-        local fromBoss = ns.JournalInstanceOfBoss and ns.JournalInstanceOfBoss(name) or false
-        for _, inst in ipairs({ fromBoss, book.instance or false, type(st) == "table" and st.instanceName or false, type(st) == "table" and st.zone or false }) do
-            if display then break end
-            if inst then display = ns.JournalBossDisplay(inst, name, enc) end
-        end
+        local enc = (type(info) == "table" and tonumber(info.encounter)) or (cache and tonumber(cache.encounter)) or nil
+        local jd, jn = ns.JournalBossDisplay(name, enc)
+        display, npc = jd, npc or jn
     end
+    local known = ns.BOSS_LOOKS and ns.BOSS_LOOKS[name]
+    if known then display, npc = display or known[2], npc or known[1] end
     return display, npc
 end
 

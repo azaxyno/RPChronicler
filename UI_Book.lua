@@ -495,8 +495,9 @@ function K.AddStory(pages, st, index, total)
         end
         for pi, para in ipairs(ch.paras) do
             local boss = ch.bossAt and ch.bossAt[pi]
-            if boss and UI.CreateBossPanel then
-                local bh = math.floor(math.max(110, math.min(170, H * 0.38)))
+            if boss and UI.CreateStoryScene then
+                -- 0.6.8: the party facing the boss (a boss scene)
+                local bh = math.floor(math.max(140, math.min(230, H * 0.42)))
                 if cy + bh > H and cy > 0 then NewPage() end
                 Add(cur, { type = "boss", story = st, boss = boss, y = cy, h = bh })
                 cy = cy + bh + 10
@@ -726,7 +727,7 @@ function K.DrawPage(side, n)
     local usedScene, usedBoss = false, false
     local function Finish()
         if p.scene and not usedScene then p.scene.frame:Hide() end
-        if p.boss and not usedBoss then p.boss:Hide() end
+        if p.bossScene and not usedBoss then p.bossScene.frame:Hide() end
     end
     local page = K.list and K.list[n]
     p.num:SetText(page and tostring(n) or "")
@@ -814,21 +815,27 @@ function K.DrawPage(side, n)
                 end
             end
         elseif it.type == "boss" and not K.noModels then
-            if not p.boss then
-                local ok, panel = pcall(UI.CreateBossPanel, p)
-                if ok and panel then
-                    p.boss = panel
-                    panel:SetFrameLevel(p:GetFrameLevel() + 4)
+            if not p.bossScene then
+                local ok, scene = pcall(UI.CreateStoryScene, p, {
+                    bigTip = "Shows this fight in a big window. Or click the scene.",
+                    onBig = function(sc) UI.OpenBigScene(sc.story, sc.view, ns.GetBookInfo(sc.story).name, sc.bossName) end,
+                })
+                if ok and scene then
+                    p.bossScene = scene
+                    scene.frame:SetFrameLevel(p:GetFrameLevel() + 4)
                 end
             end
-            if p.boss then
+            if p.bossScene then
                 usedBoss = true
-                p.boss:ClearAllPoints()
-                p.boss:SetPoint("TOPLEFT", p, "TOPLEFT", x0, -(top + it.y))
-                p.boss:SetSize(K.cw, it.h)
-                if p.boss.story ~= it.story or p.boss.boss ~= it.boss or not p.boss:IsShown() then
-                    p.boss:Show()
-                    pcall(p.boss.SetBoss, p.boss, it.story, it.boss)
+                local sc = p.bossScene
+                sc.frame:ClearAllPoints()
+                sc.frame:SetPoint("TOPLEFT", p, "TOPLEFT", x0, -(top + it.y))
+                sc.frame:SetSize(K.cw, it.h)
+                if sc.story ~= it.story or sc.bossName ~= it.boss then
+                    sc.frame:Show()
+                    pcall(sc.SetBoss, sc, it.story, it.boss)
+                elseif not sc.frame:IsShown() then
+                    sc.frame:Show()
                 end
             end
         end
@@ -851,6 +858,9 @@ function K.Render(sides)
         K.pageText:SetText("|cffd7c4a3" .. K.at .. (K.at + 1 <= n and ("-" .. (K.at + 1)) or "") .. " of " .. n .. "|r")
     end
     if K.list and K.list[K.at] and K.list[K.at].storyId then ns.state.bookStoryId = K.list[K.at].storyId end
+    -- 0.6.8: the open story's music (dungeons and raids)
+    local page = K.list and K.list[K.at]
+    if UI.BookMusic then UI.BookMusic(page and page.storyId and ns.FindStory(page.storyId) or nil) end
     K.last[K.Key()] = K.at
 end
 
@@ -1169,7 +1179,10 @@ end
 
 -- a book hidden mid-animation (the window closed) never hears its
 -- animation finish: settle it so it is never left half turned
-K.frame:HookScript("OnHide", function() if K.busy then K.Settle() end end)
+K.frame:HookScript("OnHide", function()
+    if K.busy then K.Settle() end
+    if UI.BookMusic then UI.BookMusic(nil) end
+end)
 
 local function OnDone(ag, fn)
     ag:SetScript("OnFinished", fn)
@@ -1195,6 +1208,9 @@ function K.ShowClosed(which)
     K.PlaceCovers()
     K.Settle()
     K.pageText:SetText("|cffd7c4a3" .. (which == "FRONT" and "Cover" or "Back cover") .. "|r")
+    -- 0.6.8: a closed story book plays its music too
+    local o = ns.state.bookOpen
+    if UI.BookMusic then UI.BookMusic(o and o.kind == "story" and ns.FindStory(o.id) or nil) end
 end
 
 -- Shows the pages at once (Contents, a story asked for by name)

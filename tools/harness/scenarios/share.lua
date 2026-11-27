@@ -76,7 +76,7 @@ NOW = NOW + 120
 -- a clean transfer
 NS.Set("storySharing", "ANYONE")
 NS.ShareStoryWith(st.id, "Bob-Realm")
-Pump(1)
+Pump(3)
 Check("asked first", #prompts == 1 and prompts[1].l1 == "Accept Tome")
 prompts[1].f1(); prompts = {}
 Pump()
@@ -100,7 +100,7 @@ filter = function(b)
   return outb
 end
 NS.ShareStoryWith(st.id, "Bob-Realm")
-Pump(1)
+Pump(3)
 Check("repeat asks replace or keep both", #prompts == 1 and prompts[1].l1 == "Replace")
 prompts[1].f1(); prompts = {}
 Pump()
@@ -116,7 +116,7 @@ filter = function(b)
   return b
 end
 NS.ShareStoryWith(st.id, "Bob-Realm")
-Pump(1); prompts[1].f2(); prompts = {}   -- keep both
+Pump(3); prompts[1].f2(); prompts = {}   -- keep both
 Pump()
 Check("damaged book refused", Gifts() == 1)
 filter = nil
@@ -124,7 +124,7 @@ NOW = NOW + 120
 
 -- lockdown pauses the sender, then it goes on
 NS.ShareStoryWith(st.id, "Bob-Realm")
-Pump(1); prompts[1].f2(); prompts = {}
+Pump(3); prompts[1].f2(); prompts = {}
 NS._shareRestricted = true
 Pump(400)
 local o = NS.ShareTransfers()
@@ -137,7 +137,7 @@ NOW = NOW + 120
 -- block (a new book: the repeat prompt has no Block button)
 for _, x in ipairs(NS.GetStories()) do if x.shared then x.shared.srcId = "old" end end
 NS.ShareStoryWith(st.id, "Bob-Realm")
-Pump(1); prompts[1].f3(); prompts = {}
+Pump(3); prompts[1].f3(); prompts = {}
 Pump()
 Check("blocked", NS.ShareBlocked("Bob") and Gifts() == 2)
 NOW = NOW + 120
@@ -149,7 +149,7 @@ NS.ClearShareBlocks()
 -- the receiver goes away mid-transfer (logout): it times out
 NOW = NOW + 120
 NS.ShareStoryWith(st.id, "Bob-Realm")
-Pump(1); prompts[1].f2(); prompts = {}
+Pump(3); prompts[1].f2(); prompts = {}
 filter = function() return {} end
 Pump(400)
 local o2, i2 = NS.ShareTransfers()
@@ -160,6 +160,24 @@ filter = nil
 NS._shareInInstance = true
 Check("no sending in a dungeon", not NS.ShareStoryWith(st.id, "Bob-Realm"))
 NS._shareInInstance = false
+
+-- names: first and last name, junk, not online
+local c = NS.ShareCandidates("Morai Galeclaw")
+Check("first name is tried first", c[1] == "Morai" and c[2] == "MoraiGaleclaw")
+Check("realm kept", NS.ShareCandidates("Morai Galeclaw-Some Realm")[1] == "Morai-SomeRealm")
+Check("empty refused", not NS.ShareStoryWith(st.id, "  "))
+NOW = NOW + 120
+filter = function() return {} end
+NS.ShareStoryWith(st.id, "dsjfls")
+Fire("CHAT_MSG_SYSTEM", "No player named 'dsjfls' is currently playing.")
+local o3 = NS.ShareTransfers()
+Check("not online: dropped at once", next(o3) == nil and PRINTED:find("No player named", 1, true) ~= nil)
+NS.ShareStoryWith(st.id, "Ghost")
+Pump(60)
+local o4 = NS.ShareTransfers()
+Check("no addon: ping times out", next(o4) == nil and PRINTED:find("did not answer", 1, true) ~= nil)
+filter = nil
+Check("people list", type(NS.SharePeople()) == "table")
 
 -- the code path saves a gift too
 local okc, idc = NS.AddSharedStory(NS.ReadShareCode(code), { via = "code" })

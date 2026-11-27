@@ -57,6 +57,7 @@ local ok3, err3 = pcall(function()
   local S = NS.UI.shelf
   local st = NS.GetStories()[1]
   S.OpenShelfMenu(S.shareBtn, nil, "PICK")
+  S.OpenPeople(S.shareBtn, st)
   S.OpenShelfMenu(S.shareBtn, nil, st.id)
   Fire("GLOBAL_MOUSE_DOWN", "LeftButton")
   local sp = S.spines[1]

@@ -467,10 +467,14 @@ end
 -- ok, why. Asks the friend first; the pieces go only after Accept.
 function ns.ShareStoryWith(storyId, target, opts)
     local st = ns.FindStory(storyId)
-    target = type(target) == "string" and target:gsub("^%s+", ""):gsub("%s+$", "") or ""
     if not st then return false, "No story." end
-    if target == "" or target:find("[%s%c|]") then return false, "Type a character name (Name or Name-Realm)." end
-    if Short(target) == Short(ns.PlayerName()) then return false, "That is you." end
+    -- 0.7.1: Forever shows a first and a last name ("Morai Galeclaw"), but
+    -- the game whispers the character name (the first word, plus -Realm).
+    -- Each spelling is tried in turn: a ping, then the offer.
+    local cands = ns.ShareCandidates(target)
+    if #cands == 0 then return false, "Type their character name (Morai, Morai Galeclaw or Morai-Realm)." end
+    target = cands[1]
+    if Short(target) == Short(UnitName and UnitName("player") or "") or Short(target) == Short(ns.PlayerName()) then return false, "That is you." end
     if InCombatLockdown and InCombatLockdown() then return false, "Leave combat first." end
     if InInstance() then return false, "Leave the dungeon first. Books are sent only in the open world and in cities." end
     local raw, why = ns.BuildSharePayload(st, opts)
@@ -482,12 +486,54 @@ function ns.ShareStoryWith(storyId, target, opts)
     local id = NewId()
     local title = Plain(ns.StripColors((ns.GetBookInfo and ns.GetBookInfo(st).name) or st.title or "Story"), CAP.title)
     local src = Plain((type(st.shared) == "table" and st.shared.srcId) or st.id, 24)
-    out[id] = { id = id, to = target, pieces = pieces, sum = ns.Adler32(raw), title = title, state = "ASK", last = Now(), rounds = 0, ends = 0 }
-    Send(string.format("O %s %d %s %s %s %s", id, #pieces, out[id].sum, PROTO, src ~= "" and src or "-", title), target)
-    Say(string.format("Asking %s to accept '%s'...", Gold(Short(target)), title))
+    out[id] = { id = id, to = target, cands = cands, ci = 1, pieces = pieces, sum = ns.Adler32(raw), title = title,
+        src = src ~= "" and src or "-", state = "PING", pingAt = Now(), last = Now(), rounds = 0, ends = 0 }
+    Send("H " .. id, target)
+    Say(string.format("Looking for %s...", Gold(Short(target))))
     Wake()
     return true
 end
+
+-- The spellings to try for what the player typed: the character name
+-- (first word) with the realm they gave, then the whole text without spaces
+function ns.ShareCandidates(text)
+    text = type(text) == "string" and text:gsub("[%c|]", ""):gsub("^%s+", ""):gsub("%s+$", "") or ""
+    if text == "" then return {} end
+    local base, realm = text:match("^(.-)%-([^%-]+)$")
+    if not base or base:match("^%s*$") then base, realm = text, nil end
+    local out, seen = {}, {}
+    local function Add(n)
+        if n and n ~= "" and not seen[n:lower()] and not n:find("%s") then seen[n:lower()] = true; out[#out + 1] = n end
+    end
+    local first = base:match("^(%S+)")
+    Add(first and (realm and (first .. "-" .. realm:gsub("%s", "")) or first))
+    Add(base:gsub("%s+", "") .. (realm and ("-" .. realm:gsub("%s", "")) or ""))
+    return out
+end
+
+local function Offer(t)
+    t.state, t.last = "ASK", Now()
+    Send(string.format("O %s %d %s %s %s %s", t.id, #t.pieces, t.sum, PROTO, t.src, t.title), t.to)
+    Say(string.format("%s is online. Asking them to accept '%s'...", Gold(Short(t.to)), t.title))
+end
+
+-- The game says a name is not online: try the next spelling, else fail
+local function NotFound(name)
+    for id, t in pairs(out) do
+        if t.state == "PING" and Short(t.to):lower() == Short(name):lower() then
+            t.ci = t.ci + 1
+            if t.cands[t.ci] then
+                t.to, t.pingAt, t.last = t.cands[t.ci], Now(), Now()
+                Send("H " .. id, t.to)
+            else
+                out[id] = nil
+                Say(string.format("No player named %s is online. Check the spelling: the character name is their first name.", Gold(t.cands[1])))
+                ns.Notify("shareChanged")
+            end
+        end
+    end
+end
+ns.ShareNotFound = NotFound
 
 local function Missing(t)
     local miss = {}
@@ -581,6 +627,12 @@ function ns.ShareHeard(msg, sender)
     if type(msg) ~= "string" or type(sender) ~= "string" or sender == "" then return end
     local kind, id, rest = msg:match("^(%u) (%w+) ?(.*)$")
     if not kind then return end
+    -- 0.7.1: a ping before the offer: "I id" (or "I id off")
+    if kind == "H" then
+        if ns.ShareBlocked(sender) then return end
+        Send("I " .. id .. (Setting() == "OFF" and " off" or (Setting() == "FRIENDS" and not ns.IsFriendly(sender) and " friends" or "")), sender)
+        return
+    end
     -- incoming book (only while sharing is on and the sender isn't blocked)
     if kind == "O" or kind == "D" or kind == "E" then
         if Setting() == "OFF" or ns.ShareBlocked(sender) then return end
@@ -612,6 +664,19 @@ function ns.ShareHeard(msg, sender)
     local t = out[id]
     if not t or Short(t.to) ~= Short(sender) then return end
     t.last = Now()
+    if kind == "I" and t.state == "PING" then
+        if rest == "off" then
+            out[id] = nil
+            Say(string.format("%s has RP Chronicler but takes no stories (Options > Privacy > Story sharing is Off).", Gold(Short(t.to))))
+        elseif rest == "friends" then
+            out[id] = nil
+            Say(string.format("%s takes stories only from friends, guild and group.", Gold(Short(t.to))))
+        else
+            t.to = sender
+            Offer(t)
+        end
+        return
+    end
     if kind == "Y" and t.state == "ASK" then
         t.state, t.queue = "SEND", {}
         for i = 1, #t.pieces do t.queue[i] = i end
@@ -665,6 +730,10 @@ function Tick()
             Send("E " .. id, t.to)
             t.endAt, t.ends = now, t.ends + 1
         end
+        if t.state == "PING" and now - (t.pingAt or now) > 8 then
+            out[id] = nil
+            Say(string.format("%s did not answer. They need RP Chronicler 0.7.0 or newer (or the name is wrong).", Gold(Short(t.to))))
+        end
         if out[id] and now - t.last > TIMEOUT then
             if t.state == "ASK" then
                 out[id] = nil
@@ -695,6 +764,17 @@ end
 ns.ShareTick = function() Tick() end
 ns.ShareTransfers = function() return out, inc, waiting end
 
+-- "No player named 'X' is currently playing." while a ping waits
+local function NotFoundPattern()
+    local f = ERR_CHAT_PLAYER_NOT_FOUND_S or "No player named '%s' is currently playing."
+    return "^" .. f:gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%s", "(.+)") .. "$"
+end
+ns.On("CHAT_MSG_SYSTEM", function(_, msg)
+    if not next(out) or type(msg) ~= "string" then return end
+    local ok, name = pcall(string.match, msg, NotFoundPattern())
+    if ok and name then NotFound(name) end
+end)
+
 ns.On({ "PLAYER_LOGIN", "CHAT_MSG_ADDON" }, function(event, prefix, msg, channel, sender)
     if event == "PLAYER_LOGIN" then
         Register()
@@ -704,3 +784,41 @@ ns.On({ "PLAYER_LOGIN", "CHAT_MSG_ADDON" }, function(event, prefix, msg, channel
         ns.ShareHeard(msg, sender)
     end
 end)
+
+-- 0.7.1: people you can send to right now: your target, group, online
+-- friends and online guild members. { send = whisper name, show = label }
+function ns.SharePeople()
+    local list, seen = {}, {}
+    local me = ns.StripRealm(UnitName and UnitName("player"))
+    local function Add(send, show)
+        send = ns.SafeStr(send)
+        if not send or send == "" or ns.StripRealm(send) == me then return end
+        local k = ns.StripRealm(send):lower()
+        if seen[k] or #list >= 14 then return end
+        seen[k] = true
+        list[#list + 1] = { send = send, show = show or send }
+    end
+    local function Unit(u)
+        if not (UnitExists and UnitExists(u)) or not ns.SafeBool(UnitIsPlayer(u)) then return end
+        local ok, n, r = pcall(UnitName, u)
+        n, r = ok and ns.SafeStr(n) or nil, ok and ns.SafeStr(r) or nil
+        if n then Add((r and r ~= "") and (n .. "-" .. r) or n, ns.GetUnitFullName(u) or n) end
+    end
+    Unit("target")
+    if ns.ForEachGroupUnit then pcall(ns.ForEachGroupUnit, function(u) Unit(u) end) end
+    if C_FriendList and C_FriendList.GetNumFriends and C_FriendList.GetFriendInfoByIndex then
+        local ok, n = pcall(C_FriendList.GetNumFriends)
+        for i = 1, (ok and tonumber(n) or 0) do
+            local oki, info = pcall(C_FriendList.GetFriendInfoByIndex, i)
+            if oki and type(info) == "table" and info.connected and info.name then Add(info.name, ns.StripRealm(info.name) .. " (friend)") end
+        end
+    end
+    if GetNumGuildMembers and GetGuildRosterInfo then
+        local ok, n = pcall(GetNumGuildMembers)
+        for i = 1, (ok and tonumber(n) or 0) do
+            local oki, name, _, _, _, _, _, _, _, online = pcall(GetGuildRosterInfo, i)
+            if oki and name and online then Add(name, ns.StripRealm(name) .. " (guild)") end
+        end
+    end
+    return list
+end

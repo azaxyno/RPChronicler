@@ -418,7 +418,7 @@ do
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     verBadge:SetPoint("RIGHT", closeBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f7f68v" .. (ns.VERSION or "0.7.0") .. "|r")
+    verBadge:SetText("|cff8f7f68v" .. (ns.VERSION or "0.7.1") .. "|r")
 end
 
 -- The chronicle plaque: "Start a new recording" over "Chronicle a new

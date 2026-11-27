@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: RP Chronicler
 ## Notes: Record your adventures with friends and read them back as illustrated story books in game, plus one-key scene copy for roleplay replies
-## Version: 0.7.0
+## Version: 0.7.1
 ## Author: azaxyno
 ## IconTexture: Interface\AddOns\RPChronicler\Media\logo
 ## SavedVariables: RPChroniclerDB

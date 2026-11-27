@@ -646,7 +646,7 @@ do
         { key = "storyCover", label = "Story scenes",
           tip = "Each story opens with its party: you in 3D in the gear from that run, companions near you as they are, everyone else as a shadow of their race, in front of a painting of the place. At each boss's chapter the party faces the boss, and after the kill you see it fall. Click anyone to see them up close with their items. Off: the book is only written pages (also if your client shows no models)." },
         { key = "standIns", label = "Likeness figures",
-          tip = "On (default): someone in a story who is not near you is drawn as a likeness, their race in the outfit they wore (on a figure of your own sex; the game can't draw faces it never saw). A shared book's author can pick a face for it. Off: their race shadow." },
+          tip = "On (default): someone in a story who is not near you is drawn as a likeness, their race in the outfit they wore (on a figure of your own sex; the game can't draw faces it never saw). Off: their race shadow." },
         { key = "bookMusic", label = "Dungeon music in the book",
           tip = "While a dungeon story's pages are open, the game's own music for that kind of dungeon plays (at your music volume). Off, or when Story scenes is off: the book is silent and the game's music goes on as usual." },
         { key = "bookPages", label = "Pages", names = { PARCHMENT = "Parchment", LIGHT = "Light parchment", NIGHT = "Night" },
@@ -700,7 +700,7 @@ do
         { key = "versionCheck", label = "Update notices",
           tip = "Sends only RP Chronicler's version number to your group and guild, through the game's addon messages, and tells you once when someone has a newer version. Nothing else is ever sent. OFF: nothing is sent or read." },
         { key = "storySharing", label = "Story sharing", names = { OFF = "Off", FRIENDS = "Friends, guild, group", ANYONE = "Anyone" },
-          tip = "Who may offer you a story (a book's menu: Share with a friend). Off (default): offers are ignored. Friends, guild, group: only them. Anyone: any player. You are always asked first (Accept, Decline or Block), and a book carries only its text, party names, classes, races, outfits and boss names: never screenshots, chat or notes. Sending a book of yours works whatever this says." },
+          tip = "Who may offer you a story (a book's menu: Share with a friend). Off: offers are ignored. Friends, guild, group (default): only them. Anyone: any player. You are always asked first (Accept, Decline or Block), and a book carries only its text, party names, classes, races, outfits and boss names: never screenshots, chat or notes. Sending a book of yours works whatever this says." },
     })
     local btns = CreateFrame("Frame", nil, p)
     btns:SetSize(360, 60)

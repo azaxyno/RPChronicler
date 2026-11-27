@@ -1356,3 +1356,24 @@ function RPChronicler_Toggle()
         RPChronicler_Open("")
     end
 end
+
+-- =========================================================
+-- 0.7.0 (Mor): a menu closes when you click anywhere outside it (and
+-- outside the button that opened it, which toggles it itself)
+-- =========================================================
+do
+    local open = {}
+    function UI.CloseOnOutsideClick(menu, anchor)
+        if menu then open[menu] = anchor or true end
+    end
+    ns.On("GLOBAL_MOUSE_DOWN", function()
+        for m, anchor in pairs(open) do
+            if not m:IsShown() then
+                open[m] = nil
+            elseif not m:IsMouseOver() and not (type(anchor) == "table" and anchor.IsMouseOver and anchor:IsMouseOver()) then
+                m:Hide()
+                open[m] = nil
+            end
+        end
+    end)
+end

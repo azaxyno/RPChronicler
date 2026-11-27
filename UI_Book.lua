@@ -1125,6 +1125,15 @@ function K.PlaceCovers()
     if K.single then
         F:SetAllPoints(K.tome)
         Bk:SetAllPoints(K.tome)
+    elseif K.state == "FRONT" or K.state == "BACK" then
+        -- 0.7.0 (Mor): a closed book lies in the middle; it moves to its
+        -- side of the spread only while it swings open or shut
+        local half = math.floor((K.tome:GetWidth() or 800) / 2)
+        for _, c in ipairs({ F, Bk }) do
+            c:SetPoint("TOP", K.tome, "TOP", 0, 0)
+            c:SetPoint("BOTTOM", K.tome, "BOTTOM", 0, 0)
+            c:SetWidth(half)
+        end
     else
         F:SetPoint("TOPLEFT", K.tome, "TOP", 0, 0)
         F:SetPoint("BOTTOMRIGHT", K.tome, "BOTTOMRIGHT", 0, 0)
@@ -1260,6 +1269,7 @@ function K.OpenCover(which)
     K.Settle()
     K.at = K.SpreadOf(which == "BACK" and #K.list or 1)
     K.state = "OPEN"
+    K.PlaceCovers()
     B.Sound("IG_SPELLBOOK_OPEN")
     if not K.Motion() or not c.fold then return K.Settle() or K.Render() end
     K.busy, K.noModels, K.busySince = true, true, GetTime()
@@ -1647,7 +1657,6 @@ do
             H("|cff8f9ba8This story:|r |cfff5e6c8" .. B.Cut(ns.StripColors(ns.GetBookInfo(st).name or ""), 24) .. "|r")
             if B.CHRONICLES then R("Add to a chronicle...", function() S.OpenChronicleMenu(K.menuBtn, st.id) end, "gold") end
             R("Share with a friend...", function() B.ShareWithFriend(st) end, "gold")
-            R("Copy share code", function() B.CopyShareCode(st) end)
             R("Move to shelf...", function(self) S.OpenShelfMenu(K.menuBtn, nil, st.id) end)
             R("Share as plain text", function() B.Share(st) end)
             R("Read outside the game", function() UI.ShowViewerPath() end)
@@ -1694,6 +1703,7 @@ do
         menu:ClearAllPoints()
         menu:SetPoint("TOPRIGHT", K.menuBtn, "BOTTOMRIGHT", 0, -2)
         menu:Show()
+        UI.CloseOnOutsideClick(menu, K.menuBtn)
     end
     K.menuBtn:SetScript("OnClick", function()
         if menu:IsShown() then menu:Hide() else K.OpenMenu() end

@@ -6,7 +6,8 @@ local ADDON_NAME, ns = ...
 -- WHISPER only, never guild or group broadcasts), or as a share code the
 -- player copies and the friend pastes into + Import.
 --   * The friend is asked first (Accept / Decline / Block) and only gets
---     anything when storySharing is on (Options > Privacy, Off by default).
+--     anything when storySharing allows the sender (Options > Privacy; friends,
+--     guild and group by default).
 --   * The book is a strict "@key value" text (never loadstring, only the
 --     keys below, every value capped and cleaned), with an Adler-32
 --     checksum; story text keeps only |cffXXXXXX and |r escapes.

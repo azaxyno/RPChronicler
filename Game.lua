@@ -325,3 +325,71 @@ do
         end
     end)
 end
+
+-- =========================================================
+-- Looks (0.7.0): race, sex, class and the transmog appearance of every
+-- visible slot (about 200 bytes), for the dressed stand-ins in story
+-- scenes and shared books. No face, hair or skin: no addon can read them.
+--   look = { v = 1, race, sex, class, slots = { [slot] = { a, s, i } }, at, src }
+-- =========================================================
+function ns.LookFromList(list, race, sex, class, src)
+    if type(list) ~= "table" then return nil end
+    local look = { v = 1, race = race, sex = sex, class = class, slots = {}, at = time and time() or 0, src = src }
+    local n = 0
+    for slot, info in pairs(list) do
+        if type(slot) == "number" and type(info) == "table" then
+            local a = ns.SafeNum(info.appearanceID)
+            if a and a > 0 then
+                look.slots[slot] = { a = a, s = ns.SafeNum(info.secondaryAppearanceID) or 0, i = ns.SafeNum(info.illusionID) or 0 }
+                n = n + 1
+            end
+        end
+    end
+    if n == 0 then return nil end
+    return look
+end
+
+local function UnitRaceSex(unit)
+    local race = UnitRace and select(4, pcall(UnitRace, unit))
+    local sex = UnitSex and ns.SafeNum(select(2, pcall(UnitSex, unit)))
+    local class = UnitClass and select(3, pcall(UnitClass, unit))
+    return ns.SafeNum(race), sex, ns.SafeStr(class)
+end
+
+-- A party member's look, right after their inspect (INSPECT_READY)
+function ns.InspectLook(unit)
+    if not (C_TransmogCollection and C_TransmogCollection.GetInspectItemTransmogInfoList) then return nil end
+    local ok, list = pcall(C_TransmogCollection.GetInspectItemTransmogInfoList)
+    if not ok then return nil end
+    local race, sex, class = UnitRaceSex(unit)
+    return ns.LookFromList(list, race, sex, class, "inspect")
+end
+
+-- Your own look: a hidden dressing model wears you for 3 seconds, then
+-- reads what you show (transmog, hidden helm and cloak included).
+do
+    local reader, busy
+    function ns.CapturePlayerLook(cb)
+        if busy then return end
+        if not reader then
+            local ok, m = pcall(CreateFrame, "DressUpModel", nil, UIParent)
+            if not ok or not m or not m.GetItemTransmogInfoList then reader = false return end
+            m:SetSize(1, 1)
+            m:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -10, 10)
+            if m.SetAlpha then m:SetAlpha(0) end
+            reader = m
+        end
+        if reader == false then return end
+        busy = true
+        reader:Show()
+        pcall(reader.SetUnit, reader, "player")
+        C_Timer.After(3, function()
+            busy = false
+            local ok, list = pcall(reader.GetItemTransmogInfoList, reader)
+            reader:Hide()
+            local race, sex, class = UnitRaceSex("player")
+            local look = ok and ns.LookFromList(list, race, sex, class, "self") or nil
+            if look and cb then pcall(cb, look) end
+        end)
+    end
+end

@@ -37,7 +37,7 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 - **Saved variables:** `RPChroniclerDB` (account-wide, on your PC only)
 - **License:** GPL-3.0
 
-**Contents:** [Quick start](#quick-start) | [Requirements](#requirements) | [Character skill](#the-character-skill) | [Companions](#companions) | [Slice tabs](#slice-tabs) | [Adventures](#adventures-recording-runs) | [Story Book](#the-story-book) | [Screenshots and export](#screenshots-and-export) | [Privacy](#privacy) | [Commands](#slash-commands) | [Keybinds](#keybindings) | [Bugs](#reporting-bugs) | [Install](#installation) | [Developers](#for-developers)
+**Contents:** [Quick start](#quick-start) | [Requirements](#requirements) | [Character skill](#the-character-skill) | [Companions](#companions) | [Slice tabs](#slice-tabs) | [Adventures](#adventures-recording-runs) | [Library](#the-library) | [Sharing](#sharing-a-story) | [Screenshots and export](#screenshots-and-export) | [Privacy](#privacy) | [Commands](#slash-commands) | [Keybinds](#keybindings) | [Bugs](#reporting-bugs) | [Install](#installation) | [Developers](#for-developers)
 
 ---
 
@@ -53,7 +53,7 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 ## Quick start
 
 1. **Install** the addon (see [Installation](#installation)) and log in. A short **setup** opens once: what you want to use (RP Copy, recordings and stories, or both), whether dungeons ask to record, and screenshots. Click **Start**, and change any of it later in **Options**.
-2. Type `/rp`. The rail on the left switches between **Copy**, **Companions**, **Adventures** and **Story Book** (Copy is hidden while RP Copy is off). The **gear** at the top right opens **Options**.
+2. Type `/rp`. The window is a leather tome. Its ribbons on the left open the **Library** (your stories), the **Journal** (your recordings), **Players** (companions), **Copy** (hidden while RP Copy is off) and **Options** (the Binder's Desk, the key ribbon). The plaque at the top starts and ends a recording.
 3. **Create your character skill** (one time): gear > **AI & Stories** > **RP Template**, copy it, paste it into your AI, fill in your character, and pick a short trigger such as `use <your name>`. Enter that trigger as the **Skill Call** in **Options > Slice Tabs**. See [The character skill](#the-character-skill).
 4. **Play.** When someone talks to you, press `Ctrl+C` (or `/rp quick`). A toast confirms the copy. To steer the AI, use `/rp <instruction>`, for example `/rp make it flirty`.
 5. **Paste into your AI.** It replies with 5 short options written for the channel. Copy one into WoW chat.
@@ -273,7 +273,7 @@ RP Chronicler also works as a quiet chronicler. A recording captures what a stor
 3. **Paste it into any AI chat** and copy back the colored story it writes.
    **Advanced: use a skill.** Make the **Dungeon Story** and **Adventure Story** templates (gear > **AI & Stories**) skills in your AI. Leave **Include AI instructions** off: the copy then stays short, starting with `use wow-dungeon-raid-story` or `use wow-open-world-story`. When the story rules change in an update, RP Chronicler tells you once to copy the template again.
    **No AI?** In **Import Story**, pick the run and click **Quick Chronicle (test)**. It is a test feature, so the writing is still rough: RP Chronicler writes a short chronicle in game from the run's own log, with chapters per boss (or per place), the fights, deaths and wipes, real in-character quotes and your Story Notes. It reads like a journal, not a novel, and it says so at the top. A story from your AI replaces it later.
-4. **Import Story** and paste the colored story. It opens in the [Story Book](#the-story-book), named after the title the AI gave it. Every recording has a **Run ID** in its Full Log header, and the AI copies it onto the story's last line, so the story links itself to the right recording. Picking a run by hand is optional, and a story with no recording at all can be imported too.
+4. **Import Story** and paste the colored story. It opens in the [Story Book](#the-library), named after the title the AI gave it. Every recording has a **Run ID** in its Full Log header, and the AI copies it onto the story's last line, so the story links itself to the right recording. Picking a run by hand is optional, and a story with no recording at all can be imported too.
 
 <details>
 <summary><b>How recording works</b></summary>
@@ -325,13 +325,17 @@ The header has the run type, zone, date and duration, levels gained, quests comp
 
 ---
 
-## The Story Book
+## The Library
 
-The Story Book has its own place on the rail. It opens on **your shelf**: a wall of wooden shelves where every story stands as a leather book with gold bands and its title on the spine.
+The Library (the red ribbon, and where `/rp` opens) is your Story Book: wooden shelves where every story stands as a leather book with gold bands, its chapter emblem and its title on the spine.
+
+- **Shelves.** **Finished tales** holds your stories, **Waiting for their story** shows your recordings that have no story yet as unbound pages (click one to open it in the Journal and give it its story), and **Gifts** holds books friends gave you. Click a shelf's name (or right-click a book) to add a shelf, rename, reorder or delete one, or move a book to another shelf. A book on a deleted shelf goes back to Finished tales.
+- **Chapter emblems.** Each chapter can open with a small inked emblem (a skull for a boss, a road for travel, a cave, a ship and about 40 more). The story templates ask the AI for one `[emblem: name]` line under each chapter title; the line itself is never shown.
+- **Bosses in the text.** Point at a boss's name in a story and a small window shows the boss (from the Encounter Journal, or RP Chronicler's own list; a skull when it doesn't know it).
 
 - **The shelf.** Your stories stand newest first, each book colored by its kind of run. A story you imported this session glows until you open it. Point at a book for its date, place, kind of run, party and length; click it to open it. **Search** finds stories by title, place, party member or date, and **+ Import** adds a new story.
 - **The open book.** A book taken from the shelf lies closed, front cover up: its title, where it happened, its emblem and its party. Click the cover (or **Next >**, or the mouse wheel) and it swings open across the whole window as two facing pages. The first page of a story is its title page: the party scene, the title, the place, the date and the run's numbers, with a list of its chapters (click one to go there). Every chapter starts on a new page. Turn pages with **< Previous** and **Next >** under the pages, or the mouse wheel; **Contents** goes back to the start. On the first pages **< Front cover** closes the book again, and after the last page **Back cover >** shows its back cover, with a few lines from the story, the party and the run. **< Close book** closes it and puts it back on the shelf. In a narrow window the book shows one page at a time.
-- **The Book menu** (top right of the open book) holds everything else for the story you are reading: **Share as plain text**, **Read outside the game**, **Copy for viewer**, **Edit details**, **Re-import**, **Open the run** and **Delete story**.
+- **The Book menu** (top right of the open book) holds everything else for the story you are reading: **Share with a friend**, **Copy share code**, **Move to shelf**, **Share as plain text**, **Read outside the game**, **Copy for viewer**, **Edit details**, **Re-import**, **Open the run** and **Delete story** (a gift has no Re-import or Open the run).
 - **Pages:** warm parchment by default, with the story's colors inked dark so they read well on paper (each name keeps its class color; the Priest's gray is a slate ink), **Light parchment** (brighter pages), or **Night** pages (dark, with the story's own bright colors) in **Options > AI & Stories > Pages**. **Book animations** (the cover opening, page turns, the book closing) can be turned off there too.
 
 Every run shows its own icon (in Adventures, and on a story's title page when scenes are off): one per dungeon and raid (raids in a gold frame), and one per kind of land for the open world (desert, forest, snow, coast, the capitals and more). Every story your AI wrote is there under the title the AI gave it on its first line (`Title: Shadows Over Pyrewood`), with its dungeon or region, duration, date, party and the stats for that kind of run (bosses and wipes for dungeons, foes, quests, levels and places for the open world).
@@ -341,7 +345,7 @@ Every run shows its own icon (in Adventures, and on a story's title page when sc
 - **Share as plain text** copies the story as clean text for Discord or a forum. **Edit details** renames the story or edits any other field. **Re-import** replaces the text and keeps your details. **Open the run** jumps to the recording (when the story has one). **Read outside the game** keeps `StoryViewer.html`'s address once you paste it there. **Copy for viewer** hands a story you imported this session to `StoryViewer.html`. **Delete story** removes it (it asks first).
 - **Titles come from the AI.** Both story templates ask for `Title: <name>` on the first line, and RP Chronicler names the story from that line, never by guessing. A story without one keeps the run's name until you rename it.
 - **Stories stand on their own.** Deleting a recording keeps its story and its details.
-- **Story scenes.** Each story opens with its party standing together in front of a painting of the place (a lava cavern, a crypt, a mine, a forest and more; the painting drifts slowly while you read), then its title. Every member is shown exactly as they are, or as a shadow: you appear in 3D in the gear from that run (on your own stories), a companion who is near you right now appears as they are, and everyone else is a black shadow of their race in a glow of their class color. Every race keeps its true size, so a gnome stands next to a tauren the way they did in game. Your 3D figure stands exactly as tall as a shadow of your race. **+** and **-** (or the mouse wheel over the scene) zoom, dragging moves the camera any way (up to a face, down to the boots), and a click on the scene or **Enlarge** opens the whole party side by side, each at full size, in a big window you can resize. Click anyone there to see them up close. Someone whose race an older run never recorded stands as a blurred figure until you see them again.
+- **Story scenes.** Each story opens with its party standing together in front of a painting of the place (a lava cavern, a crypt, a mine, a forest and more; the painting drifts slowly while you read), then its title. Every member is shown as they are, as a likeness, or as a shadow: you appear in 3D in the gear from that run (on your own stories), a companion who is near you right now appears as they are, someone RP Chronicler saw the outfit of is a **likeness** (their race in the outfit they wore, on a figure of your own sex, with a default face: the game can't record faces), and everyone else is a black shadow of their race in a glow of their class color. **Options > AI & Stories > Likeness figures** turns likenesses off. Every race keeps its true size, so a gnome stands next to a tauren the way they did in game. Your 3D figure stands exactly as tall as a shadow of your race. **+** and **-** (or the mouse wheel over the scene) zoom, dragging moves the camera any way (up to a face, down to the boots), and a click on the scene or **Enlarge** opens the whole party side by side, each at full size, in a big window you can resize. Click anyone there to see them up close. Someone whose race an older run never recorded stands as a blurred figure until you see them again.
 - **Up close.** Click anyone in the scene for their own small window: the figure enlarged (drag to turn a 3D model, mouse wheel or + and - to zoom), their level, sex, race, class and role, what they wore (yours always; your party's with **Record party gear**, which you can turn off in Options > Recording) and the gear each of them really won on the run (won rolls and their own loot, weapons and armor of green quality and up, each drop once).
 - **Bosses in their chapters.** Where a story's chapter first names a boss, the party faces it in its own scene: you in a fighting pose, the boss ready for you. **<** and **>** on the scene show it again after the kill, lying fallen. Click the boss to see it up close with what it dropped. RP Chronicler knows how a boss looks from the game's Encounter Journal (by the fight it recorded) and from its own list of the dungeon and raid bosses, so a boss shows even in older stories and for bosses you never met; a boss it doesn't know yet shows a skull.
 - **The dungeon's music.** While a dungeon or raid story is open, the game's own music for that kind of dungeon plays softly (at your music volume), and the game's music comes back when you close the book. Turn it off in **Options > AI & Stories > Dungeon music in the book**.
@@ -374,14 +378,30 @@ The one-line viewer tip at the bottom of the shelf can be closed (bring it back 
 
 ---
 
+## Sharing a story
+
+Give a finished story to a friend who also has RP Chronicler 0.7.0 or newer. It arrives as a real book on their **Gifts** shelf, with its chapters, emblems, party and bosses, and "Penned by" you on the cover.
+
+1. **Your friend turns on Story sharing** in **Options > Privacy > Story sharing**: **Friends, guild, group** or **Anyone** (it is **Off** by default, and then offers are ignored).
+2. **Open the book** and pick **Book > Share with a friend...**. First comes **How you look in this book**: the game can't send your face, so you may pick a close one. Target an NPC (out of dungeons) whose face and hair are close to yours and press **Use my target's face**, or send without. Your friend sees that face in the outfit you wore; near you, friends always see the real you.
+3. **Type their character name** (Name or Name-Realm; empty sends to the player you target). They are asked first: **Accept Tome**, **Decline** or **Block Scribe**. Your chat says when it arrived.
+
+- Books go only out of combat and outside dungeons and raids, and a transfer pauses while the game holds addon messages back. A small story takes a few seconds.
+- **Copy share code** gives the same book as one line of text to send any way you like; your friend pastes it into **+ Import** in the Library.
+- A book you already have from the same friend asks **Replace** or **Keep both**. **Options > Privacy > Blocked Sharers** lists and unblocks anyone you blocked.
+- What a book carries: the story's text and title, its dates and place, the party's names, classes, races, roles, gear and outfits, the boss names, and your picked face. Never screenshots, chat, notes or your recordings.
+
+---
+
 ## Privacy
 
 - **Everything stays on your PC**, in your WoW SavedVariables. RP Chronicler has no internet access. No account, email or real-world personal data is collected.
 - **Update notices.** RP Chronicler sends only its version number (for example `V 0.6.3`) to your group and guild through the game's addon messages, and tells you once a session when someone has a newer version. It never sends chat, recordings, stories or notes. Turn it off in **Options > Privacy > Update notices**; then nothing is sent or read.
+- **Story sharing** (off by default for receiving). A book you share goes only to the one friend you name, as addon whispers through the game, or as a share code you copy yourself. It carries the story's text, title, dates, place, the party's names, classes, races, gear and outfits, boss names and your picked face, never screenshots, chat or notes. Nobody can send you anything unless you turn **Options > Privacy > Story sharing** on, and you are asked before every book (Accept, Decline or Block).
 - **Chat leaves your PC only when you paste it** into your own AI tool, and that tool's privacy terms apply then.
 - **Use only what you want.** The first-run setup asks whether you want **RP Copy**, **recordings and stories**, or **both**. With RP Copy off (also **Options > General > RP Copy**), the Copy view, `Ctrl+C`, slice tabs, the chat it keeps for the copy, Nearby companions and the RP reply template don't run at all.
 - **Your choice of what is kept.** **Options > Privacy** has a switch per kind of chat: say, yell and emotes; whispers; party and raid chat; guild and officer chat; world channels; NPC dialogue. Out-of-character chat is never kept in a recording.
-- **What RP Chronicler records:** recent chat in memory for RP Copy (only while it is on, cleared on `/reload`), the dungeon recording prompt (or auto-recording, if you choose it), screenshots in runs (auto screenshots in dungeons by default, and your own Print Screen shots), companion updates from chat, the companions you see nearby (in memory only), a debug log of RP Chronicler's own errors (never chat), up to 20 error reports kept between sessions for `/rp debug` (**Options > Privacy > Keep error reports**), your Story Notes, the gear you wore when a run began, each party member's race and sex (for their shadow in the story scene), and the gear each party member wore (**Record party gear**, on by default: while a run records, RP Chronicler inspects each member once, out of combat and in range, exactly like the game's own Inspect, and keeps it on your PC only). **You can turn Record party gear off** in **Options > Recording**, and then nobody is inspected. The setup keeps to the basics (what you use, dungeon recording, screenshots, the RP button) and names what else is on (party gear, update notices, error reports); every one of them has a switch in Options.
+- **What RP Chronicler records:** recent chat in memory for RP Copy (only while it is on, cleared on `/reload`), the dungeon recording prompt (or auto-recording, if you choose it), screenshots in runs (auto screenshots in dungeons by default, and your own Print Screen shots), companion updates from chat, the companions you see nearby (in memory only), a debug log of RP Chronicler's own errors (never chat), up to 20 error reports kept between sessions for `/rp debug` (**Options > Privacy > Keep error reports**), your Story Notes, the gear you wore when a run began, each party member's race and sex (for their shadow in the story scene), your outfit (its transmog appearances, read at the start of a run and of each boss), and the gear and outfit each party member wore (**Record party gear**, on by default: while a run records, RP Chronicler inspects each member once, out of combat and in range, exactly like the game's own Inspect, and keeps it on your PC only). **You can turn Record party gear off** in **Options > Recording**, and then nobody is inspected. The setup keeps to the basics (what you use, dungeon recording, screenshots, the RP button) and names what else is on (party gear, update notices, error reports); every one of them has a switch in Options.
 - **StoryViewer.html runs only in your browser.** It works offline, can't connect to the internet (its security policy blocks it), and reads only the folder or files you choose. The online copy is the same page: once loaded, it can't send anything either, so your stories and screenshots never leave your PC. A folder you choose is remembered by your browser only.
 - **Delete everything** with `/rp wipe` or **Options > Privacy > Delete All Data** (click twice). It removes every recording, story, companion and setting and reloads the UI. Deleting `RPChronicler.lua` in your SavedVariables folder does the same.
 - `/rp setup` shows the setup again. A later version that adds a new choice shows only the new ones.
@@ -479,6 +499,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 10 | `Templates.lua` | The RP template and the two story templates, the template version |
 | 11 | `Narrator.lua` | Quick Chronicle: a short story written in game from a run's log, with no AI |
 | 12 | `Screenshots.lua` | Combat-safe auto screenshots and your own screenshots |
+| 13b | `Share.lua` | Story sharing: the book as strict text with a checksum, share codes, the addon whisper transfer (asks first, paced, resends lost pieces) |
 | 13 | `Updates.lua` | Update notices: sends only the version number to your group and guild |
 | 14 | `Events.lua` | Game events to recordings, chat buffers and capture switches, loot, combat poller, run trackers |
 | 15 | `Chronicle.lua` | Fights and streaks, kills, PvP, quests and objectives, NPCs, levels, places, milestones, prompts |
@@ -493,6 +514,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | 24 | `UI_Options.lua` | Options pages and the template window |
 | 25 | `UI_Setup.lua` | First-run setup |
 | 26 | `UI_Commands.lua` | The Ctrl+C binding, the RP button (minimap or floating) and its menu, `/rp` commands |
+| | `Libs/LibDeflate.lua` | LibDeflate 1.0.2 (zlib License, altered: CLI part removed), compresses shared books |
 | | `Bindings.xml` | Key Bindings entries |
 | | `StoryViewer.html` | Reads your stories and screenshots in the browser, offline, and saves a story as one web page |
 | | `Export_Stories.bat` | Windows exporter (GitHub zip only): all stories, text and Full Logs at once |
@@ -512,6 +534,7 @@ All files share the addon's private namespace (`local ADDON_NAME, ns = ...`). Wo
 | `players[name]` | Companions: kind, names, relationship, tone, your note, include mode, level, race, class, guild, first met, last seen, last 5 chat lines |
 | `adventures` | Up to 40 runs: type, zone, dates, party, places, levels, quests, kills and foe counts, PvP, bosses, loot, milestones, highlights, timeline, screenshots |
 | `stories` | Imported stories, each with its own copy of the run's details and its Story Book fields (title included), so it survives deleting the recording |
+| `shelves`, `shareBlocked`, `likeness` | Your Library's shelves, the players you blocked from offering you stories, and the face you picked for shared books (0.7.0) |
 | `chronicles` | Story Book volumes (hidden for now; any you made are kept) |
 | `activeRun` | The run being recorded right now, so it survives `/reload` and disconnects |
 | `capture`, `logGroups` | What chat is kept, and which Full Log groups are on |
@@ -546,7 +569,7 @@ Session buffers (`ns.logs`) live only in memory and are cleared on `/reload` or 
 
 ## Credits
 
-Adventure icons are made from [game-icons.net](https://game-icons.net) glyphs by Lorc, Delapouite, Sbed and Caro Asercion (CC BY 3.0). The Story Viewer's title font (Cinzel, OFL) and the icons are listed with their licenses in [CREDITS.md](CREDITS.md).
+LibDeflate (Haoqian He, zlib License) compresses shared books. Adventure icons are made from [game-icons.net](https://game-icons.net) glyphs by Lorc, Delapouite, Sbed and Caro Asercion (CC BY 3.0). The Story Viewer's title font (Cinzel, OFL) and the icons are listed with their licenses in [CREDITS.md](CREDITS.md).
 
 ## License
 

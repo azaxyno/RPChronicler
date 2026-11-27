@@ -1646,13 +1646,18 @@ do
         if st then
             H("|cff8f9ba8This story:|r |cfff5e6c8" .. B.Cut(ns.StripColors(ns.GetBookInfo(st).name or ""), 24) .. "|r")
             if B.CHRONICLES then R("Add to a chronicle...", function() S.OpenChronicleMenu(K.menuBtn, st.id) end, "gold") end
+            R("Share with a friend...", function() B.ShareWithFriend(st) end, "gold")
+            R("Copy share code", function() B.CopyShareCode(st) end)
+            R("Move to shelf...", function(self) S.OpenShelfMenu(K.menuBtn, nil, st.id) end)
             R("Share as plain text", function() B.Share(st) end)
             R("Read outside the game", function() UI.ShowViewerPath() end)
             R("Copy for viewer", function() B.CopyForViewer(st) end)
             if not ns.ScreenshotFormatOK() then R("Use JPG screenshots", function() B.UseJpg() end, "tool") end
             R("Edit details", function() UI.OpenStoryDetails(st) end)
-            R("Re-import", function() B.ReImport(st) end)
-            R("Open the run", function() B.OpenRun(st) end, nil, not ns.StoryRun(st))
+            if not st.shared then
+                R("Re-import", function() B.ReImport(st) end)
+                R("Open the run", function() B.OpenRun(st) end, nil, not ns.StoryRun(st))
+            end
             R("Delete story...", function() B.DeleteStory(st) end, "danger")
         end
         if B.CHRONICLES and open and open.kind == "chronicle" then

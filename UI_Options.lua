@@ -631,7 +631,7 @@ do
 
     local stories = CreateFrame("Frame", nil, p)
     stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
-    stories:SetHeight(320)
+    stories:SetHeight(346)
     -- 0.6.5: Include AI instructions adds the story rules, so the skill is optional
     Note(stories,
         "|cffffd100Your stories|r\n" ..
@@ -645,6 +645,8 @@ do
           tip = "One line under the Library's shelves: how unbound pages get their story, or how to read your stories with screenshots in StoryViewer.html." },
         { key = "storyCover", label = "Story scenes",
           tip = "Each story opens with its party: you in 3D in the gear from that run, companions near you as they are, everyone else as a shadow of their race, in front of a painting of the place. At each boss's chapter the party faces the boss, and after the kill you see it fall. Click anyone to see them up close with their items. Off: the book is only written pages (also if your client shows no models)." },
+        { key = "standIns", label = "Likeness figures",
+          tip = "On (default): someone in a story who is not near you is drawn as a likeness, their race in the outfit they wore (on a figure of your own sex; the game can't draw faces it never saw). A shared book's author can pick a face for it. Off: their race shadow." },
         { key = "bookMusic", label = "Dungeon music in the book",
           tip = "While a dungeon story's pages are open, the game's own music for that kind of dungeon plays (at your music volume). Off, or when Story scenes is off: the book is silent and the game's music goes on as usual." },
         { key = "bookPages", label = "Pages", names = { PARCHMENT = "Parchment", LIGHT = "Light parchment", NIGHT = "Night" },
@@ -652,7 +654,7 @@ do
         { key = "bookMotion", label = "Animations",
           tip = "The book opens from its front cover, turns its pages and closes to its cover; the plaque's rune ring turns and its wax seal pulses while you record. Off: everything happens at once and stands still." },
     })
-    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -274)
+    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -300)
     O.refresh.AI = function()
         stories:ClearAllPoints()
         stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
@@ -691,12 +693,14 @@ do
     local refreshGrid = CheckGrid(capHolder, 0, ns.CAPTURE_TYPES, function() return RPChroniclerDB.capture end, "RPChroniclerOptCap_")
     -- 0.6.3: error reports kept in the saved file, and the update notice
     local privHolder = CreateFrame("Frame", nil, p)
-    privHolder:SetSize(360, 52)
+    privHolder:SetSize(360, 76)
     local privRows = SettingRows(privHolder, 0, {
         { key = "keepErrors", label = "Keep error reports",
           tip = "Keeps RP Chronicler's own last 20 errors (with the addon and game version, never chat) in its saved file, so a bug report needs no second try. /rp debug shows them; /rp debug clear deletes them." },
         { key = "versionCheck", label = "Update notices",
           tip = "Sends only RP Chronicler's version number to your group and guild, through the game's addon messages, and tells you once when someone has a newer version. Nothing else is ever sent. OFF: nothing is sent or read." },
+        { key = "storySharing", label = "Story sharing", names = { OFF = "Off", FRIENDS = "Friends, guild, group", ANYONE = "Anyone" },
+          tip = "Who may offer you a story (a book's menu: Share with a friend). Off (default): offers are ignored. Friends, guild, group: only them. Anyone: any player. You are always asked first (Accept, Decline or Block), and a book carries only its text, party names, classes, races, outfits and boss names: never screenshots, chat or notes. Sending a book of yours works whatever this says." },
     })
     local btns = CreateFrame("Frame", nil, p)
     btns:SetSize(360, 60)
@@ -708,6 +712,16 @@ do
     reportBtn.tipTitle = "|cffffd100Debug Report|r"
     reportBtn.tipText = "RP Chronicler keeps a small debug log (its own errors, blocked actions, runs starting and ending; never chat). Copy it into a bug report. Same as /rp debug."
     reportBtn:SetScript("OnClick", function() SlashCmdList["RPCHRONICLER"]("debug") end)
+    -- 0.7.0: who you blocked from offering you stories
+    local blockBtn = UI.CreateSleekButton(btns, 120, 24, "Blocked Sharers", "tool")
+    blockBtn.tipTitle = "|cffffd100Blocked sharers|r"
+    blockBtn.tipText = "Players you blocked when they offered you a story. Their offers are ignored."
+    blockBtn:SetScript("OnClick", function()
+        local list = ns.ShareBlockedList()
+        if #list == 0 then UI.SetStatus("Nobody is blocked.", "good") return end
+        UI.ShowPrompt("|cffffd100Blocked from offering you stories:|r\n|cfff5e6c8" .. table.concat(list, ", ") .. "|r",
+            "Unblock all", function() ns.ClearShareBlocks() UI.SetStatus("Nobody is blocked now.", "good") end, "Close", nil)
+    end)
     local wipeBtn = UI.CreateSleekButton(btns, 120, 24, "Delete All Data", "danger")
     wipeBtn.tipTitle = "|cffff6b6bDelete all RP Chronicler data|r"
     wipeBtn.tipText = "Click twice. Deletes every recording, story, companion and setting, then reloads the UI (/rp wipe)."
@@ -734,14 +748,14 @@ do
         privHolder:SetWidth(math.max(250, math.floor(p:GetWidth() or 0)))
         privRows()
         btns:ClearAllPoints()
-        btns:SetPoint("TOPLEFT", 0, -(gridBottom + 54))
+        btns:SetPoint("TOPLEFT", 0, -(gridBottom + 78))
         refreshGrid()
         wipeBtn.armedAt = nil
         wipeBtn:SetText("Delete All Data")
         -- 0.6.3: the three buttons flow and wrap with the page width
         local w = math.max(200, math.floor(p:GetWidth() or 0))
         btns:SetWidth(w)
-        btns:SetHeight(UI.FlowRow(btns, { setupBtn, reportBtn, wipeBtn }, nil, { width = w, rowH = 24, gap = 6 }))
+        btns:SetHeight(UI.FlowRow(btns, { setupBtn, reportBtn, blockBtn, wipeBtn }, nil, { width = w, rowH = 24, gap = 6 }))
     end
 end
 

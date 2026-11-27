@@ -619,6 +619,9 @@ do
                     token.p.gear = gear
                     ns.Debug("run", "party gear: " .. token.p.name .. " (" .. #gear .. ")")
                 end
+                -- 0.7.0: and how they looked (transmog), for their likeness
+                local look = ns.InspectLook and ns.InspectLook(token.unit)
+                if look then token.p.look = look end
             end
             Done()
         end)
@@ -702,6 +705,7 @@ function ns.StartAdventure(customTitle, isAuto)
     }
     -- Persist the live run in SavedVariables so /reload or a disconnect can't lose it
     RPChroniclerDB.activeRun = activeRun
+    ns.CaptureRunLook()
     ns.NoteRunPlace(instName or ns.SafeStr(GetRealZoneText()) or zone)
     local startSub = ns.SafeStr(GetSubZoneText())
     if startSub and startSub ~= "" then ns.NoteRunPlace(startSub) end
@@ -1686,4 +1690,13 @@ function ns.StartRun()
     local run = ns.StartAdventure(nil, false)
     if run then ns.Notify("runChanged", run) end
     return run
+end
+
+-- 0.7.0: your look on the live run (at its start and at each boss start)
+function ns.CaptureRunLook()
+    if not activeRun or not ns.CapturePlayerLook then return end
+    local run = activeRun
+    ns.CapturePlayerLook(function(look)
+        if run == activeRun then run.look = look end
+    end)
 end

@@ -168,6 +168,29 @@ do
             imp.title:SetText("|cffff6b6bPaste a story first before saving!|r")
             return
         end
+        -- 0.7.0: a friend's share code becomes a gift on the Gifts shelf
+        if ns.IsShareCode and ns.IsShareCode(raw) then
+            local d, why = ns.ReadShareCode(raw)
+            if not d then
+                imp.title:SetText("|cffff6b6b" .. (ns.SHARE_WHY[why] or "That share code could not be read.") .. "|r")
+                return
+            end
+            local function Save(mode)
+                local okS, sid = ns.AddSharedStory(d, { via = "code", mode = mode })
+                f:Hide()
+                if okS then
+                    UI.OpenStoryBook(sid)
+                    UI.SetStatus("The book is on your Gifts shelf.", "good")
+                end
+            end
+            if ns.FindSharedStory(d.from, d.src) then
+                UI.ShowPrompt("|cffffd100You already have this book.|r Replace your copy or keep both?",
+                    "Replace", function() Save("replace") end, "Keep both", function() Save("both") end, "Cancel", nil)
+            else
+                Save()
+            end
+            return
+        end
         -- 0.6.3: one import path; the run is optional (found by Run ID)
         local ok, storyId, linked = ns.ImportStory(raw, f.targetAdvId, f.targetStoryId)
         if ok then

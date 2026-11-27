@@ -23,7 +23,9 @@ local STORY_META = { "code", "title", "zone", "instanceName", "kind", "startDate
     -- 0.6.3: the cover (who and what they wore), name fixes, version stamp
     "char", "gear", "fixes", "addonVersion", "clientBuild",
     -- 0.6.4: the story scene (dungeon art)
-    "ejInstance" }
+    "ejInstance",
+    -- 0.7.0: your look on the run (for shared books)
+    "look" }
 
 local function DeepCopy(v, depth)
     if type(v) ~= "table" then return v end
@@ -1518,4 +1520,87 @@ do
         end
         return table.concat(out, "\n")
     end
+end
+
+-- =========================================================
+-- Shared stories (0.7.0): a book a friend sent (Share.lua) or a pasted
+-- share code. Saved in one go as a new story on the Gifts shelf, never
+-- linked to a run of yours and never written into an existing story,
+-- except "Replace" of the same book from the same author.
+--   st.shared = { author, at, version, via ("whisper" / "code"), srcId }
+-- =========================================================
+function ns.FindSharedStory(author, srcId)
+    if not author or not srcId then return nil end
+    local a = ns.ShortName and ns.ShortName(author) or author
+    for _, st in ipairs(Stories()) do
+        local sh = type(st) == "table" and st.shared
+        if type(sh) == "table" and sh.srcId == srcId and (ns.ShortName and ns.ShortName(sh.author) or sh.author) == a then return st end
+    end
+    return nil
+end
+
+-- d: the book from ns.ReadSharePayload. o = { author, via, mode = "replace" | "both" }
+-- Returns ok, storyId.
+function ns.AddSharedStory(d, o)
+    if type(d) ~= "table" or type(d.story) ~= "string" then return false end
+    ns.EnsureDB()
+    o = o or {}
+    local author = o.author or d.from or "Unknown"
+    local st = { id = NewStoryId() }
+    local old = (o.mode ~= "both") and ns.FindSharedStory(author, d.src) or nil
+    local parts = {}
+    for _, p in ipairs(d.parts or {}) do
+        p.gear = d.gear and d.gear[p.idx] or nil
+        p.look = d.looks and d.looks[p.idx] or nil
+        p.idx = nil
+        table.insert(parts, p)
+    end
+    -- the author stands where the reader would on their own books: their
+    -- gear and look go into their party entry
+    local who
+    for _, p in ipairs(parts) do if d.char and p.name and ns.StripRealm(p.name) == ns.StripRealm(d.char) then who = p end end
+    if not who and d.char then
+        who = { name = d.char }
+        table.insert(parts, 1, who)
+    end
+    if who then
+        who.gear = (d.gear and d.gear[0]) or who.gear
+        who.look = (d.looks and d.looks[0]) or who.look
+        who.face = d.face
+        who.author = true
+    end
+    st.participants = parts
+    st.title, st.kind, st.zone, st.instanceName, st.ejInstance = d.title, d.kind, d.zone, d.instanceName, d.ejInstance
+    st.startDate, st.endDate, st.startTime, st.endTime, st.duration = d.startDate, d.endDate, d.startTime, d.endTime, d.duration
+    st.char = d.char
+    st.bossKills, st.bossInfo = {}, {}
+    for _, b in ipairs(d.bosses or {}) do
+        table.insert(st.bossKills, b.name)
+        st.bossInfo[b.name] = { encounter = b.encounter, cls = b.cls ~= "" and b.cls or nil, level = b.level, kind = "boss" }
+    end
+    st.places = d.places
+    st.shared = { author = author, at = time(), version = d.app, via = o.via or "code", srcId = d.src }
+    st.shelf = ns.GIFT_SHELF.id
+    local cleaned = ns.NormalizeStoryText(d.story)
+    st.story = cleaned
+    st.importedAt = time()
+    st.importedWith = ns.VERSION
+    ApplyBook(st, cleaned)
+    if d.title and d.title ~= "" then
+        st.book.title = d.title
+        st.book.edited.title = true
+    end
+    if old then
+        st.id = old.id
+        st.shelf = old.shelf or st.shelf
+        for k in pairs(old) do old[k] = nil end
+        for k, v in pairs(st) do old[k] = v end
+        st = old
+    else
+        table.insert(Stories(), 1, st)
+    end
+    if ns.EnsureGiftShelf then ns.EnsureGiftShelf() end
+    ns.Debug("run", string.format("shared story saved (%d chars, via %s)", #cleaned, tostring(st.shared.via)))
+    ns.Notify("shelfChanged", st.shelf)
+    return true, st.id
 end

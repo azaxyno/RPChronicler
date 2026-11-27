@@ -345,6 +345,73 @@ function B.Share(st)
         header .. ns.GetStoryPlainText(st))
 end
 
+-- =========================================================
+-- Sharing (0.7.0, Share.lua): to a friend by name, or as a share code.
+-- On your own book, the likeness step comes first: the game can't send
+-- your face, so you may pick a close one (an NPC you target) for the
+-- friend's copy. Shown only here, as a step of Share.
+-- =========================================================
+local function TakeTargetFace()
+    if not (UnitExists and UnitExists("target")) then return false, "Target someone whose face is close to yours first." end
+    if ns.SafeBool(UnitIsPlayer and UnitIsPlayer("target")) then return false, "Target an NPC (a guard or a vendor): a player's face can't be read." end
+    if IsInInstance and ns.SafeBool(IsInInstance()) then return false, "Pick a face outside dungeons and raids." end
+    B.faceReader = B.faceReader or CreateFrame("PlayerModel", nil, UIParent)
+    local m = B.faceReader
+    m:SetSize(1, 1)
+    m:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -10, 10)
+    pcall(m.SetUnit, m, "target")
+    local ok, id = pcall(m.GetDisplayInfo, m)
+    id = ok and ns.SafeNum(id) or nil
+    m:Hide()
+    if not id or id <= 0 then return false, "The game did not give that face. Try someone else." end
+    RPChroniclerDB.likeness = { id = id, name = ns.SafeStr(UnitName("target")) or "your pick" }
+    return true
+end
+
+function B.LikenessStep(st, done)
+    if not st or st.shared or (st.char and st.char ~= ns.PlayerName()) then done(nil) return end
+    local like = type(RPChroniclerDB.likeness) == "table" and RPChroniclerDB.likeness or nil
+    UI.ShowPrompt("|cffffd100How you look in this book|r\n" ..
+        (like and ("|cfff5e6c8Your likeness: the face of |cffffd100" .. like.name .. "|cfff5e6c8, in the outfit you wore.|r")
+            or "|cfff5e6c8No likeness yet: your friend sees your race in the outfit you wore.|r") .. "\n" ..
+        "|cffd7c4a3The game can't send your face to a friend, so choose the one closest to yours. Your friend will see it, in the outfit you wore.|r\n" ..
+        "|cff8f9ba8To choose: target an NPC (out of dungeons) whose face and hair are close to yours. Only the outfit and this choice go with the book.|r",
+        "Use my target's face", function()
+            local ok, why = TakeTargetFace()
+            if ok then UI.SetStatus("Likeness saved: " .. RPChroniclerDB.likeness.name .. ".", "good") else UI.SetStatus(why, "error") end
+            B.LikenessStep(st, done)
+        end,
+        like and "Send with this face" or "Send without", function() done(like) end,
+        like and "Forget the face" or "Cancel", like and function() RPChroniclerDB.likeness = nil B.LikenessStep(st, done) end or nil)
+end
+
+function B.ShareWithFriend(st)
+    if not st then return end
+    B.LikenessStep(st, function(face)
+        local tname = UnitExists and UnitExists("target") and ns.SafeBool(UnitIsPlayer("target")) and ns.GetUnitFullName("target") or nil
+        UI.AskLine({ title = "Share with a friend",
+            sub = "Their character name (Name or Name-Realm). They need RP Chronicler with Story sharing on, and they are asked first." ..
+                (tname and (" Empty: your target, " .. tname .. ".") or ""),
+            placeholder = tname or "Name-Realm", okText = "Send",
+            onAccept = function(text)
+                if (text or "") == "" then text = tname end
+                local ok, why = ns.ShareStoryWith(st.id, text or "", { face = face })
+                if ok then UI.SetStatus("Asked " .. tostring(text) .. ". The answer shows in your chat.", "good")
+                else UI.SetStatus(why or "Could not share.", "error") end
+            end })
+    end)
+end
+
+function B.CopyShareCode(st)
+    if not st then return end
+    B.LikenessStep(st, function(face)
+        local code, why = ns.BuildShareCode(st, { face = face })
+        if not code then UI.SetStatus(ns.SHARE_WHY[why] or "Could not make the share code.", "error") return end
+        UI.ShowCopyBox("|cffffd100Share code:|r |cfff5e6c8" .. ns.GetBookInfo(st).name .. "|r",
+            "|cffb0bac5Press Ctrl+C and send it to your friend any way you like. They paste it into + Import in their Library.|r", code)
+    end)
+end
+
 -- 0.6.2: a story imported this session isn't in the saved file yet, so
 -- StoryViewer.html gets it by paste
 function B.CopyForViewer(st)

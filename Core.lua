@@ -185,10 +185,14 @@ ns.SETTINGS = {
     { key = "quickNote",         default = false,      label = "Ask for an instruction on Ctrl+C" },
     -- 0.6.3: the 3D character on a story's cover (some clients draw no models)
     { key = "storyCover",        default = true,       label = "Story scenes" },
+    -- 0.7.0: people not near you as a likeness (race and outfit) instead of a shadow
+    { key = "standIns",          default = true,       label = "Likeness figures" },
     -- 0.6.3: RP Chronicler's own errors are kept in the saved file
     { key = "keepErrors",        default = true,       label = "Keep error reports" },
     -- 0.6.3: send only the version number to your group and guild
     { key = "versionCheck",      default = true,       label = "Update notices" },
+    -- 0.7.0: who may give you a story (Share.lua); off by default
+    { key = "storySharing",      default = "OFF",      choices = { "OFF", "FRIENDS", "ANYONE" } },
     -- 0.6.7: the open book's pages: parchment (story colors inked darker
     -- so they read on paper) or night (dark pages, the colors as written)
     { key = "bookPages",         default = "PARCHMENT", choices = { "PARCHMENT", "LIGHT", "NIGHT" } },
@@ -294,11 +298,12 @@ end
 
 -- The privacy note (first-run setup and Options > Privacy). Plain ASCII.
 ns.PRIVACY_TEXT =
-    "|cffd8dee9RP Chronicler stores everything on your PC, in your WoW SavedVariables. It has no internet access and never sends your chat, recordings, stories or notes anywhere. " ..
+    "|cffd8dee9RP Chronicler stores everything on your PC, in your WoW SavedVariables. It has no internet access and never sends your chat, recordings or notes anywhere, and a story only to the friend you share it with. " ..
     "No account, email or real-world personal data is collected.\n" ..
     "RP Copy (one switch) keeps recent chat in memory for the live copy. Recording (only while a run is on) keeps a Full Log with in-character chat (never OOC), the notes you type with /rp note, the gear you wore, your party's race and sex (for their shadows in the story scene) and, unless you turn Record party gear off, the gear they wore (RP Chronicler inspects each member once, out of combat, like the game's own Inspect). " ..
     "Screenshots go to your normal WoW Screenshots folder. Error reports (RP Chronicler's own errors, never chat) are kept in the saved file for bug reports. Each of these can be turned off in Options.\n" ..
     "Update notices: RP Chronicler sends only its version number to your group and guild, through the game, so you hear when a newer one exists. No network, no recorded data. Turn it off in Options > Privacy.\n" ..
+    "Story sharing (off by default): when you share a story, RP Chronicler sends that one book (its text, title, dates, party names, classes, races, gear and looks, and boss names; never screenshots, chat or notes) to the one friend you name, as addon whispers through the game. Nothing comes to you unless you turn Story sharing on in Options > Privacy and press Accept. Share codes are the same book as text you copy yourself.\n" ..
     "StoryViewer.html (in the addon folder, and the same page online) runs only in your browser and reads only the files you choose. It uploads nothing.\n" ..
     "Chat and log text only leave your PC if YOU paste them into your own AI tool, and that tool's own privacy terms apply then.\n" ..
     "You can delete everything at any time with |cff69ccf0/rp wipe|cffd8dee9 (or by deleting RPChronicler.lua in your SavedVariables folder).|r"

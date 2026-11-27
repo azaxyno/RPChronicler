@@ -176,6 +176,7 @@ do
         end
         menu.idle = 0
         menu:Show()
+        UI.CloseOnOutsideClick(menu, anchor)
     end
 
     -- Closes a few seconds after the mouse leaves it

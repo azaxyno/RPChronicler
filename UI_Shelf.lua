@@ -165,11 +165,17 @@ do
     S.importBtn.tipTitle = GOLD .. "Import Story|r"
     S.importBtn.tipText = "Paste a colored story and pick the run it belongs to."
     S.importBtn:SetScript("OnClick", function() UI.OpenStoryImportModal(nil) end)
+    -- 0.7.0 (Mor): Share, next to + Import: pick a book, name a friend
+    S.shareBtn = UI.CreateSleekButton(f, 64, 20, "Share", "gold")
+    S.shareBtn:SetPoint("RIGHT", S.importBtn, "LEFT", -6, 0)
+    S.shareBtn.tipTitle = GOLD .. "Share a story|r"
+    S.shareBtn.tipText = "Pick a book and type a friend's name. They get a popup and the book lands on their Gifts shelf if they accept. (Right-click a book does the same.)"
+    S.shareBtn:SetScript("OnClick", function(self) S.OpenShelfMenu(self, nil, "PICK") end)
 
     -- search: title, place, party member, date or chronicle
     local box = CreateFrame("EditBox", "RPChroniclerShelfSearch", f, "InputBoxTemplate")
     box:SetSize(150, 20)
-    box:SetPoint("RIGHT", S.importBtn, "LEFT", -10, 0)
+    box:SetPoint("RIGHT", S.shareBtn, "LEFT", -10, 0)
     box:SetAutoFocus(false)
     box:SetMaxLetters(40)
     local hint = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -296,6 +302,10 @@ local function MakeSpine()
     b:SetScript("OnEnter", SpineEnter)
     b:SetScript("OnLeave", SpineLeave)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    -- 0.7.0 (Mor): drag a book onto another shelf
+    b:RegisterForDrag("LeftButton")
+    b:SetScript("OnDragStart", function(self) if S.BeginDrag then S.BeginDrag(self) end end)
+    b:SetScript("OnDragStop", function(self) if S.EndDrag then S.EndDrag(self) end end)
     b:SetScript("OnClick", function(self, button)
         UI.HideTooltip()
         if button == "RightButton" then
@@ -522,7 +532,9 @@ function S.Refresh()
     -- the shelves (0.7.0): each of the player's shelves in order, rows
     -- that wrap; the runs shelf holds the unbound pages
     local nSpine, nPlank, nLabel, nLoose, y = 0, 0, 0, 0, 0
+    S.bands = {}
     local function Group(label, items, shelfId, emptyLine)
+        local y0 = y
         nLabel = nLabel + 1
         Label(nLabel, -y, label .. ((#items == 0 and emptyLine) and ("   |cff8f9ba8" .. emptyLine .. "|r") or ""), shelfId)
         local x, base = 8, y + LABEL_H + BOOK_MAX_H
@@ -573,6 +585,7 @@ function S.Refresh()
             x = x + it.w + GAP
         end
         y = base + PLANK_H + ROW_GAP + 6
+        table.insert(S.bands, { id = shelfId, top = y0, bottom = y })
         return #items
     end
 
@@ -697,6 +710,7 @@ do
         menu:ClearAllPoints()
         menu:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -2)
         menu:Show()
+        UI.CloseOnOutsideClick(menu, anchor)
     end
     B.root:HookScript("OnHide", function() menu:Hide() end)
 end
@@ -748,10 +762,19 @@ do
             if disabled then b:Disable() else b:Enable() end
             b:Show()
         end
-        if storyId then
+        if storyId == "PICK" then
+            -- 0.7.0 (Mor): the Share button: pick a book to send
+            for i, st in ipairs(ns.GetStories()) do
+                if i > 14 then break end
+                Add("|cfff5e6c8" .. Cut(ns.StripColors(ns.GetBookInfo(st).name or ""), 26) .. "|r", function() B.ShareWithFriend(st) end)
+            end
+            if n == 0 then Add("|cff8f9ba8No stories yet|r", function() end, true) end
+        elseif storyId then
             local st = ns.FindStory(storyId)
             if not st then return end
             local cur = ns.StoryShelf(st)
+            Add(GOLD .. "Share with a friend...|r", function() B.ShareWithFriend(st) end)
+            Add("|cfff5e6c8Open|r", function() if B.OpenBook then B.OpenBook({ kind = "story", id = st.id }) end end)
             for _, sh in ipairs(ns.GetShelves()) do
                 if not sh.runs then
                     local mark = (sh.id == cur) and "|cff5cb85c(here)|r " or ""
@@ -784,8 +807,13 @@ do
         end
         menu:SetHeight(12 + n * 22)
         menu:ClearAllPoints()
-        menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+        if storyId == "PICK" then
+            menu:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -2)
+        else
+            menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+        end
         menu:Show()
+        UI.CloseOnOutsideClick(menu, anchor)
     end
     B.root:HookScript("OnHide", function() menu:Hide() end)
 end
@@ -801,3 +829,58 @@ end)
 UI.AddReflow(function()
     if S.frame:IsVisible() then S.Refresh() end
 end)
+
+-- =========================================================
+-- Drag and drop (0.7.0, Mor): a book dragged onto another shelf moves there
+-- =========================================================
+do
+    local ghost
+    local function Ghost()
+        if ghost then return ghost end
+        ghost = CreateFrame("Frame", nil, UIParent)
+        ghost:SetFrameStrata("TOOLTIP")
+        ghost.tex = ghost:CreateTexture(nil, "ARTWORK")
+        ghost.tex:SetAllPoints()
+        ghost.tex:SetTexture(B.Art("leather"))
+        ghost:SetScript("OnUpdate", function(self)
+            local x, y = GetCursorPosition()
+            local sc = UIParent:GetEffectiveScale()
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / sc, y / sc)
+        end)
+        ghost:Hide()
+        return ghost
+    end
+    function S.BeginDrag(b)
+        if not b.open or b.open.kind ~= "story" then return end
+        UI.HideTooltip()
+        local g = Ghost()
+        g:SetSize(b:GetWidth() or 32, b:GetHeight() or 120)
+        g.tex:SetVertexColor(b.r or 0.5, b.g or 0.3, b.b or 0.2, 0.85)
+        g:Show()
+        b:SetAlpha(0.35)
+        S.dragging = b.open.id
+    end
+    function S.EndDrag(b)
+        if ghost then ghost:Hide() end
+        b:SetAlpha(1)
+        local sid = S.dragging
+        S.dragging = nil
+        if not sid or not S.frame:IsMouseOver() then return end
+        local _, cy = GetCursorPosition()
+        local top = S.child:GetTop()
+        if not top then return end
+        local dy = top - cy / S.child:GetEffectiveScale()
+        for _, band in ipairs(S.bands or {}) do
+            if dy >= band.top and dy < band.bottom then
+                local sh = ns.FindShelf(band.id)
+                local st = ns.FindStory(sid)
+                if sh and st and not sh.runs and ns.StoryShelf(st) ~= sh.id then
+                    ns.MoveStoryToShelf(sid, sh.id)
+                    UI.SetStatus("Moved to " .. sh.name .. ".", "good")
+                end
+                return
+            end
+        end
+    end
+end

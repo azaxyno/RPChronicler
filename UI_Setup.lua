@@ -144,7 +144,7 @@ end
 S.later = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 S.later:SetWidth(TEXT_W)
 S.later:SetJustifyH("CENTER")
-S.later:SetText("|cff8f9ba8Also on, all kept on your PC: party gear (each member inspected once while you record), update notices (only the version number is sent) and error reports. Change any of this later in Options > Recording and Privacy.|r")
+S.later:SetText("|cff8f9ba8Also on, all kept on your PC: party gear (each member inspected once while you record), update notices (only the version number is sent), error reports, and story offers from friends (you accept each one). Change any of this later in Options > Recording and Privacy.|r")
 
 S.start = UI.CreateSleekButton(f, 160, 28, "Start", "good")
 S.start:SetPoint("BOTTOM", 0, 14)

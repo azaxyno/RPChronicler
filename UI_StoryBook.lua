@@ -387,10 +387,13 @@ end
 
 function B.ShareWithFriend(st)
     if not st then return end
-    B.LikenessStep(st, function(face)
+    -- 0.7.0 (Mor): simple for now: a name, then the friend's popup
+    -- (the likeness step waits for 0.7.1)
+    local face = nil
+    do
         local tname = UnitExists and UnitExists("target") and ns.SafeBool(UnitIsPlayer("target")) and ns.GetUnitFullName("target") or nil
         UI.AskLine({ title = "Share with a friend",
-            sub = "Their character name (Name or Name-Realm). They need RP Chronicler with Story sharing on, and they are asked first." ..
+            sub = "Their character name (Name or Name-Realm). They need RP Chronicler 0.7.0 or newer, and they get a popup to accept it." ..
                 (tname and (" Empty: your target, " .. tname .. ".") or ""),
             placeholder = tname or "Name-Realm", okText = "Send",
             onAccept = function(text)
@@ -399,7 +402,7 @@ function B.ShareWithFriend(st)
                 if ok then UI.SetStatus("Asked " .. tostring(text) .. ". The answer shows in your chat.", "good")
                 else UI.SetStatus(why or "Could not share.", "error") end
             end })
-    end)
+    end
 end
 
 function B.CopyShareCode(st)

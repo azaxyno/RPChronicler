@@ -294,8 +294,8 @@ UI.OpenStoryImportModal = OpenStoryImportModal
 -- =========================================================
 -- 0.5.0: Adventures holds the recordings only; the Story Book is its own
 -- section right below it (UI_StoryBook.lua)
-local view = UI.NewSection("ADVENTURES", "Adventures", "Your recorded runs: Summary, Full Log for your AI, and a link to each story.")
-UI.AddRailButton("ADVENTURES", "Adventures", UI.ICONS.ADVENTURES, "Record dungeon and open-world runs (raids: coming soon).")
+local view = UI.NewSection("ADVENTURES", "Journal", "Your recorded runs: Summary, Full Log for your AI, and a link to each story.")
+UI.AddRailButton("ADVENTURES", "Journal", UI.ICONS.ADVENTURES, "Every recorded run, and its next step: copy it for your AI, or read its story.")
 
 local A = { cards = {} }
 UI.adventures = A

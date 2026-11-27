@@ -248,7 +248,7 @@ local function Finish()
     print("|cffffd100RP Chronicler|r Setup saved. |cff9aa5b4Change it any time in Options (/rp setup shows this again).|r")
     -- 0.6.3: one next step for each thing you chose
     if S.use ~= "STORIES" and ns.RpCopyOn() then
-        print("|cffffd100RP Chronicler|r |cff9aa5b4RP Copy, next:|r type /rp, open Options > AI & Stories, copy the RP Template into your AI as a character skill, and put its trigger in Options > Slice Tabs as the Skill Call. Then Ctrl+C copies the scene.")
+        print("|cffffd100RP Chronicler|r |cff9aa5b4RP Copy, next:|r type /rp, open Options > AI & Stories, copy the RP Template into your AI as a character skill, and put its trigger in Options > Copy and Tabs as the Skill Call. Then Ctrl+C copies the scene.")
     end
     if S.use ~= "COPY" then
         print("|cffffd100RP Chronicler|r |cff9aa5b4Stories, next:|r type /rp, open Adventures and press Start (dungeons ask when you enter). When the run ends, open its Full Log, tick Include AI instructions, click Copy for AI, paste it into any AI chat, then import the story it writes in the Story Book.")

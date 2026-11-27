@@ -69,6 +69,26 @@ function ns.Debug(kind, msg)
 end
 
 -- Called once RPChroniclerDB is loaded (PLAYER_LOGIN): pending lines join the saved log
+-- 0.7.0 animation check (Mor saw promised animations not play): every
+-- watched AnimationGroup logs how long it really ran. One that "finishes"
+-- in about 0 seconds never played. Seen in /rp debug.
+function ns.WatchAnim(ag, name)
+    if not ag or not ag.HookScript then return end
+    pcall(ag.HookScript, ag, "OnPlay", function(self) self.rpcPlayAt = GetTime() end)
+    pcall(ag.HookScript, ag, "OnFinished", function(self) ns.AnimDone(self, name) end)
+    ag.rpcAnimName = name
+end
+
+function ns.AnimDone(ag, name)
+    local at = ag and ag.rpcPlayAt
+    if not at then return end
+    ag.rpcPlayAt = nil
+    local took = GetTime() - at
+    ns.Debug("anim", string.format("%s ran %.2fs%s", tostring(name or (ag and ag.rpcAnimName) or "?"), took,
+        took < 0.03 and " (did not play)" or ""))
+    return took
+end
+
 function ns.DebugReady()
     if ready then return end
     ready = true

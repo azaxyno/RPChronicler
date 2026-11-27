@@ -1326,3 +1326,147 @@ function ns.SearchStories(text)
     end
     return out
 end
+
+-- =========================================================
+-- 0.7.0 SHELVES (Mor): the Library's planks. "Finished tales" and
+-- "Waiting for their story" (the recordings with no story yet, drawn as
+-- unbound pages) are the defaults; players rename them, add their own,
+-- and move stories between story shelves. Deleting a shelf puts its
+-- stories back on Finished tales, so nothing is lost. Gifts (stories
+-- friends shared) is made the first time one arrives.
+-- RPChroniclerDB.shelves = { { id, name, runs = true? } ... } in order,
+-- st.shelf = shelf id. Changes say ns.Notify("shelfChanged").
+-- =========================================================
+do
+    ns.SHELF_NAME_MAX = 32
+    ns.DEFAULT_SHELVES = {
+        { id = "tales", name = "Finished tales" },
+        { id = "waiting", name = "Waiting for their story", runs = true },
+    }
+    ns.GIFT_SHELF = { id = "gifts", name = "Gifts" }
+    local FIXED = { tales = true, waiting = true }
+
+    local function Clean(name)
+        local t = tostring(name or ""):gsub("||", "|"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("[%c|]", " ")
+        t = t:match("^%s*(.-)%s*$") or ""
+        if #t > ns.SHELF_NAME_MAX then t = t:sub(1, ns.SHELF_NAME_MAX):match("^(.-)%s*$") end
+        return t
+    end
+
+    -- Every shelf in order; the two defaults are always there
+    function ns.GetShelves()
+        if not RPChroniclerDB then return {} end
+        local list = type(RPChroniclerDB.shelves) == "table" and RPChroniclerDB.shelves or {}
+        RPChroniclerDB.shelves = list
+        for _, d in ipairs(ns.DEFAULT_SHELVES) do
+            local have = false
+            for _, s in ipairs(list) do if s.id == d.id then have = true end end
+            if not have then table.insert(list, { id = d.id, name = d.name, runs = d.runs }) end
+        end
+        return list
+    end
+
+    function ns.FindShelf(id)
+        for _, s in ipairs(ns.GetShelves()) do
+            if s.id == id then return s end
+        end
+        return nil
+    end
+
+    -- The story shelf a story stands on (an unknown or missing one: tales)
+    function ns.StoryShelf(st)
+        local s = st and st.shelf and ns.FindShelf(st.shelf)
+        if s and not s.runs then return s.id end
+        return "tales"
+    end
+
+    function ns.CreateShelf(name)
+        local n = Clean(name)
+        if n == "" then return nil, "Give the shelf a name." end
+        local list = ns.GetShelves()
+        if #list >= 12 then return nil, "The Library holds 12 shelves at most." end
+        local s = { id = "sh" .. tostring(time()) .. tostring(math.random(100, 999)), name = n }
+        table.insert(list, s)
+        ns.Notify("shelfChanged", s.id)
+        return s
+    end
+
+    -- The gifts shelf, made when the first gift arrives (renamable and
+    -- deletable like any shelf of the player's)
+    function ns.EnsureGiftShelf()
+        local s = ns.FindShelf(ns.GIFT_SHELF.id)
+        if s then return s end
+        s = { id = ns.GIFT_SHELF.id, name = ns.GIFT_SHELF.name }
+        table.insert(ns.GetShelves(), s)
+        ns.Notify("shelfChanged", s.id)
+        return s
+    end
+
+    function ns.RenameShelf(id, name)
+        local s = ns.FindShelf(id)
+        local n = Clean(name)
+        if not s or n == "" then return false end
+        s.name = n
+        ns.Notify("shelfChanged", id)
+        return true
+    end
+
+    function ns.CanDeleteShelf(id)
+        return ns.FindShelf(id) ~= nil and not FIXED[id]
+    end
+
+    -- Its stories go back to Finished tales
+    function ns.DeleteShelf(id)
+        if not ns.CanDeleteShelf(id) then return false end
+        local list = ns.GetShelves()
+        for i = #list, 1, -1 do
+            if list[i].id == id then table.remove(list, i) end
+        end
+        for _, st in ipairs(ns.GetStories()) do
+            if st.shelf == id then st.shelf = nil end
+        end
+        ns.Notify("shelfChanged", id)
+        return true
+    end
+
+    function ns.MoveShelf(id, delta)
+        local list = ns.GetShelves()
+        for i, s in ipairs(list) do
+            if s.id == id then
+                local j = i + delta
+                if j < 1 or j > #list then return false end
+                list[i], list[j] = list[j], list[i]
+                ns.Notify("shelfChanged", id)
+                return true
+            end
+        end
+        return false
+    end
+
+    function ns.MoveStoryToShelf(storyId, shelfId)
+        local st = ns.FindStory(storyId)
+        local s = ns.FindShelf(shelfId)
+        if not st or not s or s.runs then return false end
+        st.shelf = (shelfId ~= "tales") and shelfId or nil
+        ns.Notify("shelfChanged", shelfId)
+        return true
+    end
+
+    -- The stories on one story shelf, newest first
+    function ns.ShelfStories(shelfId)
+        local out = {}
+        for _, st in ipairs(ns.GetStories()) do
+            if ns.StoryShelf(st) == shelfId then out[#out + 1] = st end
+        end
+        return out
+    end
+
+    -- Saved recordings with no story yet (the unbound pages), newest first
+    function ns.RunsWithoutStory()
+        local out = {}
+        for _, adv in ipairs((RPChroniclerDB and RPChroniclerDB.adventures) or {}) do
+            if type(adv) == "table" and adv ~= ns.GetActiveAdventure() and not ns.RunHasStory(adv) then out[#out + 1] = adv end
+        end
+        return out
+    end
+end

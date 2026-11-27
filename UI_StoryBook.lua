@@ -17,9 +17,9 @@ UI.storyBook = B
 -- only and every story opens as its own book. Saved chronicles are kept
 -- (RPChroniclerDB.chronicles), just not shown; true brings them back.
 B.CHRONICLES = false
-local root = UI.NewSection("BOOK", "Story Book", "The tales of your adventures.")
+local root = UI.NewSection("BOOK", "Library", "Your tales, and the pages still waiting for their story.")
 B.root = root
-UI.AddRailButton("BOOK", "Story Book", UI.ICONS.STORY, "Read, share and edit the tales of your adventures.")
+UI.AddRailButton("BOOK", "Library", UI.ICONS.STORY, "Your shelves: finished tales, gifts, and the recordings still waiting for their story.")
 
 -- Stories imported this session glow on the shelf until opened
 B.sessionStart = time and time() or 0
@@ -199,7 +199,7 @@ do
     heading:SetPoint("TOPLEFT", book, "TOPRIGHT", 10, -2)
     heading:SetPoint("RIGHT", e, "RIGHT", -16, 0)
     heading:SetJustifyH("LEFT")
-    heading:SetText("|cffffd100Your Story Book is empty|r")
+    heading:SetText("|cffffd100Your Library is empty|r")
     pcall(heading.SetFont, heading, "Fonts\\FRIZQT__.TTF", 15, "")
 
     local subHeading = e:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -215,7 +215,8 @@ do
     steps:SetSpacing(4)
     steps:SetText(
         "|cffffd100How to make a story:|r\n" ..
-        "|cfff5e6c81. Copy the run:|r in Adventures open |cff69ccf0Full Log|r, tick |cffffd100Include AI instructions|r, click |cffffd100Copy for AI|r, press |cffffd100Ctrl+C|r.\n" ..
+        "|cfff5e6c80. Record:|r click |cffffd100Chronicle a new adventure|r at the top, or enter a dungeon.\n" ..
+        "|cfff5e6c81. Copy the run:|r in the Journal open |cff69ccf0Full Log|r, tick |cffffd100Include AI instructions|r, click |cffffd100Copy for AI|r, press |cffffd100Ctrl+C|r.\n" ..
         "|cfff5e6c82. Ask your AI:|r paste it into any AI chat. The story rules come with it.\n" ..
         "|cfff5e6c83. Import:|r copy the story it writes and click |cffffd100Import Story|r.\n" ..
         "|cff9aa5b4No AI? Import Story > Quick Chronicle (a test feature) writes a short one for you.|r\n\n" ..
@@ -379,9 +380,11 @@ function UI.RefreshStoryBook()
     -- 0.6.4: skill users hear once a session when the story rules changed
     local notice = not B.noticeShown and ns.TemplateNotice()
     if notice then B.noticeShown = true; UI.SetStatus(notice, "warn") end
-    if #ns.GetStories() == 0 and not (B.CHRONICLES and #ns.GetChronicles() > 0) then
+    -- 0.7.0: the empty page only on a fresh Library (no story, no run)
+    if #ns.GetStories() == 0 and #ns.RunsWithoutStory() == 0 and not (B.CHRONICLES and #ns.GetChronicles() > 0) then
         if B.HideBook then B.HideBook() end
         if B.HideShelf then B.HideShelf() end
+        UI.SetBookMode(false)
         B.empty:Show()
         return
     end
@@ -390,10 +393,12 @@ function UI.RefreshStoryBook()
     local exists = open and ((open.kind == "story" and ns.FindStory(open.id)) or (B.CHRONICLES and open.kind == "chronicle" and ns.FindChronicle(open.id)))
     if ns.state.bookView == "BOOK" and exists and B.ShowBook then
         if B.HideShelf then B.HideShelf() end
+        UI.SetBookMode(true)
         B.ShowBook()
     else
         ns.state.bookView = "SHELF"
         if B.HideBook then B.HideBook() end
+        UI.SetBookMode(false)
         if B.ShowShelf then B.ShowShelf() end
     end
 end

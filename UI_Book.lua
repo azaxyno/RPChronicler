@@ -143,10 +143,10 @@ do
     B.Vignette(f, 110, 0.95)
     f:SetScript("OnMouseWheel", function(_, delta) K.Wheel(delta) end)
 
-    K.closeBtn = UI.CreateSleekButton(f, 100, 22, "< Close book", "gold")
+    K.closeBtn = UI.CreateSleekButton(f, 150, 22, "< Back to the Library", "gold")
     K.closeBtn:SetPoint("TOPLEFT", 12, -8)
-    K.closeBtn.tipTitle = GOLD .. "Close book|r"
-    K.closeBtn.tipText = "Closes the book and puts it back on the shelf."
+    K.closeBtn.tipTitle = GOLD .. "Back to the Library|r"
+    K.closeBtn.tipText = "Closes the book and puts it back on its shelf."
     K.closeBtn:SetScript("OnClick", function() K.Close() end)
 
     K.menuBtn = UI.CreateSleekButton(f, 64, 22, "Book")
@@ -940,11 +940,21 @@ do
         end
     end)
     K.canAnimate = ok and true or false
+    if ok and ns.WatchAnim then
+        ns.WatchAnim(K.tomeFadeIn, "book pages fade in")
+        ns.WatchAnim(K.tomeFadeOut, "book pages fade out")
+        for i = 1, 2 do
+            local sh = K["sheet" .. i]
+            ns.WatchAnim(sh.fold, "page fold " .. i)
+            ns.WatchAnim(sh.open, "page open " .. i)
+            ns.WatchAnim(sh.fade, "page fade " .. i)
+        end
+    end
     K.ScaleAnim, K.AlphaAnim = ScaleAnim, AlphaAnim
 end
 
 function K.Motion()
-    return K.canAnimate and ns.Get("bookMotion") and true or false
+    return K.canAnimate and ns.Get("bookMotion") and not K.noMotion and true or false
 end
 
 -- =========================================================
@@ -1184,8 +1194,16 @@ K.frame:HookScript("OnHide", function()
     if UI.BookMusic then UI.BookMusic(nil) end
 end)
 
+-- 0.7.0: the animation check (ns.WatchAnim) logs each run; a handler
+-- set here replaces the hook, so it logs too
 local function OnDone(ag, fn)
-    ag:SetScript("OnFinished", fn)
+    ag:SetScript("OnFinished", function(self, ...)
+        local took = ns.AnimDone and ns.AnimDone(self)
+        -- a turn that "finished" at once never played: from then on the
+        -- book changes at once instead of half-moving (until /reload)
+        if took and took < 0.03 then K.noMotion = true end
+        fn(self, ...)
+    end)
 end
 
 -- the sheets cover one page each

@@ -33,7 +33,7 @@ RP Chronicler is a free addon that sits between WoW and the AI you already use (
 3. **Your AI answers** with five short in-character replies, one per mood. Pick the one you like there and copy it.
 4. **Back in WoW**, paste it into chat (`/s`, `/p`, `/w` and so on) and send it yourself.
 
-- **Version:** 0.7.0 beta (interface `16001`, WoW: Forever)
+- **Version:** 0.7.1 beta (interface `16001`, WoW: Forever)
 - **Saved variables:** `RPChroniclerDB` (account-wide, on your PC only)
 - **License:** GPL-3.0
 
@@ -383,7 +383,7 @@ The one-line viewer tip at the bottom of the shelf can be closed (bring it back 
 Give a finished story to a friend who also has RP Chronicler 0.7.0 or newer. It arrives as a real book on their **Gifts** shelf, with its chapters, emblems, party and bosses, and "Penned by" you on the cover.
 
 1. **Right-click a book** on your shelves and pick **Share with a friend...** (or click **Share** next to **+ Import** and pick the book, or open it and use **Book > Share with a friend...**).
-2. **Type their character name** (Name or Name-Realm; leave it empty to send to the player you target).
+2. **Pick who gets it:** your target, your group, and your online friends and guild members are listed; or **Type a name...** (the first name is enough: Forever whispers the character name, so `Morai Galeclaw` goes to Morai). RP Chronicler first checks that they are online and have RP Chronicler, and tells you in chat if not.
 3. **They get a popup:** **Accept Tome**, **Decline** or **Block Scribe**. If they accept, the book lands on their Gifts shelf, and your chat says it arrived.
 
 - By default you get offers only from friends, guild and group, and you accept each one. **Options > Privacy > Story sharing** sets **Off**, **Friends, guild, group** or **Anyone**, and **Blocked Sharers** lists and unblocks anyone you blocked.

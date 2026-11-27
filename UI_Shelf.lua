@@ -713,6 +713,7 @@ do
         UI.CloseOnOutsideClick(menu, anchor)
     end
     B.root:HookScript("OnHide", function() menu:Hide() end)
+    function S.OpenPeople(anchor, st) S.OpenShelfMenu(anchor, nil, { st = st }) end
 end
 
 -- =========================================================
@@ -762,18 +763,26 @@ do
             if disabled then b:Disable() else b:Enable() end
             b:Show()
         end
-        if storyId == "PICK" then
+        if type(storyId) == "table" then
+            -- 0.7.1: who gets the book: people online now, or a typed name
+            local st = storyId.st
+            for _, p in ipairs(ns.SharePeople()) do
+                Add("|cfff5e6c8" .. Cut(p.show, 28) .. "|r", function() B.SendShare(st, p.send) end)
+            end
+            if n == 0 then Add("|cff8f9ba8Nobody online in your target, group, friends or guild|r", function() end, true) end
+            Add(GOLD .. "Type a name...|r", function() B.AskShareName(st) end)
+        elseif storyId == "PICK" then
             -- 0.7.0 (Mor): the Share button: pick a book to send
             for i, st in ipairs(ns.GetStories()) do
                 if i > 14 then break end
-                Add("|cfff5e6c8" .. Cut(ns.StripColors(ns.GetBookInfo(st).name or ""), 26) .. "|r", function() B.ShareWithFriend(st) end)
+                Add("|cfff5e6c8" .. Cut(ns.StripColors(ns.GetBookInfo(st).name or ""), 26) .. "|r", function() B.ShareWithFriend(st, anchor) end)
             end
             if n == 0 then Add("|cff8f9ba8No stories yet|r", function() end, true) end
         elseif storyId then
             local st = ns.FindStory(storyId)
             if not st then return end
             local cur = ns.StoryShelf(st)
-            Add(GOLD .. "Share with a friend...|r", function() B.ShareWithFriend(st) end)
+            Add(GOLD .. "Share with a friend...|r", function() B.ShareWithFriend(st, anchor) end)
             Add("|cfff5e6c8Open|r", function() if B.OpenBook then B.OpenBook({ kind = "story", id = st.id }) end end)
             for _, sh in ipairs(ns.GetShelves()) do
                 if not sh.runs then
@@ -807,7 +816,7 @@ do
         end
         menu:SetHeight(12 + n * 22)
         menu:ClearAllPoints()
-        if storyId == "PICK" then
+        if storyId == "PICK" or type(storyId) == "table" then
             menu:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -2)
         else
             menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)

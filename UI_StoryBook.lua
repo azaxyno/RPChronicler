@@ -385,24 +385,27 @@ function B.LikenessStep(st, done)
         like and "Forget the face" or "Cancel", like and function() RPChroniclerDB.likeness = nil B.LikenessStep(st, done) end or nil)
 end
 
-function B.ShareWithFriend(st)
+function B.ShareWithFriend(st, anchor)
     if not st then return end
-    -- 0.7.0 (Mor): simple for now: a name, then the friend's popup
-    -- (the likeness step waits for 0.7.1)
-    local face = nil
-    do
-        local tname = UnitExists and UnitExists("target") and ns.SafeBool(UnitIsPlayer("target")) and ns.GetUnitFullName("target") or nil
-        UI.AskLine({ title = "Share with a friend",
-            sub = "Their character name (Name or Name-Realm). They need RP Chronicler 0.7.0 or newer, and they get a popup to accept it." ..
-                (tname and (" Empty: your target, " .. tname .. ".") or ""),
-            placeholder = tname or "Name-Realm", okText = "Send",
-            onAccept = function(text)
-                if (text or "") == "" then text = tname end
-                local ok, why = ns.ShareStoryWith(st.id, text or "", { face = face })
-                if ok then UI.SetStatus("Asked " .. tostring(text) .. ". The answer shows in your chat.", "good")
-                else UI.SetStatus(why or "Could not share.", "error") end
-            end })
+    -- 0.7.1: pick someone online (target, group, friends, guild), or type
+    if UI.shelf and UI.shelf.OpenPeople then
+        C_Timer.After(0, function() UI.shelf.OpenPeople(anchor or UI.frame, st) end)
+    else
+        B.AskShareName(st)
     end
+end
+
+function B.SendShare(st, name)
+    local ok, why = ns.ShareStoryWith(st.id, name or "")
+    if ok then UI.SetStatus("Looking for " .. tostring(name) .. "... The answer shows in your chat.", "good")
+    else UI.SetStatus(why or "Could not share.", "error") end
+end
+
+function B.AskShareName(st)
+    UI.AskLine({ title = "Share with a friend",
+        sub = "Their character name: the first name is enough (Morai, Morai Galeclaw or Morai-Realm). They need RP Chronicler 0.7.0 or newer and get a popup to accept it.",
+        placeholder = "Morai", okText = "Send",
+        onAccept = function(text) B.SendShare(st, text) end })
 end
 
 function B.CopyShareCode(st)

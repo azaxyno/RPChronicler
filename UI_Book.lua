@@ -1656,7 +1656,7 @@ do
         if st then
             H("|cff8f9ba8This story:|r |cfff5e6c8" .. B.Cut(ns.StripColors(ns.GetBookInfo(st).name or ""), 24) .. "|r")
             if B.CHRONICLES then R("Add to a chronicle...", function() S.OpenChronicleMenu(K.menuBtn, st.id) end, "gold") end
-            R("Share with a friend...", function() B.ShareWithFriend(st) end, "gold")
+            R("Share with a friend...", function() B.ShareWithFriend(st, K.menuBtn) end, "gold")
             R("Move to shelf...", function(self) S.OpenShelfMenu(K.menuBtn, nil, st.id) end)
             R("Share as plain text", function() B.Share(st) end)
             R("Read outside the game", function() UI.ShowViewerPath() end)

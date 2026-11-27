@@ -16,3 +16,4 @@ desktop.ini
 # Internal docs (Mor + Claude only): keep local copies, never publish
 docs/ARCHITECTURE.md
 *.pdf
+__pycache__/

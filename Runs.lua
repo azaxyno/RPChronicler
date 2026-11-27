@@ -103,8 +103,18 @@ function ns.GetAdventureIcon(adv)
         end
         return Icon(adv.kind == "raid" and "raid" or "dungeon")
     end
+    -- 0.7.0: the zone (also "Zone - Subzone"), else the first place the
+    -- run went, else its title (ns.ZoneTerrain in SceneData.lua)
     local zone = (ns.SafeStr(adv.zone) or ""):lower():match("^%s*(.-)%s*$")
-    return Icon(ZONE_TERRAIN[zone] or "world")
+    local key = ZONE_TERRAIN[zone] or (ns.ZoneTerrain and ns.ZoneTerrain(zone))
+    if not key and ns.ZoneTerrain then
+        for _, pl in ipairs(type(adv.places) == "table" and adv.places or {}) do
+            key = ns.ZoneTerrain(type(pl) == "table" and (pl.name or pl.zone) or pl)
+            if key then break end
+        end
+        key = key or ns.ZoneTerrain(adv.title)
+    end
+    return Icon(key or "world")
 end
 
 -- Our icons carry their own frame, so they show whole; game icons are
@@ -609,6 +619,9 @@ do
                     token.p.gear = gear
                     ns.Debug("run", "party gear: " .. token.p.name .. " (" .. #gear .. ")")
                 end
+                -- 0.7.0: and how they looked (transmog), for their likeness
+                local look = ns.InspectLook and ns.InspectLook(token.unit)
+                if look then token.p.look = look end
             end
             Done()
         end)
@@ -692,6 +705,7 @@ function ns.StartAdventure(customTitle, isAuto)
     }
     -- Persist the live run in SavedVariables so /reload or a disconnect can't lose it
     RPChroniclerDB.activeRun = activeRun
+    ns.CaptureRunLook()
     ns.NoteRunPlace(instName or ns.SafeStr(GetRealZoneText()) or zone)
     local startSub = ns.SafeStr(GetSubZoneText())
     if startSub and startSub ~= "" then ns.NoteRunPlace(startSub) end
@@ -1676,4 +1690,13 @@ function ns.StartRun()
     local run = ns.StartAdventure(nil, false)
     if run then ns.Notify("runChanged", run) end
     return run
+end
+
+-- 0.7.0: your look on the live run (at its start and at each boss start)
+function ns.CaptureRunLook()
+    if not activeRun or not ns.CapturePlayerLook then return end
+    local run = activeRun
+    ns.CapturePlayerLook(function(look)
+        if run == activeRun then run.look = look end
+    end)
 end

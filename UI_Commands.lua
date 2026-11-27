@@ -89,10 +89,30 @@ end
 -- Book, Clear logs. A plain frame, so it works in combat too.
 do
     local menu = CreateFrame("Frame", "RPChroniclerIconMenu", UIParent, UI.BACKDROP)
-    menu:SetSize(170, 10)
+    menu:SetSize(178, 10)
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:Hide()
-    UI.ApplyDarkGlass(menu, 0.05, 0.07, 0.10, 0.97, 0.82, 0.65, 0.30, 0.90)
+    -- 0.7.0 (Mor): the book look, a leather card with brass corners and
+    -- a gold title (Story Book and Clear chat logs left the menu)
+    UI.ApplyStoryTomeLook(menu)
+    do
+        local bg = menu:CreateTexture(nil, "BACKGROUND", nil, 1)
+        bg:SetPoint("TOPLEFT", 1, -1)
+        bg:SetPoint("BOTTOMRIGHT", -1, 1)
+        bg:SetTexture(UI.ART .. "cover.png")
+        bg:SetVertexColor(0.36, 0.16, 0.11)
+        for _, c in ipairs({ { "TOPLEFT", 0, 1, 0, 1 }, { "TOPRIGHT", 1, 0, 0, 1 }, { "BOTTOMLEFT", 0, 1, 1, 0 }, { "BOTTOMRIGHT", 1, 0, 1, 0 } }) do
+            local t = menu:CreateTexture(nil, "OVERLAY", nil, 7)
+            t:SetTexture(UI.ART .. "corner.png")
+            t:SetSize(16, 16)
+            t:SetPoint(c[1], 0, 0)
+            t:SetTexCoord(c[2], c[3], c[4], c[5])
+        end
+        local title = menu:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("TOP", 0, -8)
+        pcall(title.SetFont, title, UI.GOLD_FONT, 13, "")
+        title:SetText("|cffffd100RP Chronicler|r")
+    end
     UI.iconMenu = menu
 
     local items = {
@@ -104,13 +124,8 @@ do
             local run = ns.GetActiveAdventure()
             if run then UI.OpenRecording(run.id, "FULL") end
         end },
-        { key = "book", label = "Story Book", fn = function() UI.OpenStoryBook() end },
         -- 0.6.5: ideas and bug reports
         { key = "feedback", label = "Feedback / bug report", fn = function() UI.OpenFeedback() end },
-        { key = "clear", label = "Clear chat logs", fn = function()
-            ns.ClearSessionLogs()
-            print("|cff00ff00[RP Chronicler]|r All logs cleared.")
-        end },
         -- 0.6.4: minimap or floating, also from here (Options > General too)
         { key = "mode", fn = function()
             local float = ns.Get("iconMode") ~= "FLOAT"
@@ -122,14 +137,14 @@ do
     }
     for i, it in ipairs(items) do
         local b = UI.CreateSleekButton(menu, 158, 20, it.label or "", it.key == "run" and "good" or nil)
-        b:SetPoint("TOP", 0, -6 - (i - 1) * 22)
+        b:SetPoint("TOP", 0, -26 - (i - 1) * 22)
         b:SetScript("OnClick", function()
             menu:Hide()
             pcall(it.fn)
         end)
         it.btn = b
     end
-    menu:SetHeight(12 + #items * 22)
+    menu:SetHeight(32 + #items * 22)
 
     local function Refresh()
         local run = ns.GetActiveAdventure()
@@ -137,7 +152,7 @@ do
         if run then openBtn:Enable() else openBtn:Disable() end
         runBtn.accentStyle = run and "danger" or "good"
         runBtn.ApplyNormalLook()
-        runBtn:SetText(run and "Stop & Save" or "Start Recording")
+        runBtn:SetText(run and "End adventure" or "Chronicle a new adventure")
         if run then pauseBtn:Enable() else pauseBtn:Disable() end
         pauseBtn:SetText((run and run.paused) and "Resume" or "Pause")
         if run and not run.paused then markBtn:Enable() else markBtn:Disable() end

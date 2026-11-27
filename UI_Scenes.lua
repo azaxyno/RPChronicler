@@ -282,6 +282,65 @@ local function ShowReal(s, unit, gear)
     return true
 end
 
+-- 0.7.0: a dressed stand-in for someone who is not near you: their race in
+-- the outfit they wore (look.slots appearances, else their gear links),
+-- on a body of your own sex (the game can't draw the other sex from your
+-- model). A book's author may carry a likeness they picked (an NPC face,
+-- p.face): that model is undressed and dressed the same way where the
+-- client allows. Every step is in a pcall; a refusal falls back to the
+-- shadow. Returns "face", "standin" or false.
+local function Dress(a, p)
+    local look = type(p.look) == "table" and p.look or nil
+    local dressed = false
+    if a.Undress then pcall(a.Undress, a) end
+    if look and type(look.slots) == "table" and a.SetItemTransmogInfo and ItemUtil and ItemUtil.CreateItemTransmogInfo then
+        for slot, v in pairs(look.slots) do
+            if type(v) == "table" and (v.a or 0) > 0 then
+                local okI, info = pcall(ItemUtil.CreateItemTransmogInfo, v.a, v.s or 0, v.i or 0)
+                if okI and info and pcall(a.SetItemTransmogInfo, a, info, slot) then dressed = true end
+            end
+        end
+    end
+    if not dressed and a.TryOn then
+        for _, g in ipairs(type(p.gear) == "table" and p.gear or {}) do
+            if type(g) == "table" and g.link and pcall(a.TryOn, a, g.link) then dressed = true end
+        end
+    end
+    return dressed
+end
+
+local function ShowStandIn(s, p)
+    if ns.Get("standIns") == false then return false end
+    local look = type(p.look) == "table" and p.look or nil
+    local race = tonumber((look and look.race) or p.race)
+    local sex = tonumber((look and look.sex) or p.sex)
+    if not race or not (look or type(p.gear) == "table" and #p.gear > 0) then return false end
+    local m = SlotModel(s)
+    if not m then return false end
+    local a = m.actor
+    s.framed, s.fixed, s.cam = false, false, nil
+    local kind
+    if type(p.face) == "table" and tonumber(p.face.id) and a.SetModelByCreatureDisplayID
+        and pcall(a.SetModelByCreatureDisplayID, a, tonumber(p.face.id)) then
+        kind = "face"
+    else
+        local mySex = ns.SafeNum(UnitSex and UnitSex("player"))
+        if not sex or not mySex or sex ~= mySex then return false end
+        if not pcall(a.SetModelByUnit, a, "player", false, true, false, true, false, race) then return false end
+        kind = "standin"
+    end
+    Dress(a, p)
+    pcall(a.SetYaw, a, 0)
+    m.wait = 0
+    m:SetAlpha(0)
+    m:Show()
+    FrameActor(s)
+    return kind
+end
+UI.ShowStandIn = ShowStandIn
+local STAND_TIP = { face = "The likeness they chose, in the outfit they wore. The game can't send a face.",
+    standin = "A likeness: their race and the outfit they wore. Faces can't be recorded." }
+
 -- Places the model box over the slot's figure box (w x h)
 local function FitModel(s, w, h)
     if not s.model then return end
@@ -594,11 +653,12 @@ function Scene:Refresh()
         s.rgb = rgb
         s.glow:SetVertexColor(rgb[1], rgb[2], rgb[3], 0.85)
         s.name:SetText("|cff" .. Hex(rgb) .. tostring(p.name) .. "|r")
-        local unit = m.isYou and "player" or NearUnit(p.name)
+        local unit = m.isYou and "player" or (p.name == ns.PlayerName() and "player") or NearUnit(p.name)
         local key = tostring((ns.ShadowTexture(p.race, p.sex))):match("([%w_]+)%.png$")
         s.fitTop = SHADOW_TOP[key or ""] or SHADOW_TOP.unknown
         local real = unit and ShowReal(s, unit, (m.isYou and st.gear) or (not m.isYou and p.gear) or nil)
-        if real then
+        local stand = not real and ShowStandIn(s, p)
+        if real or stand then
             s.shadow:Hide()
             Pose(s, p, v.pose)
         else
@@ -618,7 +678,7 @@ function Scene:Refresh()
             p.level and p.level ~= "" and ("Level " .. p.level .. " ") or "", p.class or "",
             role and (" (" .. role .. ")") or "",
             real and (m.isYou and "You, in the gear you wore on this run." or "Shown as they are: they are near you now.")
-                or (s.unknown and "A shadow. This older run did not record their race, so it fills in when you next see them (in your group, as a target or under the mouse)."
+                or (stand and STAND_TIP[stand]) or (s.unknown and "A shadow. This older run did not record their race, so it fills in when you next see them (in your group, as a target or under the mouse)."
                 or "A shadow: the game can only show another player as they are while they are near you.")) ..
             "\n|cff8f9ba8Click to see them up close, with their items.|r"
         s:Show()
@@ -705,7 +765,7 @@ function Scene:Layout()
         -- the name, in the class color
         local full = tostring(m.p.name)
         local text = (mode == "first") and (full:match("^(%S+)") or full) or full
-        s.name:SetText("|cff" .. Hex(s.rgb or ClassRGB(m.p)) .. text .. "|r")
+        s.name:SetText(ns.RoleIconText(m.p) .. "|cff" .. Hex(s.rgb or ClassRGB(m.p)) .. text .. "|r")
         local row = (mode ~= "each" and i % 2 == 0) and 1 or 0
         s.name:ClearAllPoints()
         s.name:SetWidth(n <= 1 and math.max(60, W - 16) or math.max(56, step * z * ((mode == "each") and 1 or 2) - 4))
@@ -926,12 +986,13 @@ do
             fig.fitTop = SHADOW_TOP[key or ""] or SHADOW_TOP.unknown
             fig.camZoom = ZOOM_START
             local real = unit and ShowReal(fig, unit, (isYou and st.gear) or (not isYou and p.gear) or nil)
+            local stand = not real and not isBoss and ShowStandIn(fig, p)
             fig:SetSize(FIG_H * FIG_ASPECT, FIG_H)
             fig:ClearAllPoints()
             fig:SetPoint("BOTTOM", stage, "BOTTOM", 0, 8)
-            if real then
+            if real or stand then
                 FitModel(fig, fig:GetWidth(), fig:GetHeight())
-                f.hint:SetText("|cff8f9ba8Drag to turn, wheel to zoom|r")
+                f.hint:SetText("|cff8f9ba8" .. (stand and "A likeness. " or "") .. "Drag to turn, wheel to zoom|r")
             else
                 local tex, unknown = ns.ShadowTexture(p.race, p.sex)
                 fig.shadow:SetTexture(tex)

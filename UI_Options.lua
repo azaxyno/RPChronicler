@@ -93,7 +93,7 @@ end
 -- 0.6.1: six pages built from ns.SETTINGS (Core.lua). Every row reads and
 -- writes through ns.Get / ns.Set; the page code never edits saved data.
 -- =========================================================
-local view = UI.NewSection("OPTIONS", "Options", "Settings are saved for your whole account.")
+local view = UI.NewSection("OPTIONS", "The Binder's Desk", "Settings are saved for your whole account.")
 local O = { pages = {}, navButtons = {}, refresh = {} }
 UI.options = O
 
@@ -110,7 +110,7 @@ O.area:SetPoint("BOTTOMRIGHT", 0, 0)
 -- rpCopy = true: the page only exists while RP Copy is on
 local PAGE_ORDER = {
     { key = "GENERAL", label = "General" },
-    { key = "SLICES", label = "Slice Tabs", rpCopy = true },
+    { key = "SLICES", label = "Copy and Tabs", rpCopy = true },
     { key = "RECORDING", label = "Recording" },
     { key = "COMPANIONS", label = "Companions" },
     { key = "AI", label = "AI & Stories" },
@@ -261,7 +261,8 @@ end
 -- A number box for a number setting (its min and max come from ns.SETTINGS)
 local function NumberRow(p, x, y, label, key, tip, boxW)
     local s = ns.SETTING[key]
-    UI.Label(p, label, "GameFontHighlightSmall"):SetPoint("TOPLEFT", x, y - 4)
+    local lbl = UI.Label(p, label, "GameFontHighlightSmall")
+    lbl:SetPoint("TOPLEFT", x, y - 4)
     local eb = CreateFrame("EditBox", "RPChroniclerOptNum_" .. key, p, "InputBoxTemplate")
     eb:SetSize(boxW or 44, 20)
     eb:SetPoint("TOPLEFT", x + 180, y)
@@ -279,7 +280,7 @@ local function NumberRow(p, x, y, label, key, tip, boxW)
         UI.Tooltip(self, "|cffffd100" .. label .. "|r", (tip or "") .. string.format(" From %d to %d. Default %d.", s.min, s.max, s.default))
     end)
     eb:SetScript("OnLeave", UI.HideTooltip)
-    return function() eb:SetText(tostring(ns.Get(key))) end, eb
+    return function() eb:SetText(tostring(ns.Get(key))) end, eb, lbl
 end
 
 -- A grid of check boxes bound to a table of booleans (missing = on)
@@ -340,8 +341,8 @@ do
         { key = "iconMode", label = "RP button", names = { MINIMAP = "On the minimap", FLOAT = "Floating" },
           tip = "On the minimap (default): the RP button sits on the minimap's edge; drag it around. Floating: the RP button you can drag anywhere on the screen. Both open the window on left-click and the recording menu on right-click." },
     })
-    local copyRows
-    copyRows, y = SettingRows(p, y - 6, {
+    local copyRows, copyBtns
+    copyRows, y, copyBtns = SettingRows(p, y - 6, {
         { key = "quickCtrlC", label = "Ctrl+C copies the scene",
           tip = "In the game world (no text box focused), Ctrl+C copies the last slice tab you used. OFF: Ctrl+C is left to the game.",
           after = function() UI.UpdateOverrideBindings() end },
@@ -351,7 +352,7 @@ do
           tip = "Ctrl+C first opens a one-line box for a quick instruction to your AI (\"be flirty\", \"reply to Thrall\"). Type it and press Ctrl+C right there: the scene is copied with it as its [Instruction] line. Esc copies without one.",
           after = function() UI.SyncCopyChip() end },
     })
-    local msgRefresh = NumberRow(p, 0, y - 4, "Chat messages per source", "messages",
+    local msgRefresh, msgBox, msgLabel = NumberRow(p, 0, y - 4, "Chat messages per source", "messages",
         "How many recent messages each chat source puts in a snapshot. Expand on the Copy view doubles it.")
     local off = Note(p, "", 0, y - 34)
     Note(p, "|cff8f9ba8Other shortcuts (open the window, add a companion, mark a moment, add a story note, start, pause or end a run) are in the game's own Esc > Options > Keybindings > AddOns > RP Chronicler. They have no keys until you set them.|r", 0, y - 64)
@@ -371,6 +372,10 @@ do
         copyRows()
         msgRefresh()
         off:SetText(ns.RpCopyOn() and "" or "|cffffb74dRP Copy is off: Ctrl+C, the Copy view and its chat buffers are not running.|r")
+        -- 0.7.0 (Mor): Copy-only settings hide while RP Copy is off
+        local on = ns.RpCopyOn()
+        for _, b in ipairs(copyBtns) do if on then b:Show() else b:Hide() end end
+        for _, x in ipairs({ msgBox, msgLabel }) do if on then x:Show() else x:Hide() end end
     end
 end
 
@@ -378,7 +383,7 @@ end
 -- Slice Tabs (RP Copy): every tab and its contents stay editable
 -- ---------------------------------------------------------
 do
-    local p = NewPage("SLICES", "Slice Tabs")
+    local p = NewPage("SLICES", "Copy and Tabs")
     local S = { rows = {}, checks = {} }
 
     local list = CreateFrame("Frame", nil, p, UI.BACKDROP)
@@ -579,7 +584,7 @@ end
 -- ---------------------------------------------------------
 do
     local p = NewPage("COMPANIONS", "Companions")
-    local rows, y = SettingRows(p, -24, {
+    local rows, y, cBtns = SettingRows(p, -24, {
         { key = "knownPlayerBlocks", label = "[Known Player] blocks",
           tip = "Adds your notes on the people in the scene (up to 3, notes cut to 300 letters) to the snapshot you copy." },
         { key = "autoUpdateKnown", label = "Update companions from chat",
@@ -590,7 +595,11 @@ do
           tip = "Companions you chat with during a run are listed as Known companions in its Full Log, with their notes." },
     })
     Note(p, "|cff8f9ba8Per companion, the Include button in Companions picks Auto, Always or Never. Auto adds a companion when they are your target, in your group, on screen or in the copied chat.|r", 0, y - 10)
-    O.refresh.COMPANIONS = rows
+    O.refresh.COMPANIONS = function()
+        rows()
+        -- 0.7.0: [Known Player] blocks only serve the copy
+        if ns.RpCopyOn() then cBtns[1]:Show() else cBtns[1]:Hide() end
+    end
 end
 
 -- ---------------------------------------------------------
@@ -605,7 +614,7 @@ do
     Note(rpPart,
         "|cffffd100Your character skill (one time)|r\n" ..
         "|cffd8dee9Copy the RP Template, fill in your character, and make it a Skill in Gemini, a Project in ChatGPT, or a Skill or Project in Claude. " ..
-        "Name its trigger after your character (like |cff69ccf0" .. ns.SkillCall(ns.DEFAULT_TRIGGER) .. "|cffd8dee9, the Skill Call every tab uses unless you change it in Slice Tabs).|r",
+        "Name its trigger after your character (like |cff69ccf0" .. ns.SkillCall(ns.DEFAULT_TRIGGER) .. "|cffd8dee9, the Skill Call every tab uses unless you change it in Copy and Tabs).|r",
         0, -4)
     local rpBtn = UI.CreateSleekButton(rpPart, 130, 24, "RP Template", "gold")
     rpBtn:SetPoint("TOPLEFT", 0, -78)
@@ -622,7 +631,7 @@ do
 
     local stories = CreateFrame("Frame", nil, p)
     stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
-    stories:SetHeight(320)
+    stories:SetHeight(346)
     -- 0.6.5: Include AI instructions adds the story rules, so the skill is optional
     Note(stories,
         "|cffffd100Your stories|r\n" ..
@@ -632,18 +641,20 @@ do
         0, 0)
     local tplLayout = TemplateButtons(stories, -86)
     local tipRows = SettingRows(stories, -120, {
-        { key = "exportTip", label = "Viewer tip on the shelf",
-          tip = "One line on the Story Book shelf on reading your stories with screenshots in StoryViewer.html." },
+        { key = "exportTip", label = "Tip line in the Library",
+          tip = "One line under the Library's shelves: how unbound pages get their story, or how to read your stories with screenshots in StoryViewer.html." },
         { key = "storyCover", label = "Story scenes",
           tip = "Each story opens with its party: you in 3D in the gear from that run, companions near you as they are, everyone else as a shadow of their race, in front of a painting of the place. At each boss's chapter the party faces the boss, and after the kill you see it fall. Click anyone to see them up close with their items. Off: the book is only written pages (also if your client shows no models)." },
+        { key = "standIns", label = "Likeness figures",
+          tip = "On (default): someone in a story who is not near you is drawn as a likeness, their race in the outfit they wore (on a figure of your own sex; the game can't draw faces it never saw). A shared book's author can pick a face for it. Off: their race shadow." },
         { key = "bookMusic", label = "Dungeon music in the book",
           tip = "While a dungeon story's pages are open, the game's own music for that kind of dungeon plays (at your music volume). Off, or when Story scenes is off: the book is silent and the game's music goes on as usual." },
         { key = "bookPages", label = "Pages", names = { PARCHMENT = "Parchment", LIGHT = "Light parchment", NIGHT = "Night" },
           tip = "Parchment: warm paper pages, with the story's colors inked darker so they read on paper. Light parchment: the same, on brighter pages. Night: dark pages, with the colors as the story was written." },
-        { key = "bookMotion", label = "Book animations",
-          tip = "The book opens from its front cover, turns its pages and closes to its cover with short animations. Off: everything happens at once." },
+        { key = "bookMotion", label = "Animations",
+          tip = "The book opens from its front cover, turns its pages and closes to its cover; the plaque's rune ring turns and its wax seal pulses while you record. Off: everything happens at once and stands still." },
     })
-    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -274)
+    Note(stories, "|cff9aa5b4Which AI and which plan? See the README's Requirements section.|r", 0, -300)
     O.refresh.AI = function()
         stories:ClearAllPoints()
         stories:SetPoint("RIGHT", p, "RIGHT", 0, 0)
@@ -682,12 +693,14 @@ do
     local refreshGrid = CheckGrid(capHolder, 0, ns.CAPTURE_TYPES, function() return RPChroniclerDB.capture end, "RPChroniclerOptCap_")
     -- 0.6.3: error reports kept in the saved file, and the update notice
     local privHolder = CreateFrame("Frame", nil, p)
-    privHolder:SetSize(360, 52)
+    privHolder:SetSize(360, 76)
     local privRows = SettingRows(privHolder, 0, {
         { key = "keepErrors", label = "Keep error reports",
           tip = "Keeps RP Chronicler's own last 20 errors (with the addon and game version, never chat) in its saved file, so a bug report needs no second try. /rp debug shows them; /rp debug clear deletes them." },
         { key = "versionCheck", label = "Update notices",
           tip = "Sends only RP Chronicler's version number to your group and guild, through the game's addon messages, and tells you once when someone has a newer version. Nothing else is ever sent. OFF: nothing is sent or read." },
+        { key = "storySharing", label = "Story sharing", names = { OFF = "Off", FRIENDS = "Friends, guild, group", ANYONE = "Anyone" },
+          tip = "Who may offer you a story (a book's menu: Share with a friend). Off (default): offers are ignored. Friends, guild, group: only them. Anyone: any player. You are always asked first (Accept, Decline or Block), and a book carries only its text, party names, classes, races, outfits and boss names: never screenshots, chat or notes. Sending a book of yours works whatever this says." },
     })
     local btns = CreateFrame("Frame", nil, p)
     btns:SetSize(360, 60)
@@ -699,6 +712,16 @@ do
     reportBtn.tipTitle = "|cffffd100Debug Report|r"
     reportBtn.tipText = "RP Chronicler keeps a small debug log (its own errors, blocked actions, runs starting and ending; never chat). Copy it into a bug report. Same as /rp debug."
     reportBtn:SetScript("OnClick", function() SlashCmdList["RPCHRONICLER"]("debug") end)
+    -- 0.7.0: who you blocked from offering you stories
+    local blockBtn = UI.CreateSleekButton(btns, 120, 24, "Blocked Sharers", "tool")
+    blockBtn.tipTitle = "|cffffd100Blocked sharers|r"
+    blockBtn.tipText = "Players you blocked when they offered you a story. Their offers are ignored."
+    blockBtn:SetScript("OnClick", function()
+        local list = ns.ShareBlockedList()
+        if #list == 0 then UI.SetStatus("Nobody is blocked.", "good") return end
+        UI.ShowPrompt("|cffffd100Blocked from offering you stories:|r\n|cfff5e6c8" .. table.concat(list, ", ") .. "|r",
+            "Unblock all", function() ns.ClearShareBlocks() UI.SetStatus("Nobody is blocked now.", "good") end, "Close", nil)
+    end)
     local wipeBtn = UI.CreateSleekButton(btns, 120, 24, "Delete All Data", "danger")
     wipeBtn.tipTitle = "|cffff6b6bDelete all RP Chronicler data|r"
     wipeBtn.tipText = "Click twice. Deletes every recording, story, companion and setting, then reloads the UI (/rp wipe)."
@@ -725,14 +748,14 @@ do
         privHolder:SetWidth(math.max(250, math.floor(p:GetWidth() or 0)))
         privRows()
         btns:ClearAllPoints()
-        btns:SetPoint("TOPLEFT", 0, -(gridBottom + 54))
+        btns:SetPoint("TOPLEFT", 0, -(gridBottom + 78))
         refreshGrid()
         wipeBtn.armedAt = nil
         wipeBtn:SetText("Delete All Data")
         -- 0.6.3: the three buttons flow and wrap with the page width
         local w = math.max(200, math.floor(p:GetWidth() or 0))
         btns:SetWidth(w)
-        btns:SetHeight(UI.FlowRow(btns, { setupBtn, reportBtn, wipeBtn }, nil, { width = w, rowH = 24, gap = 6 }))
+        btns:SetHeight(UI.FlowRow(btns, { setupBtn, reportBtn, blockBtn, wipeBtn }, nil, { width = w, rowH = 24, gap = 6 }))
     end
 end
 

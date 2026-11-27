@@ -729,6 +729,7 @@ local function OnEvent(event, ...)
         local encounterID, encounterName = ...
         local bName = ns.SafeStr(encounterName)
         ns.SyncAdventureRoster()
+        if ns.CaptureRunLook then ns.CaptureRunLook() end
         if bName then
             ns.RecordAdventureBossEngage(bName, nil, encounterID)
         end

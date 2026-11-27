@@ -68,6 +68,21 @@ f:SetClampedToScreen(true)
 f:Hide()
 UI.ApplyDarkGlass(f, 0.05, 0.06, 0.08, 0.98, 0.85, 0.68, 0.30, 0.90)
 S.frame = f
+-- 0.7.0: the same leather and brass as the main window
+do
+    local bg = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+    bg:SetPoint("TOPLEFT", 1, -1)
+    bg:SetPoint("BOTTOMRIGHT", -1, 1)
+    bg:SetTexture(UI.ART .. "cover.png")
+    bg:SetVertexColor(0.30, 0.14, 0.09)
+    for _, c in ipairs({ { "TOPLEFT", 0, 1, 0, 1 }, { "TOPRIGHT", 1, 0, 0, 1 }, { "BOTTOMLEFT", 0, 1, 1, 0 }, { "BOTTOMRIGHT", 1, 0, 1, 0 } }) do
+        local t = f:CreateTexture(nil, "OVERLAY", nil, 7)
+        t:SetTexture(UI.ART .. "corner.png")
+        t:SetSize(28, 28)
+        t:SetPoint(c[1], 0, 0)
+        t:SetTexCoord(c[2], c[3], c[4], c[5])
+    end
+end
 
 S.logo = f:CreateTexture(nil, "ARTWORK")
 S.logo:SetSize(96, 96)
@@ -248,7 +263,7 @@ local function Finish()
     print("|cffffd100RP Chronicler|r Setup saved. |cff9aa5b4Change it any time in Options (/rp setup shows this again).|r")
     -- 0.6.3: one next step for each thing you chose
     if S.use ~= "STORIES" and ns.RpCopyOn() then
-        print("|cffffd100RP Chronicler|r |cff9aa5b4RP Copy, next:|r type /rp, open Options > AI & Stories, copy the RP Template into your AI as a character skill, and put its trigger in Options > Slice Tabs as the Skill Call. Then Ctrl+C copies the scene.")
+        print("|cffffd100RP Chronicler|r |cff9aa5b4RP Copy, next:|r type /rp, open Options > AI & Stories, copy the RP Template into your AI as a character skill, and put its trigger in Options > Copy and Tabs as the Skill Call. Then Ctrl+C copies the scene.")
     end
     if S.use ~= "COPY" then
         print("|cffffd100RP Chronicler|r |cff9aa5b4Stories, next:|r type /rp, open Adventures and press Start (dungeons ask when you enter). When the run ends, open its Full Log, tick Include AI instructions, click Copy for AI, paste it into any AI chat, then import the story it writes in the Story Book.")

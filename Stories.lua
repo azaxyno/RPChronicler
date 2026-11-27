@@ -23,7 +23,9 @@ local STORY_META = { "code", "title", "zone", "instanceName", "kind", "startDate
     -- 0.6.3: the cover (who and what they wore), name fixes, version stamp
     "char", "gear", "fixes", "addonVersion", "clientBuild",
     -- 0.6.4: the story scene (dungeon art)
-    "ejInstance" }
+    "ejInstance",
+    -- 0.7.0: your look on the run (for shared books)
+    "look" }
 
 local function DeepCopy(v, depth)
     if type(v) ~= "table" then return v end
@@ -593,6 +595,7 @@ end
 -- the files the player picks and uploads nothing (its CSP blocks every
 -- network request).
 ns.HOSTED_VIEWER_URL = "https://azaxyno.github.io/RPChronicler/StoryViewer.html"
+ns.VIEWER_REL_PATH = "_forever_\\Interface\\AddOns\\RPChronicler\\StoryViewer.html"
 ns.VIEWER_PATH_EXAMPLE = "file:///C:/Program%20Files%20(x86)/World%20of%20Warcraft/_forever_/Interface/AddOns/RPChronicler/StoryViewer.html"
 function ns.ViewerUrl(path)
     path = tostring(path or ""):gsub("[\r\n]", ""):match("^%s*(.-)%s*$")
@@ -661,7 +664,7 @@ end
 -- Story as clean plain text (no color codes or icons), for Discord or forums
 function ns.GetStoryPlainText(adv)
     if not adv or not adv.story or adv.story == "" then return "" end
-    local text = ns.StripShotMarkers(ns.NormalizeStoryText(adv.story))
+    local text = ns.StripEmblemLines(ns.StripShotMarkers(ns.NormalizeStoryText(adv.story)))
     text = text:gsub("|T.-|t", ""):gsub("|A.-|a", ""):gsub("|H.-|h(.-)|h", "%1")
     text = ns.StripColors(text):gsub("|n", "\n"):gsub("||", "|")
     text = text:gsub("\n\n\n+", "\n\n")
@@ -1325,4 +1328,279 @@ function ns.SearchStories(text)
         if all then out[#out + 1] = st end
     end
     return out
+end
+
+-- =========================================================
+-- 0.7.0 SHELVES (Mor): the Library's planks. "Finished tales" and
+-- "Waiting for their story" (the recordings with no story yet, drawn as
+-- unbound pages) are the defaults; players rename them, add their own,
+-- and move stories between story shelves. Deleting a shelf puts its
+-- stories back on Finished tales, so nothing is lost. Gifts (stories
+-- friends shared) is made the first time one arrives.
+-- RPChroniclerDB.shelves = { { id, name, runs = true? } ... } in order,
+-- st.shelf = shelf id. Changes say ns.Notify("shelfChanged").
+-- =========================================================
+do
+    ns.SHELF_NAME_MAX = 32
+    ns.DEFAULT_SHELVES = {
+        { id = "tales", name = "Finished tales" },
+        { id = "waiting", name = "Waiting for their story", runs = true },
+    }
+    ns.GIFT_SHELF = { id = "gifts", name = "Gifts" }
+    local FIXED = { tales = true, waiting = true }
+
+    local function Clean(name)
+        local t = tostring(name or ""):gsub("||", "|"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("[%c|]", " ")
+        t = t:match("^%s*(.-)%s*$") or ""
+        if #t > ns.SHELF_NAME_MAX then t = t:sub(1, ns.SHELF_NAME_MAX):match("^(.-)%s*$") end
+        return t
+    end
+
+    -- Every shelf in order; the two defaults are always there
+    function ns.GetShelves()
+        if not RPChroniclerDB then return {} end
+        local list = type(RPChroniclerDB.shelves) == "table" and RPChroniclerDB.shelves or {}
+        RPChroniclerDB.shelves = list
+        for _, d in ipairs(ns.DEFAULT_SHELVES) do
+            local have = false
+            for _, s in ipairs(list) do if s.id == d.id then have = true end end
+            if not have then table.insert(list, { id = d.id, name = d.name, runs = d.runs }) end
+        end
+        return list
+    end
+
+    function ns.FindShelf(id)
+        for _, s in ipairs(ns.GetShelves()) do
+            if s.id == id then return s end
+        end
+        return nil
+    end
+
+    -- The story shelf a story stands on (an unknown or missing one: tales)
+    function ns.StoryShelf(st)
+        local s = st and st.shelf and ns.FindShelf(st.shelf)
+        if s and not s.runs then return s.id end
+        return "tales"
+    end
+
+    function ns.CreateShelf(name)
+        local n = Clean(name)
+        if n == "" then return nil, "Give the shelf a name." end
+        local list = ns.GetShelves()
+        if #list >= 12 then return nil, "The Library holds 12 shelves at most." end
+        local s = { id = "sh" .. tostring(time()) .. tostring(math.random(100, 999)), name = n }
+        table.insert(list, s)
+        ns.Notify("shelfChanged", s.id)
+        return s
+    end
+
+    -- The gifts shelf, made when the first gift arrives (renamable and
+    -- deletable like any shelf of the player's)
+    function ns.EnsureGiftShelf()
+        local s = ns.FindShelf(ns.GIFT_SHELF.id)
+        if s then return s end
+        s = { id = ns.GIFT_SHELF.id, name = ns.GIFT_SHELF.name }
+        table.insert(ns.GetShelves(), s)
+        ns.Notify("shelfChanged", s.id)
+        return s
+    end
+
+    function ns.RenameShelf(id, name)
+        local s = ns.FindShelf(id)
+        local n = Clean(name)
+        if not s or n == "" then return false end
+        s.name = n
+        ns.Notify("shelfChanged", id)
+        return true
+    end
+
+    function ns.CanDeleteShelf(id)
+        return ns.FindShelf(id) ~= nil and not FIXED[id]
+    end
+
+    -- Its stories go back to Finished tales
+    function ns.DeleteShelf(id)
+        if not ns.CanDeleteShelf(id) then return false end
+        local list = ns.GetShelves()
+        for i = #list, 1, -1 do
+            if list[i].id == id then table.remove(list, i) end
+        end
+        for _, st in ipairs(ns.GetStories()) do
+            if st.shelf == id then st.shelf = nil end
+        end
+        ns.Notify("shelfChanged", id)
+        return true
+    end
+
+    function ns.MoveShelf(id, delta)
+        local list = ns.GetShelves()
+        for i, s in ipairs(list) do
+            if s.id == id then
+                local j = i + delta
+                if j < 1 or j > #list then return false end
+                list[i], list[j] = list[j], list[i]
+                ns.Notify("shelfChanged", id)
+                return true
+            end
+        end
+        return false
+    end
+
+    function ns.MoveStoryToShelf(storyId, shelfId)
+        local st = ns.FindStory(storyId)
+        local s = ns.FindShelf(shelfId)
+        if not st or not s or s.runs then return false end
+        st.shelf = (shelfId ~= "tales") and shelfId or nil
+        ns.Notify("shelfChanged", shelfId)
+        return true
+    end
+
+    -- The stories on one story shelf, newest first
+    function ns.ShelfStories(shelfId)
+        local out = {}
+        for _, st in ipairs(ns.GetStories()) do
+            if ns.StoryShelf(st) == shelfId then out[#out + 1] = st end
+        end
+        return out
+    end
+
+    -- Saved recordings with no story yet (the unbound pages), newest first
+    function ns.RunsWithoutStory()
+        local out = {}
+        for _, adv in ipairs((RPChroniclerDB and RPChroniclerDB.adventures) or {}) do
+            if type(adv) == "table" and adv ~= ns.GetActiveAdventure() and not ns.RunHasStory(adv) then out[#out + 1] = adv end
+        end
+        return out
+    end
+end
+
+-- =========================================================
+-- 0.7.0 chapter emblems: [emblem:key] lines in a story (keys and files
+-- in SceneData.lua). Shown over the chapter in the book and on the
+-- spine; taken out of every plain-text copy.
+-- =========================================================
+do
+    local DIR = "Interface\\AddOns\\RPChronicler\\Media\\Emblems\\"
+
+    function ns.EmblemKey(key)
+        key = tostring(key or ""):lower():gsub("[^%w_]", "")
+        key = (ns.EMBLEM_ALIAS and ns.EMBLEM_ALIAS[key]) or key
+        return (ns.EMBLEM and ns.EMBLEM[key]) and key or "default"
+    end
+
+    function ns.EmblemPath(key)
+        return DIR .. ns.EmblemKey(key) .. ".png"
+    end
+
+    -- the key of a line that is only an emblem mark, else nil
+    function ns.EmblemLine(line)
+        local plain = ns.StripColors(tostring(line or "")):gsub("^%s*[#%*]*%s*", "")
+        local key = plain:match("^%[[Ee]mblem:%s*([%w_ ]-)%s*%]%s*$")
+        return key and ns.EmblemKey(key) or nil
+    end
+
+    -- the story's emblems in chapter order (cached on the text length)
+    function ns.StoryEmblems(st)
+        local text = type(st) == "table" and st.story or ""
+        if st and st.emblemCache and st.emblemCache.n == #text then return st.emblemCache.list end
+        local list = {}
+        for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+            local k = line:find("mblem:", 1, true) and ns.EmblemLine(line)
+            if k then list[#list + 1] = k end
+        end
+        if type(st) == "table" then st.emblemCache = { n = #text, list = list } end
+        return list
+    end
+
+    function ns.StripEmblemLines(text)
+        if type(text) ~= "string" or not text:find("mblem:", 1, true) then return text end
+        local out = {}
+        for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+            if not ns.EmblemLine(line) then out[#out + 1] = line end
+        end
+        return table.concat(out, "\n")
+    end
+end
+
+-- =========================================================
+-- Shared stories (0.7.0): a book a friend sent (Share.lua) or a pasted
+-- share code. Saved in one go as a new story on the Gifts shelf, never
+-- linked to a run of yours and never written into an existing story,
+-- except "Replace" of the same book from the same author.
+--   st.shared = { author, at, version, via ("whisper" / "code"), srcId }
+-- =========================================================
+function ns.FindSharedStory(author, srcId)
+    if not author or not srcId then return nil end
+    local a = ns.ShortName and ns.ShortName(author) or author
+    for _, st in ipairs(Stories()) do
+        local sh = type(st) == "table" and st.shared
+        if type(sh) == "table" and sh.srcId == srcId and (ns.ShortName and ns.ShortName(sh.author) or sh.author) == a then return st end
+    end
+    return nil
+end
+
+-- d: the book from ns.ReadSharePayload. o = { author, via, mode = "replace" | "both" }
+-- Returns ok, storyId.
+function ns.AddSharedStory(d, o)
+    if type(d) ~= "table" or type(d.story) ~= "string" then return false end
+    ns.EnsureDB()
+    o = o or {}
+    local author = o.author or d.from or "Unknown"
+    local st = { id = NewStoryId() }
+    local old = (o.mode ~= "both") and ns.FindSharedStory(author, d.src) or nil
+    local parts = {}
+    for _, p in ipairs(d.parts or {}) do
+        p.gear = d.gear and d.gear[p.idx] or nil
+        p.look = d.looks and d.looks[p.idx] or nil
+        p.idx = nil
+        table.insert(parts, p)
+    end
+    -- the author stands where the reader would on their own books: their
+    -- gear and look go into their party entry
+    local who
+    for _, p in ipairs(parts) do if d.char and p.name and ns.StripRealm(p.name) == ns.StripRealm(d.char) then who = p end end
+    if not who and d.char then
+        who = { name = d.char }
+        table.insert(parts, 1, who)
+    end
+    if who then
+        who.gear = (d.gear and d.gear[0]) or who.gear
+        who.look = (d.looks and d.looks[0]) or who.look
+        who.face = d.face
+        who.author = true
+    end
+    st.participants = parts
+    st.title, st.kind, st.zone, st.instanceName, st.ejInstance = d.title, d.kind, d.zone, d.instanceName, d.ejInstance
+    st.startDate, st.endDate, st.startTime, st.endTime, st.duration = d.startDate, d.endDate, d.startTime, d.endTime, d.duration
+    st.char = d.char
+    st.bossKills, st.bossInfo = {}, {}
+    for _, b in ipairs(d.bosses or {}) do
+        table.insert(st.bossKills, b.name)
+        st.bossInfo[b.name] = { encounter = b.encounter, cls = b.cls ~= "" and b.cls or nil, level = b.level, kind = "boss" }
+    end
+    st.places = d.places
+    st.shared = { author = author, at = time(), version = d.app, via = o.via or "code", srcId = d.src }
+    st.shelf = ns.GIFT_SHELF.id
+    local cleaned = ns.NormalizeStoryText(d.story)
+    st.story = cleaned
+    st.importedAt = time()
+    st.importedWith = ns.VERSION
+    ApplyBook(st, cleaned)
+    if d.title and d.title ~= "" then
+        st.book.title = d.title
+        st.book.edited.title = true
+    end
+    if old then
+        st.id = old.id
+        st.shelf = old.shelf or st.shelf
+        for k in pairs(old) do old[k] = nil end
+        for k, v in pairs(st) do old[k] = v end
+        st = old
+    else
+        table.insert(Stories(), 1, st)
+    end
+    if ns.EnsureGiftShelf then ns.EnsureGiftShelf() end
+    ns.Debug("run", string.format("shared story saved (%d chars, via %s)", #cleaned, tostring(st.shared.via)))
+    ns.Notify("shelfChanged", st.shelf)
+    return true, st.id
 end

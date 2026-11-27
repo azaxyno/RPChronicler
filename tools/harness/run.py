@@ -19,7 +19,7 @@ lua.globals().ROOT = root
 loader = lua.execute('return function(src, name) local f, err = loadstring(src, "@" .. name); if not f then error(err) end; return f end')
 toc = open(os.path.join(root, "RPChronicler.toc"), encoding="utf-8").read().splitlines()
 for line in toc:
-    f = line.strip()
+    f = line.strip().replace("\\", "/")
     if f.endswith(".lua"):
         loader(open(os.path.join(root, f), encoding="utf-8").read(), f)("RPChronicler", ns)
 lua.execute(open(sys.argv[1], encoding="utf-8").read())

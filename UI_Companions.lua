@@ -270,6 +270,9 @@ function UI.RefreshPlayersTab()
         return a:lower() < b:lower()
     end)
 
+    -- 0.7.0: a teal dot marks companions near you right now
+    local near = {}
+    for _, n in ipairs(ns.NearbyCompanions()) do near[n.key] = true end
     for idx, pName in ipairs(sorted) do
         local rb = P.rows[idx]
         if not rb then
@@ -280,7 +283,8 @@ function UI.RefreshPlayersTab()
         local data = RPChroniclerDB.players[pName]
         local hasNote = (data.note or "") ~= ""
         local tag = (data.kind == "npc" and " |cffb39ddb(NPC)|r") or (data.kind == "pet" and " |cffb39ddb(pet)|r") or ""
-        rb:SetText(pName .. tag .. (hasNote and " |cffff80ab*|r" or ""))
+        local dot = near[pName] and "|TInterface\\CHARACTERFRAME\\TempPortraitAlphaMask:9:9:0:0:64:64:0:64:0:64:64:224:208|t " or ""
+        rb:SetText(dot .. pName .. tag .. (hasNote and " |cffff80ab*|r" or ""))
         if ns.state.selectedPlayerKey == pName then rb:LockHighlight() else rb:UnlockHighlight() end
         rb:SetScript("OnClick", function()
             UI.LoadPlayerIntoEditor(pName)

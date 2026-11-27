@@ -17,9 +17,9 @@ UI.storyBook = B
 -- only and every story opens as its own book. Saved chronicles are kept
 -- (RPChroniclerDB.chronicles), just not shown; true brings them back.
 B.CHRONICLES = false
-local root = UI.NewSection("BOOK", "Story Book", "The tales of your adventures.")
+local root = UI.NewSection("BOOK", "Library", "Your tales, and the pages still waiting for their story.")
 B.root = root
-UI.AddRailButton("BOOK", "Story Book", UI.ICONS.STORY, "Read, share and edit the tales of your adventures.")
+UI.AddRailButton("BOOK", "Library", UI.ICONS.STORY, "Your shelves: finished tales, gifts, and the recordings still waiting for their story.")
 
 -- Stories imported this session glow on the shelf until opened
 B.sessionStart = time and time() or 0
@@ -136,7 +136,7 @@ do
     local clear = UI.CreateSleekButton(f, 70, 22, "Clear", "tool")
     clear:SetPoint("BOTTOMLEFT", 14, 10)
     clear.tipTitle = "|cffffd100Clear|r"
-    clear.tipText = "Forget the saved address, to paste a new one."
+    clear.tipText = "Forget an address you pasted here before."
     clear:SetScript("OnClick", function()
         ns.SetStoryViewerPath("")
         eb:SetText("")
@@ -159,24 +159,39 @@ do
         eb:SetCursorPosition(0)
         eb:HighlightText()
     end)
-    function UI.ShowViewerPath()
-        local saved = ns.StoryViewerPath()
-        if saved ~= "" then
-            sub:SetText("|cffd7c4a3Press |cffffd100Ctrl+C|cffd7c4a3, paste it into your browser's address bar and press Enter. " ..
-                "This is the address you pasted from StoryViewer.html; paste a new one if you moved the game.|r")
-            example:SetText("|cff8f9ba8Your StoryViewer.html:|r")
-        else
-            sub:SetText("|cffd7c4a3First time: open your game folder, go to |cfff5e6c8_forever_\\Interface\\AddOns\\RPChronicler|cffd7c4a3 and double-click |cfff5e6c8StoryViewer.html|cffd7c4a3. " ..
-                "The page shows its own address with a |cffffd100Copy|cffd7c4a3 button: paste it here once (Ctrl+V), and from then on this box gives it back to you.|r")
-            example:SetText("|cff8f9ba8It looks like (example, yours may differ): " .. ns.VIEWER_PATH_EXAMPLE .. "|r")
-        end
-        f:SetHeight(math.max(150, 124 + math.ceil(sub:GetStringHeight() or 28)))
-        eb:SetText(saved)
+    -- 0.7.0 (Mor: the paste step was a headache): no pasting. The box
+    -- hands over the online viewer's address, ready to copy, or the
+    -- folder path inside the game folder; the browser's bookmark keeps it.
+    local folderBtn = UI.CreateSleekButton(f, 110, 22, "Folder path", "tool")
+    folderBtn:SetPoint("LEFT", online, "RIGHT", 8, 0)
+    folderBtn.tipTitle = "|cffffd100Folder path|r"
+    folderBtn.tipText = "Where StoryViewer.html is inside your game folder. Open that folder and double-click the file."
+    local function ShowFolder()
+        eb:SetText(ns.VIEWER_REL_PATH)
+        example:SetText("|cff8f9ba8Inside your World of Warcraft folder (press Ctrl+C):|r")
         Sync()
-        f:Show()
         eb:SetFocus()
         eb:SetCursorPosition(0)
         eb:HighlightText()
+    end
+    folderBtn:SetScript("OnClick", ShowFolder)
+    function UI.ShowViewerPath()
+        local saved = ns.StoryViewerPath()
+        hint:SetText("")
+        sub:SetText("|cffd7c4a3Your stories with their screenshots, in your browser. Copy the address below (|cffffd100Ctrl+C|cffd7c4a3), paste it into your browser and press Enter. " ..
+            "|cffffd100Bookmark the page|cffd7c4a3 the first time: from then on it is one click. Nothing is uploaded either way.|r")
+        f:SetHeight(math.max(150, 124 + math.ceil(sub:GetStringHeight() or 28)))
+        f:Show()
+        if saved ~= "" then
+            eb:SetText(saved)
+            example:SetText("|cff8f9ba8Your StoryViewer.html:|r")
+            Sync()
+            eb:SetFocus()
+            eb:SetCursorPosition(0)
+            eb:HighlightText()
+        else
+            online:GetScript("OnClick")(online)
+        end
     end
 end
 
@@ -199,7 +214,7 @@ do
     heading:SetPoint("TOPLEFT", book, "TOPRIGHT", 10, -2)
     heading:SetPoint("RIGHT", e, "RIGHT", -16, 0)
     heading:SetJustifyH("LEFT")
-    heading:SetText("|cffffd100Your Story Book is empty|r")
+    heading:SetText("|cffffd100Your Library is empty|r")
     pcall(heading.SetFont, heading, "Fonts\\FRIZQT__.TTF", 15, "")
 
     local subHeading = e:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -215,7 +230,8 @@ do
     steps:SetSpacing(4)
     steps:SetText(
         "|cffffd100How to make a story:|r\n" ..
-        "|cfff5e6c81. Copy the run:|r in Adventures open |cff69ccf0Full Log|r, tick |cffffd100Include AI instructions|r, click |cffffd100Copy for AI|r, press |cffffd100Ctrl+C|r.\n" ..
+        "|cfff5e6c80. Record:|r click |cffffd100Chronicle a new adventure|r at the top, or enter a dungeon.\n" ..
+        "|cfff5e6c81. Copy the run:|r in the Journal open |cff69ccf0Full Log|r, tick |cffffd100Include AI instructions|r, click |cffffd100Copy for AI|r, press |cffffd100Ctrl+C|r.\n" ..
         "|cfff5e6c82. Ask your AI:|r paste it into any AI chat. The story rules come with it.\n" ..
         "|cfff5e6c83. Import:|r copy the story it writes and click |cffffd100Import Story|r.\n" ..
         "|cff9aa5b4No AI? Import Story > Quick Chronicle (a test feature) writes a short one for you.|r\n\n" ..
@@ -329,6 +345,73 @@ function B.Share(st)
         header .. ns.GetStoryPlainText(st))
 end
 
+-- =========================================================
+-- Sharing (0.7.0, Share.lua): to a friend by name, or as a share code.
+-- On your own book, the likeness step comes first: the game can't send
+-- your face, so you may pick a close one (an NPC you target) for the
+-- friend's copy. Shown only here, as a step of Share.
+-- =========================================================
+local function TakeTargetFace()
+    if not (UnitExists and UnitExists("target")) then return false, "Target someone whose face is close to yours first." end
+    if ns.SafeBool(UnitIsPlayer and UnitIsPlayer("target")) then return false, "Target an NPC (a guard or a vendor): a player's face can't be read." end
+    if IsInInstance and ns.SafeBool(IsInInstance()) then return false, "Pick a face outside dungeons and raids." end
+    B.faceReader = B.faceReader or CreateFrame("PlayerModel", nil, UIParent)
+    local m = B.faceReader
+    m:SetSize(1, 1)
+    m:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -10, 10)
+    pcall(m.SetUnit, m, "target")
+    local ok, id = pcall(m.GetDisplayInfo, m)
+    id = ok and ns.SafeNum(id) or nil
+    m:Hide()
+    if not id or id <= 0 then return false, "The game did not give that face. Try someone else." end
+    RPChroniclerDB.likeness = { id = id, name = ns.SafeStr(UnitName("target")) or "your pick" }
+    return true
+end
+
+function B.LikenessStep(st, done)
+    if not st or st.shared or (st.char and st.char ~= ns.PlayerName()) then done(nil) return end
+    local like = type(RPChroniclerDB.likeness) == "table" and RPChroniclerDB.likeness or nil
+    UI.ShowPrompt("|cffffd100How you look in this book|r\n" ..
+        (like and ("|cfff5e6c8Your likeness: the face of |cffffd100" .. like.name .. "|cfff5e6c8, in the outfit you wore.|r")
+            or "|cfff5e6c8No likeness yet: your friend sees your race in the outfit you wore.|r") .. "\n" ..
+        "|cffd7c4a3The game can't send your face to a friend, so choose the one closest to yours. Your friend will see it, in the outfit you wore.|r\n" ..
+        "|cff8f9ba8To choose: target an NPC (out of dungeons) whose face and hair are close to yours. Only the outfit and this choice go with the book.|r",
+        "Use my target's face", function()
+            local ok, why = TakeTargetFace()
+            if ok then UI.SetStatus("Likeness saved: " .. RPChroniclerDB.likeness.name .. ".", "good") else UI.SetStatus(why, "error") end
+            B.LikenessStep(st, done)
+        end,
+        like and "Send with this face" or "Send without", function() done(like) end,
+        like and "Forget the face" or "Cancel", like and function() RPChroniclerDB.likeness = nil B.LikenessStep(st, done) end or nil)
+end
+
+function B.ShareWithFriend(st)
+    if not st then return end
+    B.LikenessStep(st, function(face)
+        local tname = UnitExists and UnitExists("target") and ns.SafeBool(UnitIsPlayer("target")) and ns.GetUnitFullName("target") or nil
+        UI.AskLine({ title = "Share with a friend",
+            sub = "Their character name (Name or Name-Realm). They need RP Chronicler with Story sharing on, and they are asked first." ..
+                (tname and (" Empty: your target, " .. tname .. ".") or ""),
+            placeholder = tname or "Name-Realm", okText = "Send",
+            onAccept = function(text)
+                if (text or "") == "" then text = tname end
+                local ok, why = ns.ShareStoryWith(st.id, text or "", { face = face })
+                if ok then UI.SetStatus("Asked " .. tostring(text) .. ". The answer shows in your chat.", "good")
+                else UI.SetStatus(why or "Could not share.", "error") end
+            end })
+    end)
+end
+
+function B.CopyShareCode(st)
+    if not st then return end
+    B.LikenessStep(st, function(face)
+        local code, why = ns.BuildShareCode(st, { face = face })
+        if not code then UI.SetStatus(ns.SHARE_WHY[why] or "Could not make the share code.", "error") return end
+        UI.ShowCopyBox("|cffffd100Share code:|r |cfff5e6c8" .. ns.GetBookInfo(st).name .. "|r",
+            "|cffb0bac5Press Ctrl+C and send it to your friend any way you like. They paste it into + Import in their Library.|r", code)
+    end)
+end
+
 -- 0.6.2: a story imported this session isn't in the saved file yet, so
 -- StoryViewer.html gets it by paste
 function B.CopyForViewer(st)
@@ -379,9 +462,11 @@ function UI.RefreshStoryBook()
     -- 0.6.4: skill users hear once a session when the story rules changed
     local notice = not B.noticeShown and ns.TemplateNotice()
     if notice then B.noticeShown = true; UI.SetStatus(notice, "warn") end
-    if #ns.GetStories() == 0 and not (B.CHRONICLES and #ns.GetChronicles() > 0) then
+    -- 0.7.0: the empty page only on a fresh Library (no story, no run)
+    if #ns.GetStories() == 0 and #ns.RunsWithoutStory() == 0 and not (B.CHRONICLES and #ns.GetChronicles() > 0) then
         if B.HideBook then B.HideBook() end
         if B.HideShelf then B.HideShelf() end
+        UI.SetBookMode(false)
         B.empty:Show()
         return
     end
@@ -390,10 +475,12 @@ function UI.RefreshStoryBook()
     local exists = open and ((open.kind == "story" and ns.FindStory(open.id)) or (B.CHRONICLES and open.kind == "chronicle" and ns.FindChronicle(open.id)))
     if ns.state.bookView == "BOOK" and exists and B.ShowBook then
         if B.HideShelf then B.HideShelf() end
+        UI.SetBookMode(true)
         B.ShowBook()
     else
         ns.state.bookView = "SHELF"
         if B.HideBook then B.HideBook() end
+        UI.SetBookMode(false)
         if B.ShowShelf then B.ShowShelf() end
     end
 end

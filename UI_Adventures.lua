@@ -168,6 +168,29 @@ do
             imp.title:SetText("|cffff6b6bPaste a story first before saving!|r")
             return
         end
+        -- 0.7.0: a friend's share code becomes a gift on the Gifts shelf
+        if ns.IsShareCode and ns.IsShareCode(raw) then
+            local d, why = ns.ReadShareCode(raw)
+            if not d then
+                imp.title:SetText("|cffff6b6b" .. (ns.SHARE_WHY[why] or "That share code could not be read.") .. "|r")
+                return
+            end
+            local function Save(mode)
+                local okS, sid = ns.AddSharedStory(d, { via = "code", mode = mode })
+                f:Hide()
+                if okS then
+                    UI.OpenStoryBook(sid)
+                    UI.SetStatus("The book is on your Gifts shelf.", "good")
+                end
+            end
+            if ns.FindSharedStory(d.from, d.src) then
+                UI.ShowPrompt("|cffffd100You already have this book.|r Replace your copy or keep both?",
+                    "Replace", function() Save("replace") end, "Keep both", function() Save("both") end, "Cancel", nil)
+            else
+                Save()
+            end
+            return
+        end
         -- 0.6.3: one import path; the run is optional (found by Run ID)
         local ok, storyId, linked = ns.ImportStory(raw, f.targetAdvId, f.targetStoryId)
         if ok then
@@ -294,8 +317,8 @@ UI.OpenStoryImportModal = OpenStoryImportModal
 -- =========================================================
 -- 0.5.0: Adventures holds the recordings only; the Story Book is its own
 -- section right below it (UI_StoryBook.lua)
-local view = UI.NewSection("ADVENTURES", "Adventures", "Your recorded runs: Summary, Full Log for your AI, and a link to each story.")
-UI.AddRailButton("ADVENTURES", "Adventures", UI.ICONS.ADVENTURES, "Record dungeon and open-world runs (raids: coming soon).")
+local view = UI.NewSection("ADVENTURES", "Journal", "Your recorded runs: Summary, Full Log for your AI, and a link to each story.")
+UI.AddRailButton("ADVENTURES", "Journal", UI.ICONS.ADVENTURES, "Every recorded run, and its next step: copy it for your AI, or read its story.")
 
 local A = { cards = {} }
 UI.adventures = A
@@ -349,7 +372,7 @@ A.list:SetPoint("BOTTOMLEFT", 0, 0)
 UI.ApplyPanelLook(A.list)
 
 do
-    local header = UI.Label(A.list, "|cffffd100Recordings|r")
+    local header = UI.Label(A.list, "|cffffd100Journal|r")
     header:SetPoint("TOPLEFT", 10, -8)
 end
 
@@ -711,7 +734,10 @@ function UI.RefreshAdventuresTab()
         else
             extra = string.format("%dk - %dw", #(adv.bossKills or {}), adv.wipes or 0)
         end
-        card.subLbl:SetText(string.format("|cff8f9ba8%s - %s - %s|r", kindShort, ns.FormatDuration(durSec), extra))
+        -- 0.7.0 (the Journal): each row says its next step
+        local stry = not item.isLive and ns.StoryForRun(adv.id)
+        local nextStep = item.isLive and "|cffff8a8arecording|r" or (stry and ("|cffffd100Story: " .. ns.StripColors(ns.GetBookInfo(stry).name or "") .. "|r") or "|cffd7c4a3No story yet: Copy for AI|r")
+        card.subLbl:SetText(nextStep .. string.format("  |cff8f7f68%s - %s - %s|r", kindShort, ns.FormatDuration(durSec), extra))
 
         local selected = (ns.state.selectedAdventureId == adv.id)
         card.isSelected = selected
@@ -720,8 +746,8 @@ function UI.RefreshAdventuresTab()
             card:SetBackdropBorderColor(0.88, 0.71, 0.30, 0.90)
             card.accent:SetVertexColor(item.isLive and 0.36 or 0.90, 0.73, 0.32, 1)
         else
-            card:SetBackdropColor(0.09, 0.11, 0.15, 0.92)
-            card:SetBackdropBorderColor(0.22, 0.25, 0.32, 0.85)
+            card:SetBackdropColor(0.13, 0.10, 0.07, 0.92)
+            card:SetBackdropBorderColor(0.36, 0.28, 0.17, 0.85)
             card.accent:SetVertexColor(0.36, 0.72, 0.36, item.isLive and 0.85 or 0)
         end
         card:SetScript("OnClick", function()

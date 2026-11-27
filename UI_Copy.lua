@@ -613,6 +613,20 @@ function UI.RebuildSliceTabs()
         btn:Show()
         x = x + w + 4
     end
+    -- 0.7.0: the bookmark tabs end with "Edit tabs..." (Options > Copy
+    -- and Tabs), so every tab and its contents stay one click away
+    if not C.editTabs then
+        C.editTabs = UI.CreateSleekButton(C.strip, 70, 22, "Edit tabs...", "gold")
+        C.editTabs.tipTitle = "|cffffd100Edit tabs|r"
+        C.editTabs.tipText = "Add, rename, reorder or change what each tab copies (Options > Copy and Tabs)."
+        C.editTabs:SetScript("OnClick", function() UI.OpenOptionsPage("SLICES") end)
+    end
+    local ew = math.max(70, UI.ButtonWidth(C.editTabs))
+    if x + ew > maxW and x > 0 then x, y, rows = 0, y - 25, rows + 1 end
+    C.editTabs:ClearAllPoints()
+    C.editTabs:SetWidth(ew)
+    C.editTabs:SetPoint("TOPLEFT", x, y)
+    C.editTabs:Show()
     C.strip:SetHeight(rows * 25 - 1)
 end
 

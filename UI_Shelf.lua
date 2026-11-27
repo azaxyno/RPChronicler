@@ -149,7 +149,7 @@ do
     pcall(title.SetFont, title, B.TITLE_FONT, 20, "")
     title:SetShadowOffset(1, -2)
     title:SetShadowColor(0, 0, 0, 1)
-    title:SetText(GOLD .. "Your shelf|r")
+    title:SetText(GOLD .. "Your Library|r")
 
     S.newBtn = UI.CreateSleekButton(f, 112, 20, "+ New chronicle", "gold")
     S.newBtn:SetPoint("TOPRIGHT", -12, -10)
@@ -200,7 +200,7 @@ do
     tt:SetPoint("RIGHT", -30, 0)
     tt:SetJustifyH("LEFT")
     tt:SetWordWrap(false)
-    tt:SetText(GOLD .. "Read with screenshots:|r |cffd7c4a3open a book, then Book > Read outside the game (StoryViewer.html).|r")
+    S.tipText = tt
     local x = UI.CreateSleekButton(tip, 20, 18, "x", "danger")
     x:SetPoint("RIGHT", -3, 0)
     x.tipTitle = GOLD .. "Hide this tip|r"
@@ -219,7 +219,7 @@ do
     child:SetSize(400, 10)
     scroll:SetScrollChild(child)
     S.scroll, S.child = scroll, child
-    S.spines, S.planks, S.labels, S.rows = {}, {}, {}, {}
+    S.spines, S.planks, S.labels, S.rows, S.loose = {}, {}, {}, {}, {}
 
     S.emptyText = child:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     S.emptyText:SetPoint("TOPLEFT", 6, -8)
@@ -295,9 +295,51 @@ local function MakeSpine()
     b.icon:SetPoint("BOTTOM", 0, 7)
     b:SetScript("OnEnter", SpineEnter)
     b:SetScript("OnLeave", SpineLeave)
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:SetScript("OnClick", function(self, button)
+        UI.HideTooltip()
+        if button == "RightButton" then
+            if self.open.kind == "story" then S.OpenShelfMenu(self, nil, self.open.id) end
+            return
+        end
+        if B.OpenBook then B.OpenBook(self.open) end
+    end)
+    -- 0.7.0: a small wax seal on a gift's spine
+    b.gift = b:CreateTexture(nil, "OVERLAY", nil, 2)
+    b.gift:SetTexture(UI.ART .. "seal.png")
+    b.gift:SetVertexColor(0.80, 0.14, 0.12)
+    b.gift:SetSize(14, 14)
+    b.gift:SetPoint("TOP", 0, -10)
+    b.gift:Hide()
+    return b
+end
+
+-- 0.7.0: a recording with no story yet, as a stack of unbound pages
+local function MakeLoose()
+    local b = CreateFrame("Button", nil, S.child)
+    b:SetSize(40, 92)
+    b.tex = b:CreateTexture(nil, "ARTWORK")
+    b.tex:SetAllPoints(b)
+    b.tex:SetTexture(UI.ART .. "unbound.png")
+    b.tex:SetTexCoord(0.05, 0.95, 0.08, 0.98)
+    b.icon = b:CreateTexture(nil, "OVERLAY")
+    b.icon:SetSize(16, 16)
+    b.icon:SetPoint("TOP", 0, -10)
+    b:SetScript("OnEnter", function(self)
+        if self.x then self:SetPoint("BOTTOMLEFT", S.child, "TOPLEFT", self.x, self.y + 6) end
+        local adv = self.adv
+        UI.Tooltip(self, GOLD .. tostring(adv.title or "Adventure") .. "|r",
+            (adv.dateStr or adv.date or "") .. "  -  " .. ns.GetRunKindLabel(adv),
+            "|cffd7c4a3No story yet.|r",
+            "|cff8f9ba8Click to open it in the Journal, where Copy for AI gives it its story.|r")
+    end)
+    b:SetScript("OnLeave", function(self)
+        if self.x then self:SetPoint("BOTTOMLEFT", S.child, "TOPLEFT", self.x, self.y) end
+        UI.HideTooltip()
+    end)
     b:SetScript("OnClick", function(self)
         UI.HideTooltip()
-        if B.OpenBook then B.OpenBook(self.open) end
+        if UI.OpenRecording then UI.OpenRecording(self.adv.id) end
     end)
     return b
 end
@@ -394,19 +436,32 @@ local function Plank(i, y, w)
     p.shadow:Show()
 end
 
-local function Label(i, y, text)
+-- 0.7.0: a shelf's name is a button (click: rename, move, delete)
+local function Label(i, y, text, shelfId)
     local l = S.labels[i]
     if not l then
-        l = S.child:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        l:SetShadowOffset(1, -1)
-        l:SetShadowColor(0, 0, 0, 1)
-        l:SetJustifyH("LEFT")
+        l = CreateFrame("Button", nil, S.child)
+        l:SetHeight(16)
+        l.fs = l:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        l.fs:SetShadowOffset(1, -1)
+        l.fs:SetShadowColor(0, 0, 0, 1)
+        l.fs:SetJustifyH("LEFT")
+        l.fs:SetAllPoints(l)
+        l:SetScript("OnEnter", function(self)
+            if self.shelfId then
+                UI.Tooltip(self, GOLD .. "Shelf|r", "Click to rename, move or delete this shelf, or add a new one.",
+                    "|cff8f9ba8Right-click a book to move it to another shelf.|r")
+            end
+        end)
+        l:SetScript("OnLeave", UI.HideTooltip)
+        l:SetScript("OnClick", function(self) if self.shelfId then S.OpenShelfMenu(self, self.shelfId, nil) end end)
         S.labels[i] = l
     end
+    l.shelfId = shelfId
     l:ClearAllPoints()
     l:SetPoint("TOPLEFT", S.child, "TOPLEFT", 6, y)
     l:SetPoint("RIGHT", S.child, "RIGHT", -6, 0)
-    l:SetText(text)
+    l.fs:SetText(text)
     l:Show()
 end
 
@@ -432,6 +487,7 @@ function S.Refresh()
     for _, x in ipairs(S.planks) do x:Hide(); x.shadow:Hide() end
     for _, x in ipairs(S.labels) do x:Hide() end
     for _, x in ipairs(S.rows) do x:Hide() end
+    for _, x in ipairs(S.loose) do x:Hide() end
     S.emptyText:Hide()
 
     -- search results instead of the shelf
@@ -463,11 +519,12 @@ function S.Refresh()
         return
     end
 
-    -- the shelf: chronicles on top, loose stories below, rows that wrap
-    local nSpine, nPlank, nLabel, y = 0, 0, 0, 0
-    local function Group(label, items)
+    -- the shelves (0.7.0): each of the player's shelves in order, rows
+    -- that wrap; the runs shelf holds the unbound pages
+    local nSpine, nPlank, nLabel, nLoose, y = 0, 0, 0, 0, 0
+    local function Group(label, items, shelfId, emptyLine)
         nLabel = nLabel + 1
-        Label(nLabel, -y, label)
+        Label(nLabel, -y, label .. ((#items == 0 and emptyLine) and ("   |cff8f9ba8" .. emptyLine .. "|r") or ""), shelfId)
         local x, base = 8, y + LABEL_H + BOOK_MAX_H
         local function NewRow()
             nPlank = nPlank + 1
@@ -480,22 +537,35 @@ function S.Refresh()
                 base = base + PLANK_H + ROW_GAP + BOOK_MAX_H
                 NewRow()
             end
-            nSpine = nSpine + 1
-            local b = S.spines[nSpine] or MakeSpine()
-            S.spines[nSpine] = b
-            b.open = it.open
-            b.r, b.g, b.b = B.BookColor(it.open)
-            b:SetSize(it.w, it.h)
-            b.leather:SetVertexColor(b.r, b.g, b.b)
-            SpineTitle(b, it.title, it.w, it.h)
-            if it.icon then
-                b.icon:SetTexture(it.icon)
-                b.icon:SetTexCoord(ns.IconCoords(it.icon))
-                b.icon:Show()
+            local b
+            if it.adv then
+                nLoose = nLoose + 1
+                b = S.loose[nLoose] or MakeLoose()
+                S.loose[nLoose] = b
+                b.adv = it.adv
+                local icon = ns.GetAdventureIcon(it.adv)
+                b.icon:SetTexture(icon)
+                b.icon:SetTexCoord(ns.IconCoords(icon))
             else
-                b.icon:Hide()
+                nSpine = nSpine + 1
+                b = S.spines[nSpine] or MakeSpine()
+                S.spines[nSpine] = b
+                b.open = it.open
+                b.r, b.g, b.b = B.BookColor(it.open)
+                b:SetSize(it.w, it.h)
+                b.leather:SetVertexColor(b.r, b.g, b.b)
+                SpineTitle(b, it.title, it.w, it.h)
+                if it.icon then
+                    b.icon:SetTexture(it.icon)
+                    b.icon:SetTexCoord(ns.IconCoords(it.icon))
+                    if it.emblem then b.icon:SetVertexColor(1, 0.84, 0.45) else b.icon:SetVertexColor(1, 1, 1) end
+                    b.icon:Show()
+                else
+                    b.icon:Hide()
+                end
+                if it.gift then b.gift:Show() else b.gift:Hide() end
+                Glow(b, it.new)
             end
-            Glow(b, it.new)
             b.x, b.y = x, -base
             b:ClearAllPoints()
             b:SetPoint("BOTTOMLEFT", S.child, "TOPLEFT", x, -base)
@@ -506,26 +576,43 @@ function S.Refresh()
         return #items
     end
 
-    local vols, loose = {}, {}
-    for _, c in ipairs(B.CHRONICLES and ns.GetChronicles() or {}) do
-        local stories = ns.ChronicleStories(c)
-        local new = false
-        for _, st in ipairs(stories) do if B.IsNew(st) then new = true end end
-        table.insert(vols, { open = { kind = "chronicle", id = c.id }, title = c.title, new = new,
-            w = 44 + math.min(6, #stories) * 3, h = 140 + (B.Hash(c.id) % 24) })
-    end
-    for _, st in ipairs(B.CHRONICLES and ns.LooseStories() or ns.GetStories()) do
-        table.insert(loose, { open = { kind = "story", id = st.id }, title = ns.GetBookInfo(st).name, new = B.IsNew(st),
-            w = 32 + (B.Hash(st.id) % 7), h = 120 + (B.Hash(st.id .. "h") % 26) })
-    end
-    if B.CHRONICLES then
-        Group("|cffc8b48cCHRONICLES|r" .. (#vols == 0 and "   |cff8f9ba8None yet: + New chronicle makes a volume for stories that belong together.|r" or ""), vols)
-        if #loose > 0 then Group("|cffc8b48cLOOSE STORIES|r", loose) end
-    else
-        Group("|cffc8b48cYOUR STORIES|r   |cff8f9ba8Newest first. Click a book to open it.|r", loose)
+    local nWaiting = 0
+    for _, sh in ipairs(ns.GetShelves()) do
+        local items = {}
+        local name = "|cffc8b48c" .. string.upper(sh.name) .. "|r"
+        if sh.runs then
+            for _, adv in ipairs(ns.RunsWithoutStory()) do
+                table.insert(items, { adv = adv, w = 40, h = 92 })
+            end
+            nWaiting = #items
+            Group(name, items, sh.id, S.EMPTY.waiting)
+        else
+            for _, st in ipairs(ns.ShelfStories(sh.id)) do
+                local emblem = ns.StoryEmblems and ns.StoryEmblems(st)[1]
+                table.insert(items, { open = { kind = "story", id = st.id }, title = ns.GetBookInfo(st).name, new = B.IsNew(st),
+                    w = 32 + (B.Hash(st.id) % 7), h = 120 + (B.Hash(st.id .. "h") % 26),
+                    icon = emblem and ns.EmblemPath(emblem) or nil, emblem = emblem and true or nil,
+                    gift = st.shared and true or nil })
+            end
+            Group(name, items, sh.id, S.EMPTY[sh.id] or "Right-click a book on another shelf to move it here.")
+        end
     end
     S.child:SetHeight(math.max(10, y))
+    -- the line under the shelves: the Library tip while pages wait for
+    -- their story, else the viewer tip
+    if nWaiting > 0 then
+        S.tipText:SetText("|cffd7c4a3Unbound pages are tales still waiting for their ink. Open one to give it its story.|r")
+    else
+        S.tipText:SetText(GOLD .. "Read with screenshots:|r |cffd7c4a3open a book, then Book > Read outside the game (StoryViewer.html).|r")
+    end
 end
+
+-- the empty lines of the default shelves
+S.EMPTY = {
+    tales = "No bound tomes rest here yet. Give an unbound page its story to fill this shelf.",
+    waiting = "Your desk is clear: every recorded journey has found its words.",
+    gifts = "No gifted volumes yet. Tales shared by fellow travelers will appear here.",
+}
 
 function B.ShowShelf()
     S.frame:Show()
@@ -613,6 +700,99 @@ do
     end
     B.root:HookScript("OnHide", function() menu:Hide() end)
 end
+
+-- =========================================================
+-- 0.7.0: the shelf menu. On a shelf's name: rename, move, delete, a new
+-- shelf. On a book (right-click): move it to another shelf.
+-- =========================================================
+do
+    local menu = CreateFrame("Frame", "RPChroniclerShelfMenu", UIParent, UI.BACKDROP)
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:SetSize(210, 10)
+    menu:EnableMouse(true)
+    menu:Hide()
+    UI.ApplyStoryTomeLook(menu)
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "RPChroniclerShelfMenu") end
+    local items = {}
+    local function Item(i)
+        local b = items[i]
+        if b then return b end
+        b = UI.CreateSleekButton(menu, 198, 20, "")
+        b.label:SetJustifyH("LEFT")
+        b:SetPoint("TOPLEFT", 6, -6 - (i - 1) * 22)
+        b:HookScript("OnClick", function() menu:Hide() end)
+        items[i] = b
+        return b
+    end
+    local function NewShelf(storyId)
+        UI.AskLine({
+            title = GOLD .. "New shelf|r",
+            sub = "|cffb0bac5A name for the shelf (up to " .. ns.SHELF_NAME_MAX .. " letters)." .. (storyId and " This book goes on it." or "") .. "|r",
+            placeholder = "Tales of the road",
+            okText = "Create",
+            onAccept = function(text)
+                local sh, why = ns.CreateShelf(text)
+                if not sh then UI.SetStatus(why or "", "error") return end
+                if storyId then ns.MoveStoryToShelf(storyId, sh.id) end
+            end,
+        })
+    end
+    function S.OpenShelfMenu(anchor, shelfId, storyId)
+        for _, b in ipairs(items) do b:Hide() end
+        local n = 0
+        local function Add(text, fn, disabled)
+            n = n + 1
+            local b = Item(n)
+            b:SetText(text)
+            b:SetScript("OnClick", fn)
+            if disabled then b:Disable() else b:Enable() end
+            b:Show()
+        end
+        if storyId then
+            local st = ns.FindStory(storyId)
+            if not st then return end
+            local cur = ns.StoryShelf(st)
+            for _, sh in ipairs(ns.GetShelves()) do
+                if not sh.runs then
+                    local mark = (sh.id == cur) and "|cff5cb85c(here)|r " or ""
+                    Add(mark .. "|cfff5e6c8Move to " .. Cut(sh.name, 22) .. "|r", function() ns.MoveStoryToShelf(storyId, sh.id) end, sh.id == cur)
+                end
+            end
+            Add(GOLD .. "+ New shelf...|r", function() NewShelf(storyId) end)
+        else
+            local sh = ns.FindShelf(shelfId)
+            if not sh then return end
+            local list = ns.GetShelves()
+            Add("|cfff5e6c8Rename \"" .. Cut(sh.name, 18) .. "\"...|r", function()
+                UI.AskLine({
+                    title = GOLD .. "Rename shelf|r",
+                    sub = "|cffb0bac5Now: " .. sh.name .. " (up to " .. ns.SHELF_NAME_MAX .. " letters).|r",
+                    placeholder = sh.name,
+                    okText = "Rename",
+                    onAccept = function(text) ns.RenameShelf(sh.id, text) end,
+                })
+            end)
+            Add("Move up", function() ns.MoveShelf(sh.id, -1) end, list[1] == sh)
+            Add("Move down", function() ns.MoveShelf(sh.id, 1) end, list[#list] == sh)
+            Add(GOLD .. "+ New shelf...|r", function() NewShelf(nil) end)
+            if ns.CanDeleteShelf(sh.id) then
+                Add("|cffff8a8aDelete shelf...|r", function()
+                    UI.ShowPrompt("|cffffd100Delete the shelf \"" .. sh.name .. "\"?|r\n|cffd7c4a3Its books go back to " .. (ns.FindShelf("tales") or {}).name .. ". Nothing is lost.|r",
+                        "|cffff6b6bDelete shelf|r", function() ns.DeleteShelf(sh.id) end, "Keep it", nil)
+                end)
+            end
+        end
+        menu:SetHeight(12 + n * 22)
+        menu:ClearAllPoints()
+        menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+        menu:Show()
+    end
+    B.root:HookScript("OnHide", function() menu:Hide() end)
+end
+
+ns.Listen("shelfChanged", function()
+    if UI.frame:IsShown() and ns.state.section == "BOOK" then UI.RefreshStoryBook() end
+end)
 
 ns.Listen("chronicleChanged", function()
     if UI.frame:IsShown() and ns.state.section == "BOOK" then UI.RefreshStoryBook() end

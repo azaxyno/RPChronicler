@@ -562,6 +562,7 @@ function ns.BuildQuickChronicle(adv)
 
     if brief then
         table.insert(out, C(GOLD, "Chapter 1: " .. place))
+        table.insert(out, "[emblem:travel]")
         table.insert(out, C(PROSE, Cap(W.Pick("brief", { who = you, place = C(PLACE, place), dur = dur }))))
         for _, line in ipairs(WriteChapter({ events = events, title = { first = true } }, ctx, W)) do table.insert(out, line) end
         table.insert(out, C(PROSE, "Too little happened on this run for a longer tale. Record a longer run for a fuller one."))
@@ -580,6 +581,9 @@ function ns.BuildQuickChronicle(adv)
             if t.also and t.also ~= p then name = name .. " and " .. t.also end
         end
         table.insert(out, C(GOLD, "Chapter " .. i .. ": " .. name))
+        -- 0.7.0: the chapter's emblem (the book draws it over the chapter)
+        table.insert(out, "[emblem:" .. ((t.boss and "boss") or (t.open and (kind == "world" and "travel" or "cave"))
+            or (t.close and "victory") or (kind == "world" and "travel") or "battle") .. "]")
         if i == 1 then
             local opening
             if kind == "world" then opening = W.Pick("openWorld", { who = you, place = C(PLACE, place) })

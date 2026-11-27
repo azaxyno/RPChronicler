@@ -35,8 +35,19 @@ end
 -- =========================================================
 -- Dark-glass theme helpers
 -- =========================================================
+-- 0.7.0 (the Library look): every panel is warm leather and brass. The
+-- old cool blue-greys are turned to the same darkness in brown here, so
+-- every view takes the new look without its own colors changing.
+function UI.Warm(r, g, b)
+    if not (r and g and b) or b <= r then return r, g, b end
+    local l = (r + g + b) / 3
+    return math.min(1, l * 1.32), l, l * 0.68
+end
+
 function UI.ApplyDarkGlass(frame, bgR, bgG, bgB, bgA, brR, brG, brB, brA)
     if not frame or not frame.SetBackdrop then return end
+    bgR, bgG, bgB = UI.Warm(bgR or 0.06, bgG or 0.07, bgB or 0.10)
+    brR, brG, brB = UI.Warm(brR or 0.72, brG or 0.58, brB or 0.28)
     frame:SetBackdrop({
         bgFile = UI.SOLID_TEX,
         edgeFile = UI.SOLID_TEX,
@@ -170,11 +181,7 @@ function UI.CreateSleekButton(parent, width, height, text, accentStyle)
         -- handler can't raise an error
         if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0.92, 0.76, 0.35, 0.95) end
         if not self.isLocked and self.SetBackdropColor then
-            if self.accentStyle == "tool" then
-                self:SetBackdropColor(0.15, 0.21, 0.30, 0.98)
-            else
-                self:SetBackdropColor(0.16, 0.19, 0.25, 0.96)
-            end
+            self:SetBackdropColor(0.26, 0.19, 0.11, 0.97)
         end
         if self.tipTitle then UI.Tooltip(self, self.tipTitle, self.tipText) end
     end)
@@ -304,9 +311,8 @@ end
 -- =========================================================
 -- Main window
 -- =========================================================
-local RAIL_W = 92   -- 0.6.1: wide enough for "Companions" in full
-UI.DEFAULT_W, UI.DEFAULT_H = 680, 490
-UI.MIN_W, UI.MIN_H = 640, 460   -- 0.6.3: rows wrap, so nothing overlaps at this size
+UI.DEFAULT_W, UI.DEFAULT_H = 720, 520
+UI.MIN_W, UI.MIN_H = 660, 480   -- 0.6.3: rows wrap, so nothing overlaps at this size (0.7.0: taller header)
 
 local copyFrame = CreateFrame("Frame", "RPChroniclerFrame", UIParent, UI.BACKDROP)
 UI.frame = copyFrame
@@ -360,155 +366,364 @@ copyFrame:SetScript("OnDragStop", function(self)
     UI.SavePosition()
 end)
 
--- Header strip: title, version, gear, close
+-- =========================================================
+-- 0.7.0: the tome frame. Leather over the whole window, brass corners,
+-- a header with the title and the chronicle plaque, and bookmark
+-- ribbons down the left instead of the old rail.
+-- =========================================================
+UI.ART = "Interface\\AddOns\\RPChronicler\\Media\\Book\\"
+UI.GOLD_FONT = "Fonts\\MORPHEUS.TTF"
+do
+    local leather = copyFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
+    leather:SetPoint("TOPLEFT", 1, -1)
+    leather:SetPoint("BOTTOMRIGHT", -1, 1)
+    if not pcall(leather.SetTexture, leather, UI.ART .. "cover.png", "REPEAT", "REPEAT") then
+        leather:SetTexture(UI.ART .. "cover.png")
+    end
+    leather:SetVertexColor(0.36, 0.16, 0.11)
+    UI.leather = leather
+    local coords = { { "TOPLEFT", 0, 1, 0, 1 }, { "TOPRIGHT", 1, 0, 0, 1 }, { "BOTTOMLEFT", 0, 1, 1, 0 }, { "BOTTOMRIGHT", 1, 0, 1, 0 } }
+    for _, c in ipairs(coords) do
+        local t = copyFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+        t:SetTexture(UI.ART .. "corner.png")
+        t:SetSize(30, 30)
+        t:SetPoint(c[1], 0, 0)
+        t:SetTexCoord(c[2], c[3], c[4], c[5])
+    end
+end
+
+-- Header strip: title, the plaque, version and close
+UI.HEADER_H = 44
 do
     local headerBar = CreateFrame("Frame", nil, copyFrame, UI.BACKDROP)
-    headerBar:SetHeight(28)
+    headerBar:SetHeight(UI.HEADER_H)
     headerBar:SetPoint("TOPLEFT", 1, -1)
     headerBar:SetPoint("TOPRIGHT", -1, -1)
-    UI.ApplyDarkGlass(headerBar, 0.08, 0.10, 0.14, 0.98, 0.78, 0.62, 0.28, 0.30)
+    UI.ApplyDarkGlass(headerBar, 0.16, 0.08, 0.05, 0.55, 0.78, 0.62, 0.28, 0.35)
     UI.header = headerBar
 
     UI.titleText = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    UI.titleText:SetPoint("LEFT", 12, 0)
-    UI.titleText:SetText("|cffffd100RP Chronicler|r")
+    UI.titleText:SetPoint("TOPLEFT", 16, -9)
+    pcall(UI.titleText.SetFont, UI.titleText, UI.GOLD_FONT, 15, "")
+    UI.titleText:SetShadowOffset(1, -1)
+    UI.titleText:SetText("|cffffd100RP CHRONICLER|r")
+    UI.subTitle = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    UI.subTitle:SetPoint("TOPLEFT", UI.titleText, "BOTTOMLEFT", 0, -2)
+    UI.subTitle:SetText("|cffb09a70BETA|r")
 
     local closeBtn = UI.CreateSleekButton(headerBar, 22, 20, "x", "danger")
-    closeBtn:SetPoint("RIGHT", -5, 0)
+    closeBtn:SetPoint("RIGHT", -10, 0)
     closeBtn:SetScript("OnClick", function() copyFrame:Hide() end)
-
-    local gearBtn = UI.CreateSleekButton(headerBar, 26, 20, "")
-    gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -6, 0)
-    gearBtn.icon = gearBtn:CreateTexture(nil, "ARTWORK")
-    gearBtn.icon:SetSize(16, 16)
-    gearBtn.icon:SetPoint("CENTER", 0, 0)
-    gearBtn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    gearBtn.icon:SetTexture(UI.ICONS.OPTIONS)
-    gearBtn.tipTitle = "|cffffd100Options|r"
-    gearBtn.tipText = "Settings, keybinds, slice tabs and AI setup."
-    gearBtn:SetScript("OnClick", function()
-        if ns.state.section == "OPTIONS" then
-            UI.ShowSection(UI.lastNonOptions or "COPY")
-        else
-            UI.ShowSection("OPTIONS")
-        end
-    end)
-    UI.gearBtn = gearBtn
+    UI.closeBtn = closeBtn
 
     local verBadge = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    verBadge:SetPoint("RIGHT", gearBtn, "LEFT", -8, 0)
-    verBadge:SetText("|cff8f9ba8v" .. (ns.VERSION or "0.6.8") .. "|r")
+    verBadge:SetPoint("RIGHT", closeBtn, "LEFT", -8, 0)
+    verBadge:SetText("|cff8f7f68v" .. (ns.VERSION or "0.7.0") .. "|r")
 end
 
--- Left rail
+-- The chronicle plaque: "Start a new recording" over "Chronicle a new
+-- adventure". While a run records: a pulsing wax seal, its name and time.
+-- Click starts, or ends the run (after asking); right-click pauses.
 do
-    local rail = CreateFrame("Frame", nil, copyFrame, UI.BACKDROP)
+    local plq = CreateFrame("Button", nil, UI.header)
+    plq:SetSize(290, 32)
+    plq:SetPoint("CENTER", 0, -4)
+    plq:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    plq.bg = plq:CreateTexture(nil, "BACKGROUND")
+    plq.bg:SetAllPoints(plq)
+    plq.bg:SetTexture(UI.ART .. "plaque.png")
+    plq.tab = plq:CreateTexture(nil, "BORDER")
+    plq.tab:SetTexture(UI.SOLID_TEX)
+    plq.tab:SetVertexColor(0.16, 0.09, 0.05, 1)
+    plq.tab:SetSize(150, 11)
+    plq.tab:SetPoint("BOTTOM", plq, "TOP", 0, -4)
+    plq.over = plq:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    plq.over:SetPoint("CENTER", plq.tab, "CENTER", 0, 0)
+    pcall(plq.over.SetFont, plq.over, "Fonts\\FRIZQT__.TTF", 8, "")
+    plq.ring = plq:CreateTexture(nil, "ARTWORK")
+    plq.ring:SetTexture(UI.ART .. "ring.png")
+    plq.ring:SetSize(26, 26)
+    plq.ring:SetPoint("LEFT", 6, 0)
+    plq.quill = plq:CreateTexture(nil, "OVERLAY")
+    plq.quill:SetTexture(UI.ART .. "quill.png")
+    plq.quill:SetVertexColor(0.30, 0.16, 0.08)
+    plq.quill:SetSize(18, 18)
+    plq.quill:SetPoint("CENTER", plq.ring, "CENTER", 0, 0)
+    plq.seal = plq:CreateTexture(nil, "OVERLAY")
+    plq.seal:SetTexture(UI.ART .. "seal.png")
+    plq.seal:SetVertexColor(0.85, 0.12, 0.10)
+    plq.seal:SetSize(24, 24)
+    plq.seal:SetPoint("CENTER", plq.ring, "CENTER", 0, 0)
+    plq.seal:Hide()
+    plq.text = plq:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    plq.text:SetPoint("LEFT", plq.ring, "RIGHT", 6, 0)
+    plq.text:SetPoint("RIGHT", -8, 0)
+    plq.text:SetJustifyH("CENTER")
+    plq.text:SetWordWrap(false)
+    pcall(plq.text.SetFont, plq.text, UI.GOLD_FONT, 14, "")
+    UI.plaque = plq
+
+    -- looping motion (guarded; behind the Animations switch): the rune
+    -- ring turns, the seal pulses
+    if plq.CreateAnimationGroup then
+        pcall(function()
+            local spin = plq:CreateAnimationGroup()
+            local r = spin:CreateAnimation("Rotation")
+            r:SetDegrees(-360)
+            r:SetDuration(18)
+            r:SetTarget(plq.ring)
+            spin:SetLooping("REPEAT")
+            plq.spin = spin
+            local pulse = plq:CreateAnimationGroup()
+            local a = pulse:CreateAnimation("Alpha")
+            a:SetFromAlpha(1)
+            a:SetToAlpha(0.45)
+            a:SetDuration(0.9)
+            a:SetTarget(plq.seal)
+            pulse:SetLooping("BOUNCE")
+            plq.pulse = pulse
+            if ns.WatchAnim then ns.WatchAnim(spin, "plaque ring") ns.WatchAnim(pulse, "plaque seal") end
+        end)
+    end
+    local function Loop(ag, on)
+        if not ag then return end
+        if on and ns.Get("bookMotion") then
+            if not ag:IsPlaying() then ag:Play() end
+        elseif ag:IsPlaying() then
+            ag:Stop()
+        end
+    end
+
+    function UI.RefreshPlaque()
+        local run = ns.GetActiveAdventure()
+        if not run then
+            plq.over:SetText("|cffe8c66aSTART A NEW RECORDING|r")
+            plq.text:SetText("|cff4a2a12Chronicle a new adventure|r")
+            plq.seal:Hide()
+            plq.quill:Show()
+            Loop(plq.pulse, false)
+            Loop(plq.spin, true)
+            return
+        end
+        local secs = math.max(0, time() - (run.startTime or time()))
+        local clock = string.format("%d:%02d", math.floor(secs / 3600), math.floor(secs / 60) % 60)
+        local name = tostring(run.title or "Adventure")
+        if #name > 22 then name = name:sub(1, 20) .. "..." end
+        plq.quill:Hide()
+        plq.seal:Show()
+        Loop(plq.spin, false)
+        if run.paused then
+            plq.over:SetText("|cffffb74dPAUSED - RIGHT-CLICK TO RESUME|r")
+            plq.text:SetText("|cff6a4a20The quill rests: " .. name .. "|r")
+            plq.seal:SetAlpha(0.6)
+            Loop(plq.pulse, false)
+        else
+            plq.over:SetText("|cffff8a8aEND ADVENTURE|r")
+            plq.text:SetText("|cff5a1a10Chronicling: " .. name .. "  " .. clock .. "|r")
+            Loop(plq.pulse, true)
+        end
+    end
+
+    plq:SetScript("OnClick", function(_, button)
+        local run = ns.GetActiveAdventure()
+        if button == "RightButton" then
+            if run and RPChronicler_ToggleRunPause then RPChronicler_ToggleRunPause() end
+        elseif not run then
+            if RPChronicler_StartRun then RPChronicler_StartRun() end
+        else
+            UI.ShowPrompt("|cffffd100End this adventure?|r\n|cffd7c4a3" .. tostring(run.title or "") ..
+                " is saved to your Journal, waiting for its story.|r",
+                "|cffff8a8aEnd adventure|r", function() if RPChronicler_EndRun then RPChronicler_EndRun() end end,
+                "Keep recording", nil)
+        end
+        UI.RefreshPlaque()
+    end)
+    plq:SetScript("OnEnter", function(self)
+        self.bg:SetVertexColor(1, 0.95, 0.80)
+        local run = ns.GetActiveAdventure()
+        if run then
+            UI.Tooltip(self, "|cffffd100" .. tostring(run.title or "Adventure") .. "|r",
+                run.paused and "The quill rests. Recording paused." or "The enchanted quill is writing down your deeds.",
+                "Click: end the adventure (asks first). Right-click: pause or resume.")
+        else
+            UI.Tooltip(self, "|cffffd100Chronicle a new adventure|r",
+                "Starts recording here and now. Dungeons ask by themselves when you enter (Options > Recording).")
+        end
+    end)
+    plq:SetScript("OnLeave", function(self)
+        self.bg:SetVertexColor(1, 1, 1)
+        UI.HideTooltip()
+    end)
+    local acc = 1
+    plq:SetScript("OnUpdate", function(_, elapsed)
+        acc = acc + elapsed
+        if acc < 1 then return end
+        acc = 0
+        UI.RefreshPlaque()
+    end)
+    ns.Listen("runChanged", function() UI.RefreshPlaque() end)
+    ns.Listen("setting", function(key) if key == "bookMotion" then UI.RefreshPlaque() end end)
+end
+
+-- =========================================================
+-- Ribbons (0.7.0): bookmark ribbons down the left replace the rail.
+-- Library, Journal and Companions hang from the top; Copy and the brass
+-- key (Options) from the bottom. Each view adds its own with
+-- UI.AddRailButton; UI.RIBBONS sets its place, color and name.
+-- =========================================================
+local RAIL_W = 78
+UI.RIBBONS = {
+    BOOK       = { order = 1, tint = { 0.66, 0.14, 0.12 } },
+    ADVENTURES = { order = 2, tint = { 0.18, 0.40, 0.22 } },
+    PLAYERS    = { order = 3, tint = { 0.16, 0.28, 0.52 } },
+    COPY       = { order = 2, bottom = true, tint = { 0.40, 0.20, 0.52 } },
+    OPTIONS    = { order = 1, bottom = true, tint = { 0.46, 0.34, 0.16 }, short = true },
+}
+do
+    local rail = CreateFrame("Frame", nil, copyFrame)
     rail:SetWidth(RAIL_W)
-    rail:SetPoint("TOPLEFT", 1, -29)
-    rail:SetPoint("BOTTOMLEFT", 1, 1)
-    UI.ApplyDarkGlass(rail, 0.07, 0.08, 0.11, 0.96, 0.78, 0.62, 0.28, 0.22)
+    rail:SetPoint("TOPLEFT", 6, -(UI.HEADER_H + 1))
+    rail:SetPoint("BOTTOMLEFT", 6, 6)
     UI.rail = rail
     UI.railButtons = {}
+    local line = rail:CreateTexture(nil, "BACKGROUND")
+    line:SetTexture(UI.SOLID_TEX)
+    line:SetVertexColor(0.78, 0.62, 0.28, 0.25)
+    line:SetPoint("TOPRIGHT", 0, 0)
+    line:SetPoint("BOTTOMRIGHT", 0, 0)
+    line:SetWidth(1)
 end
 
 UI.railOrder = {}
 
--- Stacks the shown rail buttons from the top (0.6.1: the Copy button is
--- hidden while RP Copy is off)
+local function RibbonLook(btn, on)
+    local t = btn.tint or { 0.5, 0.5, 0.5 }
+    local k = on and 1.25 or 0.85
+    btn.cloth:SetVertexColor(math.min(1, t[1] * k), math.min(1, t[2] * k), math.min(1, t[3] * k))
+    btn.label:SetTextColor(on and 1 or 0.90, on and 0.88 or 0.80, on and 0.50 or 0.62)
+end
+
+-- Stacks the shown ribbons: top ones down from the header, bottom ones
+-- up from the floor. The open view's ribbon hangs longer.
 function UI.LayoutRail()
-    local idx = 0
+    local tops, bottoms = {}, {}
     for _, key in ipairs(UI.railOrder) do
         local btn = UI.railButtons[key]
         if btn.hiddenByFeature then
             btn:Hide()
         else
-            btn:ClearAllPoints()
-            btn:SetPoint("TOP", 0, -10 - idx * 58)
-            btn:Show()
-            idx = idx + 1
+            table.insert(btn.bottom and bottoms or tops, btn)
         end
+    end
+    table.sort(tops, function(a, b) return a.order < b.order end)
+    table.sort(bottoms, function(a, b) return a.order < b.order end)
+    local y = 0
+    for _, btn in ipairs(tops) do
+        btn:ClearAllPoints()
+        btn:SetPoint("TOP", UI.rail, "TOP", -2, -y)
+        btn:SetHeight(btn.isOpen and btn.baseH + 10 or btn.baseH)
+        btn:Show()
+        y = y + btn.baseH + 6
+    end
+    y = 0
+    for _, btn in ipairs(bottoms) do
+        btn:ClearAllPoints()
+        btn:SetPoint("BOTTOM", UI.rail, "BOTTOM", -2, y)
+        btn:SetHeight(btn.isOpen and btn.baseH + 6 or btn.baseH)
+        btn:Show()
+        y = y + btn.baseH + 8
     end
 end
 
 function UI.AddRailButton(key, label, icon, tip)
-    local btn = UI.CreateSleekButton(UI.rail, RAIL_W - 10, 52, label, "rail")
-    btn.label:ClearAllPoints()
-    btn.label:SetPoint("BOTTOMLEFT", 1, 6)
-    btn.label:SetPoint("BOTTOMRIGHT", -1, 6)
-    btn.label:SetWordWrap(false)
+    local spec = UI.RIBBONS[key] or { order = 9 }
+    local btn = CreateFrame("Button", nil, UI.rail)
+    btn.baseH = spec.short and 40 or 70
+    btn:SetSize(RAIL_W - 12, btn.baseH)
+    btn.order, btn.bottom, btn.tint = spec.order, spec.bottom, spec.tint
+    btn.cloth = btn:CreateTexture(nil, "BACKGROUND")
+    btn.cloth:SetAllPoints(btn)
+    btn.cloth:SetTexture(UI.ART .. "ribbon.png")
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
-    btn.icon:SetSize(24, 24)
-    btn.icon:SetPoint("TOP", 0, -6)
+    btn.icon:SetSize(22, 22)
+    btn.icon:SetPoint("TOP", 0, spec.short and -7 or -8)
     btn.icon:SetTexCoord(ns.IconCoords(icon))
     btn.icon:SetTexture(icon)
+    btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    btn.label:SetPoint("TOP", btn.icon, "BOTTOM", 0, -3)
+    btn.label:SetWidth(RAIL_W - 14)
+    btn.label:SetWordWrap(false)
+    pcall(btn.label.SetFont, btn.label, "Fonts\\FRIZQT__.TTF", 9, "")
+    btn.label:SetShadowOffset(1, -1)
+    btn.label:SetText(spec.short and "" or label)
     btn.tipTitle = "|cffffd100" .. label .. "|r"
     btn.tipText = tip
-    btn:SetScript("OnClick", function() UI.ShowSection(key) end)
+    function btn:LockHighlight() self.isOpen = true; RibbonLook(self, true) end
+    function btn:UnlockHighlight() self.isOpen = false; RibbonLook(self, false) end
+    btn:SetScript("OnEnter", function(self)
+        RibbonLook(self, true)
+        UI.Tooltip(self, self.tipTitle, self.tipText)
+    end)
+    btn:SetScript("OnLeave", function(self)
+        RibbonLook(self, self.isOpen)
+        UI.HideTooltip()
+    end)
+    btn:SetScript("OnClick", function()
+        if key == "OPTIONS" and ns.state.section == "OPTIONS" then
+            UI.ShowSection(UI.lastNonOptions or UI.DefaultSection())
+        else
+            UI.ShowSection(key)
+        end
+    end)
+    RibbonLook(btn, false)
     UI.railButtons[key] = btn
     table.insert(UI.railOrder, key)
     UI.LayoutRail()
     return btn
 end
 
--- Recording chip at the bottom of the rail: visible from every section
-do
-    local chip = CreateFrame("Button", nil, UI.rail, UI.BACKDROP)
-    chip:SetSize(RAIL_W - 14, 30)
-    chip:SetPoint("BOTTOM", 0, 10)
-    UI.ApplyDarkGlass(chip, 0.16, 0.06, 0.06, 0.92, 1, 0.32, 0.32, 0.85)
-    chip.dot = chip:CreateTexture(nil, "OVERLAY")
-    chip.dot:SetSize(8, 8)
-    chip.dot:SetPoint("LEFT", 8, 0)
-    chip.dot:SetTexture(UI.ICONS.DOT)
-    chip.text = chip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    chip.text:SetPoint("LEFT", chip.dot, "RIGHT", 5, 0)
-    chip.text:SetPoint("RIGHT", -4, 0)
-    chip.text:SetJustifyH("LEFT")
-    chip:Hide()
-    chip:SetScript("OnClick", function() UI.ShowSection("ADVENTURES") end)
-    chip:SetScript("OnEnter", function(self)
-        local run = ns.GetActiveAdventure()
-        UI.Tooltip(self, "|cffffd100" .. ((run and run.title) or "Adventure") .. "|r",
-            (run and run.paused) and "Recording paused." or "Recording this run.",
-            "Click to open Adventures.")
-    end)
-    chip:SetScript("OnLeave", UI.HideTooltip)
-
-    local acc = 1
-    UI.rail:SetScript("OnUpdate", function(_, elapsed)
-        acc = acc + elapsed
-        if acc < 0.5 then return end
-        acc = 0
-        local run = ns.GetActiveAdventure()
-        if not run then chip:Hide() return end
-        local mins = math.floor(math.max(0, time() - (run.startTime or time())) / 60)
-        if run.paused then
-            chip.dot:SetVertexColor(1, 0.72, 0.30, 1)
-            chip.text:SetText("|cffffb74dPAUSED|r")
-            chip:SetBackdropBorderColor(1, 0.72, 0.30, 0.85)
-        else
-            chip.dot:SetVertexColor(1, 0.15, 0.15, 1)
-            chip.text:SetText(string.format("|cffff6b6bREC|r |cffd8dee9%dm|r", mins))
-            chip:SetBackdropBorderColor(1, 0.32, 0.32, 0.85)
-        end
-        chip:Show()
-    end)
-end
+-- the brass key opens Options (its view is built in UI_Options.lua)
+UI.gearBtn = UI.AddRailButton("OPTIONS", "Options", UI.ART .. "key.png",
+    "The Binder's Desk: settings, privacy, keybinds and AI setup.")
+UI.gearBtn.icon:SetVertexColor(1, 0.84, 0.45)
 
 -- Content area (sections fill it) and the status line under it
 do
     local content = CreateFrame("Frame", nil, copyFrame)
-    content:SetPoint("TOPLEFT", UI.rail, "TOPRIGHT", 10, -8)
-    content:SetPoint("BOTTOMRIGHT", copyFrame, "BOTTOMRIGHT", -12, 26)
     UI.content = content
-
     local status = copyFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    status:SetPoint("BOTTOMLEFT", UI.rail, "BOTTOMRIGHT", 10, 8)
+    status:SetPoint("BOTTOMLEFT", UI.rail, "BOTTOMRIGHT", 10, 4)
     status:SetPoint("RIGHT", copyFrame, "RIGHT", -24, 0)
     status:SetJustifyH("LEFT")
     status:SetWordWrap(false)
     UI.statusText = status
 end
+
+-- 0.7.0 book mode: an open book fills the window. The header and the
+-- ribbons step aside (the book's own "< Back to the Library" returns).
+function UI.SetBookMode(on)
+    on = on and true or false
+    if UI.bookMode == on and UI.content:GetNumPoints() > 0 then return end
+    UI.bookMode = on
+    local c = UI.content
+    c:ClearAllPoints()
+    if on then
+        UI.header:Hide()
+        UI.rail:Hide()
+        UI.statusText:Hide()
+        c:SetPoint("TOPLEFT", copyFrame, "TOPLEFT", 8, -8)
+        c:SetPoint("BOTTOMRIGHT", copyFrame, "BOTTOMRIGHT", -8, 8)
+    else
+        local fade = ns.Get("bookMotion") and UIFrameFadeIn
+        UI.header:Show()
+        UI.rail:Show()
+        UI.statusText:Show()
+        if fade then pcall(fade, UI.header, 0.25, 0, 1) pcall(fade, UI.rail, 0.25, 0, 1) end
+        c:SetPoint("TOPLEFT", UI.rail, "TOPRIGHT", 10, -8)
+        c:SetPoint("BOTTOMRIGHT", copyFrame, "BOTTOMRIGHT", -12, 22)
+    end
+end
+UI.SetBookMode(false)
 
 -- Status line: messages show for a while, then the section's hint returns
 function UI.SetStatus(msg, kind)
@@ -542,7 +757,7 @@ function UI.SetSectionOnShow(key, fn)
 end
 
 function UI.ShowSection(key)
-    if key == "COPY" and not ns.RpCopyOn() then key = "ADVENTURES" end
+    if key == "COPY" and not ns.RpCopyOn() then key = "BOOK" end
     local sec = UI.sections[key]
     if not sec then return end
     ns.state.section = key
@@ -557,8 +772,9 @@ function UI.ShowSection(key)
     for k, b in pairs(UI.railButtons) do
         if k == key then b:LockHighlight() else b:UnlockHighlight() end
     end
-    if key == "OPTIONS" then UI.gearBtn:LockHighlight() else UI.gearBtn:UnlockHighlight() end
-    UI.titleText:SetText("|cffffd100RP Chronicler|r |cff8f9ba8-|r |cffd8dee9" .. (sec.title or "") .. "|r")
+    UI.LayoutRail()
+    if key ~= "BOOK" then UI.SetBookMode(false) end
+    UI.subTitle:SetText("|cffb09a70BETA  -  " .. string.upper(sec.title or "") .. "|r")
     UI.statusUntil = nil
     UI.SetHint(sec.hint)
     if sec.onShow then sec.onShow() end
@@ -1107,12 +1323,18 @@ do
     UI.askLine = f
 end
 
+-- the leather repeats at its own size instead of stretching
+UI.AddReflow(function()
+    local w, h = copyFrame:GetWidth() or 700, copyFrame:GetHeight() or 500
+    UI.leather:SetTexCoord(0, math.max(1, w / 256), 0, math.max(1, h / 256))
+end)
+
 -- =========================================================
 -- Opening and closing
 -- =========================================================
--- The section the window opens on: Copy, or Adventures while RP Copy is off
+-- 0.7.0: the Library is home (the RP button and /rp open on it)
 function UI.DefaultSection()
-    return ns.RpCopyOn() and "COPY" or "ADVENTURES"
+    return "BOOK"
 end
 
 function RPChronicler_Open(note, section)

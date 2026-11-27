@@ -735,7 +735,8 @@ async function renderStory(it, forSave) {
     if (!forSave && !state.shots.length && s.stem) { s.guess = true; return "../../../Screenshots/" + s.stem + ".jpg"; }
     return null;
   };
-  let story = dropTitleLine(repairHeader(it.story.replace(/\r/g, "")), it.title);
+  // 0.7.0: chapter emblem marks ([emblem:key] lines) are for the book in game
+  let story = dropTitleLine(repairHeader(it.story.replace(/\r/g, "").replace(/^[ \t#*]*(\|c[0-9a-fA-F]{8})?\[emblem:[^\]\n]*\](\|r)?[ \t]*\n?/gim, "")), it.title);
   let html = itemIcons(bossIcons(storyHtml(story), it.bosses), it.items || {});
   html = placeShots(html, shots, it, srcOf);
   html = html.replace(MARK_RE, "");

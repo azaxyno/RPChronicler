@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: RP Chronicler
 ## Notes: Record your adventures with friends and read them back as illustrated story books in game, plus one-key scene copy for roleplay replies
-## Version: 0.6.8
+## Version: 0.7.0
 ## Author: azaxyno
 ## IconTexture: Interface\AddOns\RPChronicler\Media\logo
 ## SavedVariables: RPChroniclerDB
@@ -9,6 +9,7 @@
 # "## X-Curse-Project-ID: <project id>" (two #, no space before X)
 # ## X-Curse-Project-ID: 000000
 
+Libs\LibDeflate.lua
 Core.lua
 Game.lua
 Debug.lua
@@ -22,6 +23,7 @@ Templates.lua
 Narrator.lua
 Screenshots.lua
 Updates.lua
+Share.lua
 Events.lua
 Chronicle.lua
 UI_Shell.lua

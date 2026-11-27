@@ -103,8 +103,18 @@ function ns.GetAdventureIcon(adv)
         end
         return Icon(adv.kind == "raid" and "raid" or "dungeon")
     end
+    -- 0.7.0: the zone (also "Zone - Subzone"), else the first place the
+    -- run went, else its title (ns.ZoneTerrain in SceneData.lua)
     local zone = (ns.SafeStr(adv.zone) or ""):lower():match("^%s*(.-)%s*$")
-    return Icon(ZONE_TERRAIN[zone] or "world")
+    local key = ZONE_TERRAIN[zone] or (ns.ZoneTerrain and ns.ZoneTerrain(zone))
+    if not key and ns.ZoneTerrain then
+        for _, pl in ipairs(type(adv.places) == "table" and adv.places or {}) do
+            key = ns.ZoneTerrain(type(pl) == "table" and (pl.name or pl.zone) or pl)
+            if key then break end
+        end
+        key = key or ns.ZoneTerrain(adv.title)
+    end
+    return Icon(key or "world")
 end
 
 -- Our icons carry their own frame, so they show whole; game icons are

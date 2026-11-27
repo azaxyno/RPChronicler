@@ -136,7 +136,7 @@ do
     local clear = UI.CreateSleekButton(f, 70, 22, "Clear", "tool")
     clear:SetPoint("BOTTOMLEFT", 14, 10)
     clear.tipTitle = "|cffffd100Clear|r"
-    clear.tipText = "Forget the saved address, to paste a new one."
+    clear.tipText = "Forget an address you pasted here before."
     clear:SetScript("OnClick", function()
         ns.SetStoryViewerPath("")
         eb:SetText("")
@@ -159,24 +159,39 @@ do
         eb:SetCursorPosition(0)
         eb:HighlightText()
     end)
-    function UI.ShowViewerPath()
-        local saved = ns.StoryViewerPath()
-        if saved ~= "" then
-            sub:SetText("|cffd7c4a3Press |cffffd100Ctrl+C|cffd7c4a3, paste it into your browser's address bar and press Enter. " ..
-                "This is the address you pasted from StoryViewer.html; paste a new one if you moved the game.|r")
-            example:SetText("|cff8f9ba8Your StoryViewer.html:|r")
-        else
-            sub:SetText("|cffd7c4a3First time: open your game folder, go to |cfff5e6c8_forever_\\Interface\\AddOns\\RPChronicler|cffd7c4a3 and double-click |cfff5e6c8StoryViewer.html|cffd7c4a3. " ..
-                "The page shows its own address with a |cffffd100Copy|cffd7c4a3 button: paste it here once (Ctrl+V), and from then on this box gives it back to you.|r")
-            example:SetText("|cff8f9ba8It looks like (example, yours may differ): " .. ns.VIEWER_PATH_EXAMPLE .. "|r")
-        end
-        f:SetHeight(math.max(150, 124 + math.ceil(sub:GetStringHeight() or 28)))
-        eb:SetText(saved)
+    -- 0.7.0 (Mor: the paste step was a headache): no pasting. The box
+    -- hands over the online viewer's address, ready to copy, or the
+    -- folder path inside the game folder; the browser's bookmark keeps it.
+    local folderBtn = UI.CreateSleekButton(f, 110, 22, "Folder path", "tool")
+    folderBtn:SetPoint("LEFT", online, "RIGHT", 8, 0)
+    folderBtn.tipTitle = "|cffffd100Folder path|r"
+    folderBtn.tipText = "Where StoryViewer.html is inside your game folder. Open that folder and double-click the file."
+    local function ShowFolder()
+        eb:SetText(ns.VIEWER_REL_PATH)
+        example:SetText("|cff8f9ba8Inside your World of Warcraft folder (press Ctrl+C):|r")
         Sync()
-        f:Show()
         eb:SetFocus()
         eb:SetCursorPosition(0)
         eb:HighlightText()
+    end
+    folderBtn:SetScript("OnClick", ShowFolder)
+    function UI.ShowViewerPath()
+        local saved = ns.StoryViewerPath()
+        hint:SetText("")
+        sub:SetText("|cffd7c4a3Your stories with their screenshots, in your browser. Copy the address below (|cffffd100Ctrl+C|cffd7c4a3), paste it into your browser and press Enter. " ..
+            "|cffffd100Bookmark the page|cffd7c4a3 the first time: from then on it is one click. Nothing is uploaded either way.|r")
+        f:SetHeight(math.max(150, 124 + math.ceil(sub:GetStringHeight() or 28)))
+        f:Show()
+        if saved ~= "" then
+            eb:SetText(saved)
+            example:SetText("|cff8f9ba8Your StoryViewer.html:|r")
+            Sync()
+            eb:SetFocus()
+            eb:SetCursorPosition(0)
+            eb:HighlightText()
+        else
+            online:GetScript("OnClick")(online)
+        end
     end
 end
 

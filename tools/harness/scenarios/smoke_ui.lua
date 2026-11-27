@@ -31,3 +31,23 @@ if PRINTED and PRINTED:find("rror") then io.write("PRINTED: ", PRINTED, "\n") en
 for _, l in ipairs((RPChroniclerDB and RPChroniclerDB.debugLog) or {}) do
   if l:find("error") then io.write("DEBUG: ", l, "\n") end
 end
+-- 0.7.0 Build B checks
+local ok2, err2 = pcall(function()
+  io.write("terrain: ", tostring(NS.ZoneTerrain("The Barrens - Ratchet")), " ", tostring(NS.ZoneTerrain("Elwynn Forest")), " ", tostring(NS.ZoneTerrain("Nowhere")), "\n")
+  local st = NS.GetStories()[1]
+  st.story = "|cffffd100Title: Test|r\n\n|cffffd100Chapter 1: The Road|r\n[emblem:travel]\nThey walked.\n|cffffd100Chapter 2: The End|r\n[emblem:nonsense]\nThey won."
+  local em = NS.StoryEmblems(st)
+  io.write("emblems: ", table.concat(em, ","), "\n")
+  io.write("plain has emblem: ", tostring(NS.GetStoryPlainText(st):find("emblem") ~= nil), "\n")
+  io.write("path: ", NS.EmblemPath("sea"), "\n")
+  NS.UI.OpenStoryBook(st.id); RunTimers()
+  local K = NS.UI.book
+  if K and K.list then
+    local n = 0
+    for _, pg in ipairs(K.list) do for _, it in ipairs(pg.items) do if it.emblem then n = n + 1 end end end
+    io.write("emblem items in book: ", n, "\n")
+  end
+  io.write("role icon: ", NS.RoleIconText({ classFile = "MAGE" }) ~= "" and "yes" or "no", "\n")
+  io.write("template has emblem rule: ", tostring(NS.DUNGEON_STORY_TEMPLATE:find("%[emblem:<key>%]") ~= nil), "\n")
+end)
+io.write(ok2 and "B OK\n" or ("B FAIL: " .. tostring(err2) .. "\n"))

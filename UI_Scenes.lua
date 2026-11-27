@@ -705,7 +705,7 @@ function Scene:Layout()
         -- the name, in the class color
         local full = tostring(m.p.name)
         local text = (mode == "first") and (full:match("^(%S+)") or full) or full
-        s.name:SetText("|cff" .. Hex(s.rgb or ClassRGB(m.p)) .. text .. "|r")
+        s.name:SetText(ns.RoleIconText(m.p) .. "|cff" .. Hex(s.rgb or ClassRGB(m.p)) .. text .. "|r")
         local row = (mode ~= "each" and i % 2 == 0) and 1 or 0
         s.name:ClearAllPoints()
         s.name:SetWidth(n <= 1 and math.max(60, W - 16) or math.max(56, step * z * ((mode == "each") and 1 or 2) - 4))

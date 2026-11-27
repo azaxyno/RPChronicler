@@ -704,6 +704,37 @@ function ns.ColorizeClass(text, classFile)
 end
 
 
+-- 0.7.0 (Mor): a small icon before a name in the party scene: the role
+-- they had, else the one role their class can take, else their class's
+-- icon, else nothing (never a broken square)
+local ROLE_TEX = {
+    TANK = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:%d:%d:0:0:64:64:0:19:22:41|t",
+    HEALER = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:%d:%d:0:0:64:64:20:39:1:20|t",
+    DAMAGER = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:%d:%d:0:0:64:64:20:39:22:41|t",
+}
+function ns.RoleIconText(p, size)
+    size = size or 11
+    if type(p) ~= "table" then return "" end
+    local role = ROLE_TEX[p.role or ""] and p.role
+    local cf = tostring(p.classFile or ""):upper()
+    if not role and ns.ClassRoles and cf ~= "" then
+        local list = ns.ClassRoles(cf)
+        if #list == 1 then role = list[1] end
+    end
+    if role then return string.format(ROLE_TEX[role], size, size) .. " " end
+    local c = type(CLASS_ICON_TCOORDS) == "table" and CLASS_ICON_TCOORDS[cf]
+    if c then
+        return string.format("|TInterface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES:%d:%d:0:0:256:256:%d:%d:%d:%d|t ",
+            size, size, c[1] * 256, c[2] * 256, c[3] * 256, c[4] * 256)
+    end
+    return ""
+end
+
+-- 0.7.0: a name without its realm ("Morai-Realm" -> "Morai")
+function ns.ShortName(full)
+    return (tostring(full or ""):gsub("%-[^%-]*$", ""))
+end
+
 function ns.GetRoleTag(role, useIcon)
     if role == "TANK" then
         return useIcon and "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:14:14:0:0:64:64:0:19:22:41|t |cff5bc0de[Tank]|r" or "[Tank]"

@@ -376,11 +376,17 @@ function K.StoryBody(st, info)
         end
     end
     -- chapters of paragraphs (one line is one paragraph)
-    local chapters, cur = {}, nil
+    -- 0.7.0: an [emblem:key] line gives its chapter an emblem (right after
+    -- the heading, or just before it)
+    local chapters, cur, pending = {}, nil, nil
     for _, line in ipairs(lines) do
         local pl = PlainLower(line)
-        if K.IsChapterHead(pl) then
-            cur = { head = ns.StripColors(line):gsub("^%s*#+%s*", ""):match("^%s*(.-)%s*$"), paras = {} }
+        local em = ns.EmblemLine and ns.EmblemLine(line)
+        if em then
+            if cur and #cur.paras == 0 and not cur.emblem then cur.emblem = em else pending = em end
+        elseif K.IsChapterHead(pl) then
+            cur = { head = ns.StripColors(line):gsub("^%s*#+%s*", ""):match("^%s*(.-)%s*$"), paras = {}, emblem = pending }
+            pending = nil
             table.insert(chapters, cur)
         elseif pl ~= "" then
             if not cur then
@@ -459,20 +465,9 @@ function K.AddStory(pages, st, index, total)
 
     -- the story's pages; the chapter list on the title page fills in after
     local chapters = K.StoryBody(st, info)
-    local bosses = (ns.Get("storyCover") and ns.StoryBosses) and ns.StoryBosses(st, st.story or "") or {}
-    local bossAt, used = {}, {}
-    for _, ch in ipairs(chapters) do
-        for pi, para in ipairs(ch.paras) do
-            local pl = PlainLower(para)
-            for n, boss in ipairs(bosses) do
-                if n <= 8 and not used[boss] and pl:find(boss:lower(), 1, true) then
-                    used[boss] = true
-                    ch.bossAt = ch.bossAt or {}
-                    ch.bossAt[pi] = boss
-                end
-            end
-        end
-    end
+    -- 0.7.0: the bosses this story names, for the hover popup
+    K.storyBosses = K.storyBosses or {}
+    K.storyBosses[st.id] = ns.StoryBosses and ns.StoryBosses(st, st.story or "") or {}
     local listY, listRoom = y, H - y
     local starts = {}
     local cur, cy
@@ -485,6 +480,12 @@ function K.AddStory(pages, st, index, total)
     for ci, ch in ipairs(chapters) do
         NewPage()
         starts[ci] = #pages
+        -- 0.7.0: the chapter's emblem over its heading (default when the
+        -- story names none or an unknown one)
+        if ch.head or ch.emblem then
+            Add(cur, { type = "icon", emblem = true, path = ns.EmblemPath and ns.EmblemPath(ch.emblem) or nil, y = cy, h = 34 })
+            cy = cy + 40
+        end
         if ch.head then
             local t = "|cff" .. style.head .. ch.head .. "|r"
             local h = K.Measure(t, K.size + 3, B.TITLE_FONT)
@@ -494,14 +495,6 @@ function K.AddStory(pages, st, index, total)
             cy = cy + 22
         end
         for pi, para in ipairs(ch.paras) do
-            local boss = ch.bossAt and ch.bossAt[pi]
-            if boss and UI.CreateStoryScene then
-                -- 0.6.8: the party facing the boss (a boss scene)
-                local bh = math.floor(math.max(140, math.min(230, H * 0.42)))
-                if cy + bh > H and cy > 0 then NewPage() end
-                Add(cur, { type = "boss", story = st, boss = boss, y = cy, h = bh })
-                cy = cy + bh + 10
-            end
             local t, guard = para, 0
             while t and guard < 50 do
                 guard = guard + 1
@@ -749,7 +742,7 @@ function K.DrawPage(side, n)
             fs:SetShadowColor(0, 0, 0, style.shadow)
             fs:ClearAllPoints()
             fs:SetPoint("TOPLEFT", p, "TOPLEFT", x0, -(top + it.y))
-            fs:SetText(it.text)
+            fs:SetText(K.BossLinks(it.text, page.storyId))
             fs:Show()
         elseif it.type == "flourish" or it.type == "icon" then
             ntex = ntex + 1
@@ -760,6 +753,12 @@ function K.DrawPage(side, n)
                 t:SetTexCoord(0, 1, 0, 1)
                 t:SetSize(math.min(160, K.cw * 0.6), 14)
                 t:SetVertexColor(K.Night() and 1 or 0.75, K.Night() and 1 or 0.55, K.Night() and 1 or 0.30)
+            elseif it.emblem then
+                -- 0.7.0: emblems are white ink, inked like the text
+                t:SetTexture(it.path)
+                t:SetTexCoord(0, 1, 0, 1)
+                t:SetSize(it.h, it.h)
+                if K.Night() then t:SetVertexColor(0.92, 0.80, 0.52) else t:SetVertexColor(0.22, 0.13, 0.07) end
             else
                 t:SetTexture(it.path)
                 t:SetTexCoord(ns.IconCoords(it.path))
@@ -1094,7 +1093,16 @@ function K.FillCovers()
     F.icon:SetTexCoord(ns.IconCoords(ns.GetAdventureIcon(st)))
     F.icon:Show()
     F.ring:Show()
-    F.line:SetText(party ~= "" and ("A tale of " .. party) or "")
+    -- 0.7.0 (Mor): the party line keeps to two names, "and 3 others"
+    local names = {}
+    for n in party:gmatch("[^,]+") do names[#names + 1] = n:match("^%s*(.-)%s*$") end
+    local who = party
+    if #names > 2 then who = names[1] .. ", " .. names[2] .. " and " .. (#names - 2) .. ((#names - 2 == 1) and " other" or " others") end
+    F.line:SetText(who ~= "" and ("A tale of " .. who) or "")
+    if F.line.SetMaxLines then F.line:SetMaxLines(2) end
+    if st.shared and st.shared.author then
+        F.line:SetText("Penned by " .. ns.ShortName(st.shared.author) .. (who ~= "" and ("\n" .. "A tale of " .. who) or ""))
+    end
     F.foot:SetText(ns.GetRunKindLabel(st) .. ((info.date or "") ~= "" and ("  -  " .. info.date) or ""))
     F.hint:SetText("Click to open")
     Bk.title:SetText(name)
@@ -1141,12 +1149,18 @@ function K.PlaceCovers()
     F.sub:SetPoint("TOP", F.title, "BOTTOM", 0, -8)
     F.flour:ClearAllPoints()
     F.flour:SetPoint("TOP", F.sub, "BOTTOM", 0, -12)
+    -- 0.7.0 (Mor): fixed slots that scale with the window: the icon in
+    -- the middle (smaller on small windows), the party line just above
+    -- the run line, so they can never overlap
+    local isz = math.floor(math.max(34, math.min(64, h * 0.13)))
+    F.icon:SetSize(isz, isz)
+    F.ring:SetSize(isz * 1.6, isz * 1.6)
     F.icon:ClearAllPoints()
-    F.icon:SetPoint("TOP", F.flour, "BOTTOM", 0, -math.max(18, h * 0.06))
+    F.icon:SetPoint("CENTER", F, "CENTER", 0, -h * 0.02)
     F.ring:ClearAllPoints()
     F.ring:SetPoint("CENTER", F.icon, "CENTER")
     F.line:ClearAllPoints()
-    F.line:SetPoint("TOP", F.icon, "BOTTOM", 0, -18)
+    F.line:SetPoint("BOTTOM", F, "BOTTOM", 0, 76)
     Bk.title:ClearAllPoints()
     Bk.title:SetPoint("TOP", Bk, "TOP", 0, -48)
     Bk.flour:ClearAllPoints()
@@ -1476,6 +1490,78 @@ function B.HideBook()
     if K.frame:IsShown() then K.Settle() end
     K.frame:Hide()
     if K.menu then K.menu:Hide() end
+end
+
+-- =========================================================
+-- 0.7.0 (Mor): hovering a boss's name in the story shows the boss in 3D
+-- (the chapter boss scenes are gone). Each page's text gets its boss
+-- names as links when it is drawn, so a name is never split by a page.
+-- =========================================================
+do
+    local ESC = function(x) return (x:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")) end
+    function K.BossLinks(text, storyId)
+        local bosses = storyId and K.storyBosses and K.storyBosses[storyId]
+        if not bosses or #bosses == 0 or type(text) ~= "string" then return text end
+        local ok, out = pcall(function()
+            local t = text
+            for i, name in ipairs(bosses) do
+                if i > 40 then break end
+                local done = false
+                t = t:gsub("%f[%w]" .. ESC(name) .. "%f[^%w]", function(m)
+                    if done then return m end
+                    done = true
+                    return "|Hrpcboss:" .. storyId .. ":" .. i .. "|h" .. m .. "|h"
+                end)
+            end
+            return t
+        end)
+        return ok and out or text
+    end
+
+    local pop = CreateFrame("Frame", "RPChroniclerBossPopup", UIParent, UI.BACKDROP)
+    pop:SetSize(190, 230)
+    pop:SetFrameStrata("TOOLTIP")
+    pop:Hide()
+    UI.ApplyStoryTomeLook(pop)
+    pop.name = pop:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    pop.name:SetPoint("BOTTOM", 0, 8)
+    pop.name:SetWidth(176)
+    pop.name:SetWordWrap(false)
+    pop.skull = pop:CreateTexture(nil, "ARTWORK")
+    pop.skull:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
+    pop.skull:SetSize(56, 56)
+    pop.skull:SetPoint("CENTER", 0, 10)
+    local okM, m = pcall(CreateFrame, "PlayerModel", nil, pop)
+    if okM and m then
+        m:SetPoint("TOPLEFT", 6, -6)
+        m:SetPoint("BOTTOMRIGHT", -6, 26)
+        pop.model = m
+    end
+    K.bossPopup = pop
+
+    local function Enter(_, link)
+        local sid, idx = tostring(link or ""):match("^rpcboss:(.-):(%d+)$")
+        local st = sid and ns.FindStory(sid)
+        local name = st and K.storyBosses and K.storyBosses[sid] and K.storyBosses[sid][tonumber(idx)]
+        if not name then return end
+        pop.name:SetText("|cffdc143c" .. name .. "|r")
+        local shown = pop.model and UI.SetBossModel and UI.SetBossModel(pop.model, st, name) or false
+        if pop.model then if shown then pop.model:Show() else pop.model:Hide() end end
+        if shown then pop.skull:Hide() else pop.skull:Show() end
+        local x, y = GetCursorPosition()
+        local sc = UIParent:GetEffectiveScale() or 1
+        pop:ClearAllPoints()
+        pop:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", (x or 0) / sc + 16, (y or 0) / sc + 12)
+        pop:Show()
+    end
+    local function Leave() pop:Hide() end
+    for _, pg in ipairs(K.pages) do
+        if pg.SetHyperlinksEnabled then pcall(pg.SetHyperlinksEnabled, pg, true) end
+        pcall(pg.SetScript, pg, "OnHyperlinkEnter", Enter)
+        pcall(pg.SetScript, pg, "OnHyperlinkLeave", Leave)
+        pcall(pg.SetScript, pg, "OnHyperlinkClick", function() end)
+    end
+    K.frame:HookScript("OnHide", Leave)
 end
 
 -- From the shelf: open a story or a chronicle as a book

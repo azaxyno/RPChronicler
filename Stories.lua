@@ -593,6 +593,7 @@ end
 -- the files the player picks and uploads nothing (its CSP blocks every
 -- network request).
 ns.HOSTED_VIEWER_URL = "https://azaxyno.github.io/RPChronicler/StoryViewer.html"
+ns.VIEWER_REL_PATH = "_forever_\\Interface\\AddOns\\RPChronicler\\StoryViewer.html"
 ns.VIEWER_PATH_EXAMPLE = "file:///C:/Program%20Files%20(x86)/World%20of%20Warcraft/_forever_/Interface/AddOns/RPChronicler/StoryViewer.html"
 function ns.ViewerUrl(path)
     path = tostring(path or ""):gsub("[\r\n]", ""):match("^%s*(.-)%s*$")
@@ -661,7 +662,7 @@ end
 -- Story as clean plain text (no color codes or icons), for Discord or forums
 function ns.GetStoryPlainText(adv)
     if not adv or not adv.story or adv.story == "" then return "" end
-    local text = ns.StripShotMarkers(ns.NormalizeStoryText(adv.story))
+    local text = ns.StripEmblemLines(ns.StripShotMarkers(ns.NormalizeStoryText(adv.story)))
     text = text:gsub("|T.-|t", ""):gsub("|A.-|a", ""):gsub("|H.-|h(.-)|h", "%1")
     text = ns.StripColors(text):gsub("|n", "\n"):gsub("||", "|")
     text = text:gsub("\n\n\n+", "\n\n")
@@ -1468,5 +1469,53 @@ do
             if type(adv) == "table" and adv ~= ns.GetActiveAdventure() and not ns.RunHasStory(adv) then out[#out + 1] = adv end
         end
         return out
+    end
+end
+
+-- =========================================================
+-- 0.7.0 chapter emblems: [emblem:key] lines in a story (keys and files
+-- in SceneData.lua). Shown over the chapter in the book and on the
+-- spine; taken out of every plain-text copy.
+-- =========================================================
+do
+    local DIR = "Interface\\AddOns\\RPChronicler\\Media\\Emblems\\"
+
+    function ns.EmblemKey(key)
+        key = tostring(key or ""):lower():gsub("[^%w_]", "")
+        key = (ns.EMBLEM_ALIAS and ns.EMBLEM_ALIAS[key]) or key
+        return (ns.EMBLEM and ns.EMBLEM[key]) and key or "default"
+    end
+
+    function ns.EmblemPath(key)
+        return DIR .. ns.EmblemKey(key) .. ".png"
+    end
+
+    -- the key of a line that is only an emblem mark, else nil
+    function ns.EmblemLine(line)
+        local plain = ns.StripColors(tostring(line or "")):gsub("^%s*[#%*]*%s*", "")
+        local key = plain:match("^%[[Ee]mblem:%s*([%w_ ]-)%s*%]%s*$")
+        return key and ns.EmblemKey(key) or nil
+    end
+
+    -- the story's emblems in chapter order (cached on the text length)
+    function ns.StoryEmblems(st)
+        local text = type(st) == "table" and st.story or ""
+        if st and st.emblemCache and st.emblemCache.n == #text then return st.emblemCache.list end
+        local list = {}
+        for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+            local k = line:find("mblem:", 1, true) and ns.EmblemLine(line)
+            if k then list[#list + 1] = k end
+        end
+        if type(st) == "table" then st.emblemCache = { n = #text, list = list } end
+        return list
+    end
+
+    function ns.StripEmblemLines(text)
+        if type(text) ~= "string" or not text:find("mblem:", 1, true) then return text end
+        local out = {}
+        for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+            if not ns.EmblemLine(line) then out[#out + 1] = line end
+        end
+        return table.concat(out, "\n")
     end
 end

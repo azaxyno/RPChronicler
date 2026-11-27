@@ -128,6 +128,7 @@ Line 1: Title: <a story title you invent>, in gold, e.g. |cffffd100Title: Shadow
 Line 2: |cff9e9e9e<dungeon, raid or region> | <duration from the log header> | <zone or the places visited>|r (never the same name twice: if the zone is the region, list the main places instead)
 Line 3: |cff9e9e9eDate: <date from the log header> | Party: <names, comma separated>|r
 Then a blank line and the story. Start each chapter with a gold header line: |cffffd100Chapter 1: <chapter name>|r
+Right under each chapter header, write the chapter's emblem on its own line: [emblem:<key>], the key that best fits what happens in that chapter (a boss fight: boss, a death: death, the road: travel, a camp: camp, and so on). Use only these keys: ]] .. table.concat(ns.EMBLEMS or {}, ", ") .. [[. Use default if unsure. RP Chronicler draws the emblem over the chapter and hides the line.
 Last line (footer), dungeon or raid: |cff9e9e9eBosses: <N> | Wipes: <N> | Deaths: <N>|r
 Last line (footer), open world: |cff9e9e9eFoes: <N> | Quests: <N> | Levels: <from> -> <to> | Deaths: <N>|r and leave out any part that is zero or missing.
 Very last line, after the footer: |cff9e9e9eRun ID: <the Run ID from the log header>|r, copied exactly (e.g. Run ID: TPX8OK). RP Chronicler links the story to its recording with it. Leave the line out only if the log has no Run ID.
@@ -161,7 +162,7 @@ FORMATTING RULES FOR WOW
 -- version). The templates say it in their header; a Full Log copied for
 -- an AI with the skill says it too, so the AI can tell the player that
 -- their skill is older.
-ns.TEMPLATE_VERSION = "0.6.5"
+ns.TEMPLATE_VERSION = "0.7.0"
 local VERSION_RULE = "\n\nTEMPLATE VERSION\n\nTemplate version: " .. ns.TEMPLATE_VERSION .. ". If the Full Log has a \"Template version:\" line with a newer version than this one, write the story anyway, then add one line after the code block: \"Your story skill is older than RP Chronicler " .. "<that version>: copy the template again from Options > AI & Stories.\""
 
 -- 0.6.0: the skill names come from ns.STORY_SKILLS (Core.lua), the same

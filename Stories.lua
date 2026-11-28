@@ -714,12 +714,13 @@ function ns.RunItems(adv)
         if not q and type(link) == "string" then q = ns.ItemQuality(link) end
         -- runs from before 0.6.4 kept only the link: ask the game for the rest
         local icon, cls, sub = e.icon, tonumber(e.cls), tonumber(e.sub)
+        local id = tonumber(e.id) or (type(e.link) == "string" and tonumber(e.link:match("item:(%d+)"))) or nil
         if not icon and type(link) == "string" then
             local d = ns.ItemDetails(link)
             if d then icon, cls, sub = d.icon, d.cls, d.sub end
         end
         if not items[name] or (q or 0) > (items[name].q or 0) then
-            items[name] = { q = q, icon = icon, cls = cls, sub = sub }
+            items[name] = { q = q, icon = icon, cls = cls, sub = sub, id = id or (items[name] and items[name].id) }
         end
     end
     for _, e in ipairs(type(adv.keyLoot) == "table" and adv.keyLoot or {}) do Add(e.plain, e) end
@@ -806,9 +807,50 @@ end
 
 local function Escape(s) return (s:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")) end
 
+-- 0.7.1 (Mor): the AI writes items as [item: Exact Name = its own words].
+-- The book shows the item's icon framed in its rarity color (hover shows
+-- the real item), then the AI's words in the prose color. A name the run
+-- does not know keeps only the words.
+local function ItemIconLook(it, name)
+    local hex = ns.QUALITY_HEX[it and it.q or 1] or "ffffff"
+    local r, g, b = tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16)
+    local bar = string.format("|TInterface\\Buttons\\WHITE8x8:15:2:0:-1:8:8:0:8:0:8:%d:%d:%d|t", r, g, b)
+    if not it then return nil end
+    local icon = "|T" .. tostring(it.icon or "Interface\\Icons\\INV_Misc_QuestionMark") .. ":14:14:0:-1:64:64:5:59:5:59|t"
+    local id = tonumber(it.id) or 0
+    return "|Hrpcitem:" .. id .. ":" .. (tostring(name):gsub("[|:%s]", "_")) .. "|h" .. bar .. icon .. bar .. "|h"
+end
+
+function ns.ItemMarkers(text, items)
+    return (text:gsub("%[[Ii]tem:%s*([^%]=]-)%s*=%s*([^%]]-)%s*%]", function(name, words)
+        name = ns.StripColors(name):gsub("^%[", ""):gsub("%]$", "")
+        local it = items[name] or items["[" .. name .. "]"]
+        if not it then
+            local low = name:lower()
+            for n, v in pairs(items) do
+                local bare = n:lower():gsub("^%[", ""):gsub("%]$", "")
+                if bare == low then it = v break end
+            end
+        end
+        local look = ItemIconLook(it, name)
+        return (look and (look .. " ") or "") .. words
+    end))
+end
+
 function ns.DecorateStoryItems(text, adv)
     if type(text) ~= "string" or text == "" then return text end
     local items = ns.RunItems(adv)
+    -- the markers first, so their words are never re-matched as names below
+    local marks = {}
+    text = text:gsub("%[[Ii]tem:[^%]=]-=[^%]]-%]", function(m)
+        table.insert(marks, ns.ItemMarkers(m, items))
+        return "\003" .. #marks .. "\004"
+    end)
+    text = ns.DecorateStoryNames(text, items)
+    return (text:gsub("\003(%d+)\004", function(i) return marks[tonumber(i)] end))
+end
+
+function ns.DecorateStoryNames(text, items)
     local names = {}
     for n in pairs(items) do table.insert(names, n) end
     if #names == 0 then return text end

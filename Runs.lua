@@ -20,6 +20,8 @@ local activeBossPct = nil
 local bossThresholdsHit = {}
 local vitalsCooldowns = {}
 local bossPullEngaged = {}
+-- 0.7.1: when each boss pull began (how many pulls: run.bossTries)
+local bossPullAt = {}
 local brink = {} -- party member -> time they dropped under 10% HP
 local lastHP = {} -- party member -> last health percent seen above 0
 local deadNow = {} -- party member -> true while dead (death lines for party1-4)
@@ -201,6 +203,7 @@ local function PushTimeline(adv, stamp, entryText, force)
     -- A paused run records nothing except its own pause/resume markers
     if adv.paused and not force then return end
     adv.lastSeen = time()
+    adv.lastEventAt = time()
     adv.fullTimeline = adv.fullTimeline or {}
     local tl = adv.fullTimeline
     local line = string.format("[%s] %s", stamp or PreciseStamp(), entryText)
@@ -820,10 +823,15 @@ function ns.RestoreSavedAdventure()
     saved.paused = false
     saved.interrupted = true
     local lastSeen = saved.interruptedAt or saved.lastSeen or time()
+    -- 0.7.1: a run left idle (in the instance, then logged out) ends at
+    -- its last real event
+    if saved.lastEventAt and lastSeen - saved.lastEventAt > 600 then lastSeen = saved.lastEventAt end
     saved.endTime = lastSeen
     saved.duration = math.max(0, lastSeen - (saved.startTime or lastSeen))
     saved.endDate = saved.endDate ~= "" and saved.endDate or ns.NowStamp()
-    PushTimeline(saved, PreciseStamp(), "Adventure ended (interrupted by a logout or disconnect)", true)
+    -- 0.7.1: stamped when the run was last alive, not at the next login
+    local endStamp = (date and date("%H:%M:%S", lastSeen)) or PreciseStamp()
+    PushTimeline(saved, endStamp, "Adventure ended (interrupted by a logout or disconnect)", true)
     saved.exportText = ns.BuildAdventureFullLog(saved)
     table.insert(RPChroniclerDB.adventures, 1, saved)
     ns.TrimRuns()
@@ -942,7 +950,13 @@ end
 -- alive means a wipe, reset or evade: its HP milestones start fresh next pull.
 function ns.EndAdventureBossPull()
     if activeRun and activeBossName and bossPullEngaged[activeBossName] then
-        PushTimeline(activeRun, PreciseStamp(), "[BOSS RESET] " .. activeBossName .. " survived the pull")
+        -- 0.7.1: how long it held them off, and what happened in the fight
+        local at = bossPullAt[activeBossName]
+        local dur = at and math.floor(GetTime() - at + 0.5) or nil
+        local detail = ns.FightDetail()
+        ns.FightMarkBoss()
+        PushTimeline(activeRun, PreciseStamp(), "[BOSS RESET] " .. activeBossName .. " survived the pull"
+            .. (dur and dur > 0 and (" after " .. dur .. "s") or "") .. (detail ~= "" and (" - " .. detail) or ""))
     end
     activeBossName = nil
     activeBossPct = nil
@@ -1031,11 +1045,48 @@ local function RecordBossInfo(bossName, unit, encounterID)
     if encounterID then ns.RememberBossLooks(bossName, nil, nil, encounterID) end
 end
 
+
+-- Last-ditch moves: health is hidden in dungeons, so these say "near death"
+local SAVE_SPELLS = {
+    ["lay on hands"] = true, ["divine shield"] = true, ["divine protection"] = true,
+    ["blessing of protection"] = true, ["ice block"] = true, ["shield wall"] = true,
+    ["last stand"] = true, ["feign death"] = true, ["vanish"] = true, ["evasion"] = true,
+    ["frenzied regeneration"] = true, ["barkskin"] = true, ["deterrence"] = true,
+}
+local SAVE_WORDS = { "healing potion", "healthstone", "healing draught" }
+function ns.IsSaveSpell(spell)
+    local low = tostring(spell or ""):lower()
+    if SAVE_SPELLS[low] then return true end
+    for _, w in ipairs(SAVE_WORDS) do
+        if low:find(w, 1, true) then return true end
+    end
+    return false
+end
+
+local saveAt = {}
+function ns.RecordAdventureSave(who, spell)
+    if not activeRun or activeRun.paused or not who or not ns.LogOn("danger") then return end
+    local now = GetTime()
+    if (now - (saveAt[who] or -999)) < 20 then return end
+    saveAt[who] = now
+    ns.FightNoteSave(who, spell)
+    PushTimeline(activeRun, PreciseStamp(), string.format("[SAVED] %s pulled back from the brink (%s)", who, spell))
+end
+
+local function Ordinal(n)
+    local suf = ({ "st", "nd", "rd" })[n] or "th"
+    if n % 100 >= 11 and n % 100 <= 13 then suf = "th" end
+    return n .. suf
+end
+
 function ns.RecordAdventureBossEngage(bossName, unit, encounterID)
     if not activeRun or activeRun.paused or not bossName or bossName == "" then return end
     RecordBossInfo(bossName, unit, ns.SafeNum(encounterID))
     if not bossPullEngaged[bossName] then
         bossPullEngaged[bossName] = true
+        bossPullAt[bossName] = GetTime()
+        activeRun.bossTries = activeRun.bossTries or {}
+        activeRun.bossTries[bossName] = (activeRun.bossTries[bossName] or 0) + 1
         activeBossPct = 100
         bossThresholdsHit[bossName] = {}
         PushTimeline(activeRun, PreciseStamp(), "[BOSS ENGAGED] " .. bossName)
@@ -1228,7 +1279,19 @@ function ns.RecordAdventureBossKill(bossName)
 
     activeRun.bossKills = activeRun.bossKills or {}
     table.insert(activeRun.bossKills, bossName)
-    PushTimeline(activeRun, PreciseStamp(), "[BOSS KILL] " .. bossName)
+    -- 0.7.1: one rich line: how long, who fell, saves, cries, CC, moves
+    local at = bossPullAt[bossName]
+    bossPullAt[bossName] = nil
+    local dur = at and math.floor(GetTime() - at + 0.5) or nil
+    local bits = {}
+    local detail = ns.FightDetail()
+    if detail ~= "" then table.insert(bits, detail) end
+    local tries = activeRun.bossTries and activeRun.bossTries[bossName] or 1
+    if tries > 1 then table.insert(bits, "won on the " .. Ordinal(tries) .. " attempt") end
+    ns.FightMarkBoss()
+    PushTimeline(activeRun, PreciseStamp(), "[BOSS KILL] " .. bossName
+        .. (dur and dur > 0 and (" after a " .. dur .. "s fight") or "")
+        .. (#bits > 0 and (" - " .. table.concat(bits, " - ")) or ""))
     ns.NoteBossLootSource(bossName)
     return true
 end
@@ -1236,7 +1299,7 @@ end
 -- source: "crafted", "from Arugal", "quest reward", "bought", "traded",
 -- "mail", "gathered (Mining)", "won roll", "looted" ... or nil.
 -- isNotable: green or better (goes into the Notable Loot header too).
-function ns.RecordAdventureLoot(coloredLink, plainText, looter, source, isNotable)
+function ns.RecordAdventureLoot(coloredLink, plainText, looter, source, isNotable, rawLink)
     if not activeRun or activeRun.paused then return end
     local cleanItem = plainText or ns.CleanText(coloredLink) or ""
     if cleanItem == "" then return end
@@ -1263,7 +1326,7 @@ function ns.RecordAdventureLoot(coloredLink, plainText, looter, source, isNotabl
     if isNotable ~= false then
         activeRun.keyLoot = activeRun.keyLoot or {}
         -- 0.6.4: quality, icon and kind, for the item's look in the story
-        local d = ns.ItemDetails(coloredLink) or {}
+        local d = ns.ItemDetails(rawLink) or ns.ItemDetails(coloredLink) or {}
         entry = {
             colored = coloredLink or cleanItem,
             plain = cleanItem,
@@ -1271,6 +1334,7 @@ function ns.RecordAdventureLoot(coloredLink, plainText, looter, source, isNotabl
             source = source,
             q = ns.ItemQuality(coloredLink),
             icon = d.icon, cls = d.cls, sub = d.sub,
+            id = d.id, -- 0.7.1: the real item, for its tooltip in the book
         }
         table.insert(activeRun.keyLoot, entry)
     end
@@ -1324,6 +1388,7 @@ function ns.RecordAdventureChat(channelLabel, speaker, cleanMsg, isEmote)
     local who = ns.ResolveCanonicalPlayerName(ns.StripRealm(speaker)) or "Unknown"
     local combatTag = ns.GetAdventureCombatTag()
     local tagStr = combatTag and string.format("%s | %s", channelLabel or "Chat", combatTag) or (channelLabel or "Chat")
+    if combatTag then ns.FightNoteCry(who, cleanMsg) end
     local entry = string.format("[%s] %s: %s", tagStr, who, cleanMsg)
     lastSpokenTimelineLine = entry
     PushTimeline(activeRun, PreciseStamp(), entry)

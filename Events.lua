@@ -369,11 +369,12 @@ local function HandleLootMessage(rawMsg, rawAuthor, isMoney)
     if not safeMsg or safeMsg == "" then return end
 
     local cleanPlain = ns.CleanText(safeMsg) or ""
-    local looter = ns.StripRealm(rawAuthor)
+    -- 0.7.1: Forever names have two words ("Barnabas Vonhausen won: ..."),
+    -- so the name is everything before the verb, never one word
+    local kind, named = ns.LootLineKind(cleanPlain)
+    local looter = named or ns.StripRealm(rawAuthor)
     if not looter or looter == "" then
-        looter = cleanPlain:match("^([^%s]+)%s+receives loot:")
-            or cleanPlain:match("^([^%s]+)%s+won:")
-            or ns.GetUnitFullName("player")
+        looter = ns.GetUnitFullName("player")
             or ns.StripRealm(UnitName("player"))
             or "Player"
     end
@@ -400,14 +401,24 @@ local function HandleLootMessage(rawMsg, rawAuthor, isMoney)
     -- Runs: green and better (also in the Notable Loot header) and quest
     -- items, each with where it came from
     if isMoney or not ns.RecordAdventureLoot or IsRollSpam(cleanPlain) then return end
+    -- 0.7.1: only a line that says who GOT the item is a drop. A won roll
+    -- only marks the winner; any other loot line is chatter (debug log).
+    if kind == "won" then
+        for _, item in ipairs(items or {}) do ns.NoteRollWinner(item.plain, looter) end
+        return
+    elseif kind ~= "got" then
+        if #(items or {}) > 0 then ns.NoteSkippedLoot(cleanPlain) end
+        return
+    end
     local selfName = ns.StripRealm(UnitName("player"))
     local isSelf = (ns.StripRealm(looter) == selfName) or cleanPlain:find("^You ") ~= nil
     local source = ns.ClassifyLootSource(cleanPlain, isSelf) or nil
     for _, item in ipairs(items or {}) do
+        if ns.TakeRollWinner(item.plain, (not named) and nil or looter) then source = "won roll" end
         if item.quality and item.quality >= 2 then
-            ns.RecordAdventureLoot(item.colored, item.plain, looter, source, true)
+            ns.RecordAdventureLoot(item.colored, item.plain, looter, source, true, item.link)
         elseif ns.IsQuestItem(item.link) then
-            ns.RecordAdventureLoot(item.colored, item.plain, looter, source and ("quest item, " .. source) or "quest item", false)
+            ns.RecordAdventureLoot(item.colored, item.plain, looter, source and ("quest item, " .. source) or "quest item", false, item.link)
         end
     end
 end
@@ -949,6 +960,11 @@ do
         end
         local spell = SpellName(spellID)
         if not who or not spell or T.SKIP_SPELLS[spell] then return end
+        -- 0.7.1: health is hidden in dungeons, so a near death shows as the
+        -- last-ditch move someone makes to live (a potion, a shield...)
+        if ns.IsSaveSpell(spell) and not T.PETS[unit] then
+            ns.RecordAdventureSave(who, spell)
+        end
         -- 0.5.0: abilities fold into the [FIGHT] line ("used Arcane Shot;
         -- Snips: Claw"). Only crowd control and big cooldowns stand alone.
         local low = spell:lower()
@@ -1036,6 +1052,7 @@ do
         local had = T.cc[who] or {}
         for n in pairs(now_cc) do
             if not had[n] then
+                ns.FightNoteCC(who, n)
                 ns.RecordAdventureLine(string.format("[CC] %s is hit by %s", who, n))
             end
         end

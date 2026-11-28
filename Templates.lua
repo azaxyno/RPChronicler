@@ -61,6 +61,7 @@ CHANNEL AND FORMATTING RULES
   - [Party]: teammate banter aware of pulls, mana breaks, loot and group survival.
   - [Say]: face to face. A standalone WoW emote (/shrug, /sigh, /giggle, /ponder) may go on its own line when it fits.
   - [Whisper]: a direct one-on-one reply tailored to the sender.
+- Gear in-world: never write an item's full game name ("Short Bastard Sword of the Owl"). Say "my old blade" or "that new cloak" instead.
 - Clean text: keep at least 4 options free of *action* asterisks (at most 1 brief *action*, only if it sharpens the joke). Always write in English.
 
 EXAMPLES (replace them with lines in your character's own voice)
@@ -114,13 +115,14 @@ THE CRAFT (A STORY, NOT A REPORT)
 2. Feel the big moments. A death, a near death, a fallen pet, a wipe, a level up, a first great drop: slow down and give it weight. The sound, the silence after, what the characters feel and say. When a pet dies ([PET DEATH]), its owner grieves or rages, and the others notice. Never pass a death in half a sentence.
 3. Inner voice: stay close to the player's character. Let their thoughts, doubts, fears and small jokes run between the action ([NOTE] lines are their real thoughts). A short thought often says more than a paragraph.
 4. Show, don't tell: "Valeria's shield arm shook" instead of "Valeria was tired". Use the senses: the smell of the cave, the heat of the fire, the weight of a blade.
-5. Abilities belong in the action: name the real spells and skills from the log as moves in the fight ("Hexer's Shadow Bolt slammed into it", "Valeria raised Shield Wall"), never as a list.
-6. Turn mechanics into prose: interrupts, aggro, crowd control and pulls become choices, reflexes and teamwork ("the trap snapped shut before the second pack reached the healer").
-7. Vary the rhythm. Short sentences for blows and panic. Longer ones for travel, calm and wonder. Mix action, dialogue and thought; no paragraph of pure description.
-8. Trash and routine become a line of color or a quick montage. Never count foes in the prose ("six Scorched Guardians and four...").
-9. Gear: name only the items that matter (a boss drop someone won, a new weapon, a piece the character is proud of), a few in the whole story, and name them naturally in the scene ("Hexer turned the Belt of the Wind over in his hands"). Everything else is "the spoils" or "a few coins".
-10. Each companion is a person: give them a personality from their class, role, chat and notes, and let them react to each other.
-11. End a chapter on a hook or a quiet image, never on a summary.
+5. Fights are scenes, not results. A [BOSS KILL] or [BOSS RESET] line carries the whole fight: build the fight from it with a beginning, a turn and an end. Who fell and when, who was pulled back from the brink ([SAVED]: a potion gulped, a shield raised at the last breath), who cried for healing or ran dry, the crowd control that pinned someone, the boss's yells ([NPC] lines around it) in its own voice, and the comeback after a wipe ("won on the 2nd attempt"). A long fight is a grinding struggle, a short one a sudden storm (never say the length). A boss fight with a death or a save deserves several paragraphs; an easy one may be a quick, sharp scene.
+6. Abilities belong in the action: name the real spells and skills from the log as moves in the fight ("Hexer's Shadow Bolt slammed into it", "Valeria raised Shield Wall"), never as a list.
+7. Turn mechanics into prose: interrupts, aggro, crowd control and pulls become choices, reflexes and teamwork ("the trap snapped shut before the second pack reached the healer").
+8. Vary the rhythm. Short sentences for blows and panic. Longer ones for travel, calm and wonder. Mix action, dialogue and thought; no paragraph of pure description.
+9. Trash and routine become a line of color or a quick montage. Never count foes in the prose ("six Scorched Guardians and four...").
+10. Gear, in-world: never write an item's full game name in the prose ("Handstitched Leather Vest", "Short Bastard Sword of the Owl" break the spell). Describe it as the characters would see it: "her worn leather vest", "a short blade with an owl on the pommel". For the few items that matter (a boss drop someone won, a new weapon, a piece the character is proud of), write an item mark instead: [item: <exact name from the log> = <your in-world words>], e.g. "Hexer turned [item: Belt of the Wind = the wind-woven belt] over in his hands". RP Chronicler shows the item's icon glowing in its rarity color, then your words; the reader hovers the icon to see the real item. The name before = must match the log exactly (whole name, no plural); the words after it are prose, uncolored. Never put a color code inside the mark. Everything else is "the spoils" or "a few coins".
+11. Each companion is a person: give them a personality from their class, role, chat and notes, and let them react to each other.
+12. End a chapter on a hook or a quiet image, never on a summary.
 
 STORY BOOK HEADER AND FOOTER (REQUIRED, RP Chronicler reads them)
 
@@ -146,7 +148,7 @@ COLOR EVERY MENTION, IN EVERY CHAPTER: each time a player, pet, place, foe, NPC 
 - Bosses, elites, named foes and every foe type ("Windsong Crawler"): |cffdc143c (Crimson). Never use the Druid orange for a foe.
 - Wipes, deaths and danger: |cffff5252 (Red)
 - Victories, saves and healing: |cff66bb6a (Green)
-- Loot: |cffffd700 (Loot Gold). For the few items you name (craft rule 9), write the name exactly as the log spells it (whole name, no plural, no nickname): RP Chronicler finds the name and gives it the item's real icon and quality color (gray, white, green, blue, purple, orange).
+- Loot: no color. Items appear only as item marks (craft rule 10), in the prose color: RP Chronicler draws the icon and its rarity glow itself.
 - Quoted dialogue: |cffaaaaff (Party Blue) or |cffffffff (Say White). NPC words: |cfffff0a0 (Pale Yellow)
 - Header, footer and metadata: |cff9e9e9e (Muted Gray)
 
@@ -162,12 +164,12 @@ FORMATTING RULES FOR WOW
 -- version). The templates say it in their header; a Full Log copied for
 -- an AI with the skill says it too, so the AI can tell the player that
 -- their skill is older.
-ns.TEMPLATE_VERSION = "0.7.0"
+ns.TEMPLATE_VERSION = "0.7.1"
 local VERSION_RULE = "\n\nTEMPLATE VERSION\n\nTemplate version: " .. ns.TEMPLATE_VERSION .. ". If the Full Log has a \"Template version:\" line with a newer version than this one, write the story anyway, then add one line after the code block: \"Your story skill is older than RP Chronicler " .. "<that version>: copy the template again from Options > AI & Stories.\""
 
 -- 0.6.0: the skill names come from ns.STORY_SKILLS (Core.lua), the same
 -- names the Full Log's first line calls ("use <name>")
-ns.DUNGEON_STORY_TEMPLATE = "---\nname: " .. ns.STORY_SKILLS.dungeon .. "\n" .. [[description: Turn an RP Chronicler dungeon or raid Full Log into a vivid colored chronicle with one chapter per boss, formatted with WoW color codes (|cffRRGGBB...|r) for RP Chronicler's Story Book. Use when the user pastes an RP Chronicler log that starts with "use ]] .. ns.STORY_SKILLS.dungeon .. [[" (or the older "use story") or says "Run type: Dungeon" or "Run type: Raid", or asks for a dungeon or raid story.
+ns.DUNGEON_STORY_TEMPLATE = "---\nname: " .. ns.STORY_SKILLS.dungeon .. "\n" .. [[description: Turn an RP Chronicler dungeon or raid Full Log into a vivid colored chronicle with chapters shaped by the run's story, formatted with WoW color codes (|cffRRGGBB...|r) for RP Chronicler's Story Book. Use when the user pastes an RP Chronicler log that starts with "use ]] .. ns.STORY_SKILLS.dungeon .. [[" (or the older "use story") or says "Run type: Dungeon" or "Run type: Raid", or asks for a dungeon or raid story.
 ---
 
 WOW DUNGEON AND RAID STORYTELLER (RP CHRONICLER STORY BOOK)
@@ -176,10 +178,10 @@ Turn an RP Chronicler dungeon or raid Full Log into an entertaining, faithful gr
 
 STRUCTURE
 
-- A short opening chapter: the party gathers at the entrance (use the place and the roster).
-- One chapter per boss in the order of [BOSS ENGAGED] / [BOSS KILL] lines, named after the boss or the place. Trash fights between bosses ([FIGHT], [KILL]) belong to the chapter of the boss that follows them.
+- Shape the chapters around the story, not one chapter per boss. Find the run's arc in the log: the arrival, a turning point, the hardest fight, a quiet moment, the ending. Each chapter is one of those beats and is named after it.
+- Bosses fit into that arc: an easy boss can be one scene inside a chapter, two quick bosses can share one, and a hard trash fight with a death or a save can be a chapter of its own. Keep the events in the order of the log.
 - Every wipe gets its moment: what went wrong, and how the party came back.
-- A closing chapter: the last boss falls, the spoils that matter are shared, the party leaves in one short farewell beat (see reading rule 9).
+- The ending: the last boss falls, the spoils that matter are shared, the party leaves in one short farewell beat (see reading rule 9).
 - Give every party member a distinct voice and role, from the roster and their real chat quotes.
 ]] .. STORY_SHARED_RULES .. VERSION_RULE
 

@@ -58,7 +58,7 @@ code{background:#0f0b07;border:1px solid #3a2c18;border-radius:3px;padding:0 4px
 #reader h1{color:var(--gold);font-size:22px;margin:0}
 textarea{width:100%;min-height:140px;background:#0f0b07;color:var(--text);border:1px solid var(--line);border-radius:5px;padding:8px;font:13px Consolas,monospace}
 .story{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px 24px}
-.bi{font-size:0.9em;margin-right:3px}.item{white-space:nowrap;text-shadow:0 0 1px #000}.ii{width:0.95em;height:0.95em;vertical-align:-0.12em;margin-right:3px}.bi-elite{filter:sepia(1) saturate(5) hue-rotate(-12deg) brightness(1.1)}.bi-rare{filter:grayscale(1) brightness(1.4)}
+.bi{font-size:0.9em;margin-right:3px}.item{white-space:nowrap;text-shadow:0 0 1px #000}.item.glow .ii{border-radius:3px;box-shadow:0 0 0 1px var(--q),0 0 6px 2px var(--q)}.item.glow{color:inherit}.ii{width:0.95em;height:0.95em;vertical-align:-0.12em;margin-right:3px}.bi-elite{filter:sepia(1) saturate(5) hue-rotate(-12deg) brightness(1.1)}.bi-rare{filter:grayscale(1) brightness(1.4)}
 figure.shot{margin:16px 0;text-align:center}figure.shot img{max-width:100%;border:1px solid var(--line);border-radius:4px}
 figure.missing .ph{border:1px dashed var(--line);border-radius:4px;padding:28px 16px;color:var(--muted);font-size:14px;background:#120e09}
 figcaption{color:#b0a080;font-size:13px;font-style:italic;margin-top:4px}
@@ -543,6 +543,18 @@ function runItems(meta) {
   vals(meta.gear).forEach(g => g && add(g.name, g));
   return items;
 }
+// 0.7.1: [item: Exact Name = the AI's own words]: the icon glows in the
+// item's rarity color, the words stay in the prose color
+function itemMarks(html, items) {
+  const low = {};
+  Object.keys(items).forEach(n => { low[n.toLowerCase()] = items[n]; });
+  return html.replace(/\[[Ii]tem:\s*([^\]=<]*?)\s*=\s*([^\]<]*?)\s*\]/g, (m, name, words) => {
+    const it = items[name] || low[String(name).toLowerCase()];
+    if (!it) return words;
+    const svg = '<svg class="ii" viewBox="0 0 16 16" aria-hidden="true">' + ITEM_SVG[itemShape(it.cls, it.sub)] + "</svg>";
+    return '<span class="item glow" style="--q:#' + (it.hex || "ffffff") + '" title="' + name + '">' + svg + "</span>" + words;
+  });
+}
 function itemIcons(html, items) {
   const names = Object.keys(items).filter(n => n.length >= 4).sort((a, b) => b.length - a.length);
   if (!names.length) return html;
@@ -737,7 +749,7 @@ async function renderStory(it, forSave) {
   };
   // 0.7.0: chapter emblem marks ([emblem:key] lines) are for the book in game
   let story = dropTitleLine(repairHeader(it.story.replace(/\r/g, "").replace(/^[ \t#*]*(\|c[0-9a-fA-F]{8})?\[emblem:[^\]\n]*\](\|r)?[ \t]*\n?/gim, "")), it.title);
-  let html = itemIcons(bossIcons(storyHtml(story), it.bosses), it.items || {});
+  let html = itemIcons(itemMarks(bossIcons(storyHtml(story), it.bosses), it.items || {}), it.items || {});
   html = placeShots(html, shots, it, srcOf);
   html = html.replace(MARK_RE, "");
   const meta = [it.zone, it.date].filter(Boolean).map(esc).join(" - ");

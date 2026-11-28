@@ -454,6 +454,8 @@ foreach ($sv in $svFiles) {
         if ($used.ContainsKey($base)) { $used[$base]++; $base = "$base ($($used[$base]))" } else { $used[$base] = 1 }
 
         $story = Repair-StoryHeader $it.Story
+        # 0.7.1: [item: Name = words] shows the words; [emblem:key] lines are for the game
+        if ($story) { $story = [regex]::Replace($story, '\[[Ii]tem:[^\]=]*=\s*([^\]]*?)\s*\]', '$1'); $story = [regex]::Replace($story, '(?im)^[ \t]*(\|c[0-9a-f]{8})?\[emblem:[^\]\r\n]*\](\|r)?[ \t]*\r?\n?', '') }
         $log = ''
         if ($it.Run) {
             $log = [string]$it.Run['exportText']

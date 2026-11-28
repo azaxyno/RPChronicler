@@ -269,7 +269,7 @@ RP Chronicler also works as a quiet chronicler. A recording captures what a stor
 
 1. **Play.** Entering a dungeon asks **Start recording this run?** (**Options > Recording > Dungeons**: **Ask on entry**, **Always record** or **Never**), and the run ends when you leave. Raids are coming soon (TBA): RP Chronicler supports dungeons and the open world for now, so entering a raid asks nothing. In the open world, click **Start Recording**, use the RP button's right-click menu or a key you set in the game's Key Bindings.
    The roster lists each member once, by full name, and only people who were really in the run with you: someone invited by mistake, or who never zoned in, is left out. Each member's role is the one they ended the run with, so a role fixed mid-run is right.
-2. **Copy the Full Log** in Adventures: open **Full Log**, tick **Include AI instructions**, click **Copy for AI**, then `Ctrl+C`. The box shows the log alone until you tick it; then the story rules go in front (one chapter per boss for dungeons, chapters by place and event for the open world); the size line counts them at once.
+2. **Copy the Full Log** in Adventures: open **Full Log**, tick **Include AI instructions**, click **Copy for AI**, then `Ctrl+C`. The box shows the log alone until you tick it; then the story rules go in front (chapters shaped by the run's story for dungeons, chapters by place and event for the open world); the size line counts them at once.
 3. **Paste it into any AI chat** and copy back the colored story it writes.
    **Advanced: use a skill.** Make the **Dungeon Story** and **Adventure Story** templates (gear > **AI & Stories**) skills in your AI. Leave **Include AI instructions** off: the copy then stays short, starting with `use wow-dungeon-raid-story` or `use wow-open-world-story`. When the story rules change in an update, RP Chronicler tells you once to copy the template again.
    **No AI?** In **Import Story**, pick the run and click **Quick Chronicle (test)**. It is a test feature, so the writing is still rough: RP Chronicler writes a short chronicle in game from the run's own log, with chapters per boss (or per place), the fights, deaths and wipes, real in-character quotes and your Story Notes. It reads like a journal, not a novel, and it says so at the top. A story from your AI replaces it later.
@@ -307,8 +307,8 @@ Every line is timestamped `[HH:MM:SS]`. **Options > Recording** has a switch for
 - `[FIGHT]` one line for a notable fight, with the spells used, who took aggro, fleeing, and how it ended (defeated, it escaped, the party disengaged)
 - `[KILL]` elites, rares and named foes. Trash is counted in the header as **Foes defeated**, broken down by type.
 - `[PVP]` hostile players defeated, and PvP deaths
-- `[BOSS ENGAGED]`, `[BOSS HP]` at 50%, 20% and 5%, `[BOSS RESET]`, `[BOSS KILL]`, `[BOSS CAST]`, `[WIPE #N]`
-- `[AGGRO]`, `[DANGER]` under 10% HP, `[SAVED]`, `[LOW MANA]`, `[DEATH]` with what you were fighting, `[REZ]`
+- `[BOSS ENGAGED]`, `[BOSS HP]` at 50%, 20% and 5% (where the game shows boss health), `[BOSS RESET]`, `[BOSS KILL]` with the fight itself (how long it took, who fell, who was saved, cries for healing, crowd control, a win after a wipe), `[BOSS CAST]`, `[WIPE #N]`
+- `[AGGRO]`, `[DANGER]` under 10% HP (where the game shows health), `[SAVED]` (also a last-ditch potion, healthstone or shield in a fight, since dungeons hide health), `[LOW MANA]`, `[DEATH]` with what you were fighting, `[REZ]`
 - `[SPELL]` only for big cooldowns and crowd control (other spells are folded into the fight line), `[CC]`, `[PET]` and `[PET DEATH]`. Pets are written as name and family, for example `Snips (Crab)` for a crab named Snips, or `Crab (Crab)` for a crab still named Crab.
 - `[QUEST]` quests accepted and completed, and `Objective done: <quest> - <objective>`. `[QUEST TEXT]` is the quest giver's words, trimmed.
 - `[NPC]` and `[NPC Emote]` from bosses and named NPCs, throttled and de-duplicated
@@ -350,7 +350,7 @@ Every run shows its own icon (in Adventures, and on a story's title page when sc
 - **Bosses on hover.** Point at a boss's name in the text and a small window shows the boss. RP Chronicler knows how a boss looks from the game's Encounter Journal (by the fight it recorded) and from its own list of the dungeon and raid bosses, so a boss shows even in older stories; a boss it doesn't know yet shows a skull.
 - **The dungeon's music.** While a dungeon or raid story is open, the game's own music for that kind of dungeon plays softly (at your music volume), and the game's music comes back when you close the book. Turn it off in **Options > AI & Stories > Dungeon music in the book**.
 - **Just the written book.** Turn off **Options > AI & Stories > Story scenes** and the book is only its written pages: no scenes, no models and no music.
-- **Items in color.** Loot and gear named in a story show their icon and quality color (gray, white, green, blue, purple, orange), in game and in `StoryViewer.html` (which draws a small icon for the kind of item: a sword, a bow, a shield, cloth, plate, a gem and so on).
+- **Items, in-world.** Since 0.7.1 the AI never writes full item names in the story. It describes an item in its own words next to the item's icon, which is framed in its rarity color (green, blue, purple, orange); hover the icon in game to see the real item. `StoryViewer.html` shows the icon with a glow (a small drawing of the kind of item: a sword, a bow, a shield, cloth, plate, a gem and so on). Older stories that name items still get icons and colors.
 - Make the RP Chronicler window bigger and the book grows with it.
 
 

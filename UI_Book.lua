@@ -1549,7 +1549,23 @@ do
     end
     K.bossPopup = pop
 
-    local function Enter(_, link)
+    local function Enter(owner, link)
+        -- 0.7.1: an item icon shows the real item
+        local itemId, itemName = tostring(link or ""):match("^rpcitem:(%d+):(.*)$")
+        if itemId then
+            local id = tonumber(itemId) or 0
+            local itemLink = id > 0 and ("item:" .. id) or nil
+            if not itemLink and C_Item and C_Item.GetItemInfo then
+                local ok, _, l = pcall(C_Item.GetItemInfo, ((itemName or ""):gsub("_", " ")))
+                if ok and type(l) == "string" then itemLink = l end
+            end
+            GameTooltip:SetOwner(owner or UIParent, "ANCHOR_CURSOR")
+            if not (itemLink and pcall(GameTooltip.SetHyperlink, GameTooltip, itemLink)) then
+                GameTooltip:SetText(((itemName or ""):gsub("_", " ")))
+            end
+            GameTooltip:Show()
+            return
+        end
         local sid, idx = tostring(link or ""):match("^rpcboss:(.-):(%d+)$")
         local st = sid and ns.FindStory(sid)
         local name = st and K.storyBosses and K.storyBosses[sid] and K.storyBosses[sid][tonumber(idx)]
@@ -1564,7 +1580,7 @@ do
         pop:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", (x or 0) / sc + 16, (y or 0) / sc + 12)
         pop:Show()
     end
-    local function Leave() pop:Hide() end
+    local function Leave() pop:Hide() GameTooltip:Hide() end
     for _, pg in ipairs(K.pages) do
         if pg.SetHyperlinksEnabled then pcall(pg.SetHyperlinksEnabled, pg, true) end
         pcall(pg.SetScript, pg, "OnHyperlinkEnter", Enter)

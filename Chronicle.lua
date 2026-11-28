@@ -108,7 +108,7 @@ function ns.FightBegin()
     if C.fight or not Run() then return end
     C.fight = {
         start = GetTime(), enemies = {}, order = {}, swaps = {}, low = {}, fell = {},
-        kills = 0, killNames = {}, fled = 0, coin = 0,
+        kills = 0, killNames = {}, fled = 0, coin = 0, saves = {}, cc = {}, cries = {},
         spells = {}, spellOrder = {},
     }
     C.enemySeen = {}
@@ -168,7 +168,11 @@ function ns.FightSeeUnit(u)
         return
     end
     local name = ns.SafeStr(UnitName(u))
-    if not name then return end
+    if not name then
+        -- 0.7.1: the client hides this foe (dungeons): kills can't be seen
+        if C.fight then C.fight.blind = true end
+        return
+    end
     if UnitIsDead(u) then
         local info = C.enemySeen[key]
         if info and not C.killSeen[key] then
@@ -245,6 +249,49 @@ local function SpellText(spells, order)
     return table.concat(parts, "; ")
 end
 
+-- 0.7.1: fight moments for the boss line and the [FIGHT] line
+local function AddOnce(list, v, cap)
+    for _, x in ipairs(list) do if x == v then return end end
+    if #list < (cap or 3) then table.insert(list, v) end
+end
+function ns.FightNoteSave(who, spell)
+    if C.fight and who and spell then AddOnce(C.fight.saves, who .. " (" .. spell .. ")") end
+end
+function ns.FightNoteCC(who, spell)
+    if C.fight and who and spell then AddOnce(C.fight.cc, who .. " was hit by " .. spell, 2) end
+end
+-- Party chat in a fight that cries for help ("heal!", "oom", "help")
+local CRIES = {
+    { "%f[%a]oom%f[%A]", "ran out of mana" }, { "no mana", "ran out of mana" }, { "out of mana", "ran out of mana" },
+    { "%f[%a]heal", "called for healing" }, { "%f[%a]help%f[%A]", "called for help" }, { "%f[%a]run%f[%A]", "called to run" },
+    { "dying", "called for healing" },
+}
+function ns.FightNoteCry(who, msg)
+    if not C.fight or not who or not msg then return end
+    local low = msg:lower()
+    for _, c in ipairs(CRIES) do
+        if low:find(c[1]) then AddOnce(C.fight.cries, who .. " " .. c[2]) return end
+    end
+end
+-- The current fight's moments as " - "-joined text (or ""), for the boss line
+function ns.FightDetail()
+    local f = C.fight
+    if not f then return "" end
+    local bits = {}
+    if #f.fell > 0 then table.insert(bits, table.concat(f.fell, ", ") .. " fell") end
+    if #f.low > 0 then table.insert(bits, table.concat(f.low, ", ") .. " got low") end
+    for _, v in ipairs(f.saves) do table.insert(bits, (v:gsub(" %(", " pulled back from the brink (", 1))) end
+    for _, v in ipairs(f.cries) do table.insert(bits, v) end
+    for _, v in ipairs(f.cc) do table.insert(bits, v) end
+    local st = SpellText(f.spells, f.spellOrder)
+    if st ~= "" then table.insert(bits, st) end
+    return table.concat(bits, " - ")
+end
+-- The boss line told this fight's story: no [FIGHT] line for it
+function ns.FightMarkBoss()
+    if C.fight then C.fight.bossDone = true end
+end
+
 function ns.FightNoteCoin(copper)
     if C.fight then C.fight.coin = C.fight.coin + (copper or 0) end
 end
@@ -315,6 +362,7 @@ function ns.FightFlush()
     end)
     C.enemySeen = {}
     if not Run() or not ns.LogOn("fights") then return end
+    if f.bossDone then C.streak = nil return end
     local dur = math.floor(GetTime() - f.start + 0.5)
     local foes = FoeList(f)
     if not foes and f.fledName then foes = f.fledName end
@@ -363,10 +411,15 @@ function ns.FightFlush()
     local bits = {}
     local spellText = SpellText(f.spells, f.spellOrder)
     if spellText ~= "" then table.insert(bits, spellText) end
-    if f.fled > 0 then table.insert(bits, (f.fledName and (f.fledName .. " ") or "") .. "fled " .. Times(f.fled)) end
+    if f.fled > 0 then
+        local verb = (f.kills == 0 and (f.blind or InInstance())) and "tried to flee " or "fled "
+        table.insert(bits, (f.fledName and (f.fledName .. " ") or "") .. verb .. Times(f.fled))
+    end
     for _, s in ipairs(f.swaps) do table.insert(bits, s) end
     if #f.low > 0 then table.insert(bits, table.concat(f.low, ", ") .. " got low") end
     if #f.fell > 0 then table.insert(bits, table.concat(f.fell, ", ") .. " fell") end
+    for _, v in ipairs(f.saves) do table.insert(bits, (v:gsub(" %(", " pulled back from the brink (", 1))) end
+    for _, v in ipairs(f.cries) do table.insert(bits, v) end
     if f.coin > 0 and ns.LogOn("coin") then table.insert(bits, "looted " .. ns.FormatCopper(f.coin)) end
 
     local outcome
@@ -374,6 +427,10 @@ function ns.FightFlush()
         outcome = "defeat"
     elseif f.kills > 0 then
         outcome = (f.kills > 1) and ("defeated " .. f.kills .. " foes") or "defeated"
+    elseif (f.blind or InInstance()) and not f.selfDied then
+        -- 0.7.1: in a dungeon the client hides foes' deaths; a fight the
+        -- party lived through was won
+        outcome = "the party won"
     elseif f.fled > 0 then
         outcome = "it escaped"
     elseif IsInGroup and IsInGroup() then
@@ -696,7 +753,80 @@ local function LootPatterns()
     LOOT_PATTERNS.pushedMulti = Pattern("LOOT_ITEM_PUSHED_SELF_MULTIPLE")
     LOOT_PATTERNS.won = Pattern("LOOT_ROLL_WON")
     LOOT_PATTERNS.youWon = Pattern("LOOT_ROLL_YOU_WON")
+    -- 0.7.1: the lines that say who got an item (others first: name, item)
+    LOOT_PATTERNS.got = {}
+    for _, g in ipairs({ "LOOT_ITEM_MULTIPLE", "LOOT_ITEM", "LOOT_ITEM_PUSHED_MULTIPLE", "LOOT_ITEM_PUSHED" }) do
+        local p = Pattern(g)
+        if p then table.insert(LOOT_PATTERNS.got, p) end
+    end
+    LOOT_PATTERNS.gotSelf = {}
+    for _, g in ipairs({ "LOOT_ITEM_SELF_MULTIPLE", "LOOT_ITEM_SELF", "LOOT_ITEM_PUSHED_SELF_MULTIPLE",
+        "LOOT_ITEM_PUSHED_SELF", "LOOT_ITEM_CREATED_SELF_MULTIPLE", "LOOT_ITEM_CREATED_SELF" }) do
+        local p = Pattern(g)
+        if p then table.insert(LOOT_PATTERNS.gotSelf, p) end
+    end
     return LOOT_PATTERNS
+end
+
+-- 0.7.1: what a loot line is. "got" (someone got an item), "won" (a roll
+-- result) or nil (roll chatter and anything else), plus the name it names
+-- (nil for your own lines). Names may hold spaces.
+function ns.LootLineKind(plain)
+    local p = LootPatterns()
+    local msg = plain or ""
+    if (p.youWon and msg:match(p.youWon)) or msg:find("^You won") then return "won", nil end
+    local w = p.won and msg:match(p.won)
+    if w then return "won", w end
+    w = msg:match("^(.-)%s+won:")
+    if w and w ~= "" then return "won", w end
+    for _, pat in ipairs(p.gotSelf) do
+        if msg:match(pat) then return "got", nil end
+    end
+    for _, pat in ipairs(p.got) do
+        local who = msg:match(pat)
+        if who then return "got", who end
+    end
+    if msg:find("^You receive") or msg:find("^You create") then return "got", nil end
+    w = msg:match("^(.-)%s+receives? loot:") or msg:match("^(.-)%s+receives? item:") or msg:match("^(.-)%s+creates?:")
+    if w and w ~= "" then return "got", w end
+    return nil, nil
+end
+
+-- A won roll waits (2 minutes) for the line that hands the item over
+C.rollWinners = {}
+local function RollKey(item, who)
+    return (tostring(item or ""):gsub("%s*[xX]%d+$", "")):lower() .. "|" .. tostring(ns.StripRealm(who) or ""):lower()
+end
+local function SelfNames()
+    local list = { "@self" }
+    local short = ns.StripRealm(UnitName("player"))
+    local full = ns.GetUnitFullName and ns.StripRealm(ns.GetUnitFullName("player"))
+    if short then table.insert(list, short) end
+    if full then table.insert(list, full) end
+    return list
+end
+-- who nil = you
+function ns.NoteRollWinner(item, who)
+    C.rollWinners[RollKey(item, who or "@self")] = GetTime()
+end
+function ns.TakeRollWinner(item, who)
+    for _, name in ipairs(who and { who } or SelfNames()) do
+        local k = RollKey(item, name)
+        local at = C.rollWinners[k]
+        if at then
+            C.rollWinners[k] = nil
+            return (GetTime() - at) <= 120
+        end
+    end
+    return false
+end
+
+-- Loot lines that fit no known kind go to the debug log (20 a session)
+local skipped = 0
+function ns.NoteSkippedLoot(plain)
+    if skipped >= 20 then return end
+    skipped = skipped + 1
+    ns.Debug("loot", "skipped loot line: " .. tostring(plain))
 end
 
 local function Recent(at, sec) return at and (GetTime() - at) <= sec end
@@ -710,9 +840,6 @@ function ns.ClassifyLootSource(plainMsg, isSelf)
     if (p.created and msg:match(p.created)) or (p.createdMulti and msg:match(p.createdMulti)) or low:find("^you create") then
         return "crafted"
     end
-    if (p.won and msg:match(p.won)) or (p.youWon and msg:match(p.youWon)) or low:find(" won:", 1, true) then
-        return "won roll"
-    end
     local pushed = (p.pushed and msg:match(p.pushed)) or (p.pushedMulti and msg:match(p.pushedMulti)) or low:find("^you receive item")
     if isSelf then
         if C.ctx.loot or Recent(C.ctx.lootAt, 2) then
@@ -722,7 +849,7 @@ function ns.ClassifyLootSource(plainMsg, isSelf)
         end
         if Recent(C.ctx.questAt, 4) then return "quest reward" end
         if C.ctx.merchant then return "bought" end
-        if C.ctx.mail then return "mail" end
+        if C.ctx.mail and Recent(C.ctx.mailAt, 600) and not InInstance() then return "mail" end
         if C.ctx.trade or Recent(C.ctx.tradeAt, 4) then return "traded" end
         if pushed then return "received" end
     end
@@ -866,7 +993,7 @@ do
             OnQuestTurnedIn(ns.SafeNum(a1))
         elseif event == "MERCHANT_SHOW" then C.ctx.merchant = true
         elseif event == "MERCHANT_CLOSED" then C.ctx.merchant = false
-        elseif event == "MAIL_SHOW" then C.ctx.mail = true
+        elseif event == "MAIL_SHOW" then C.ctx.mail, C.ctx.mailAt = true, GetTime()
         elseif event == "MAIL_CLOSED" then C.ctx.mail = false
         elseif event == "TRADE_SHOW" then C.ctx.trade = true
         elseif event == "TRADE_CLOSED" then C.ctx.trade, C.ctx.tradeAt = false, GetTime()

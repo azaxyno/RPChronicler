@@ -249,8 +249,9 @@ local function Parse(line)
     local base = tag:match("^([^|]-)%s*|") or tag
     base = base:gsub("%s+$", "")
     if tag == "BOSS ENGAGED" then return { kind = "engage", foe = rest } end
-    if tag == "BOSS KILL" then return { kind = "bosskill", foe = rest } end
-    if tag == "BOSS RESET" then return { kind = "reset", foe = rest } end
+    -- 0.7.1: the boss lines carry the fight after the name
+    if tag == "BOSS KILL" then return { kind = "bosskill", foe = rest:match("^(.-) after a %d+s fight") or rest:match("^(.-) %- ") or rest } end
+    if tag == "BOSS RESET" then return { kind = "reset", foe = rest:match("^(.-) survived the pull") or rest } end
     if tag:match("^WIPE") then return { kind = "wipe" } end
     if tag == "DEATH" then
         local who, foe = rest:match("^(.-) died %(fighting ([^,%)]+)")
